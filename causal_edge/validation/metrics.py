@@ -102,7 +102,9 @@ def compute_all_metrics(
     sortino = _sortino(pnl, periods_per_year=periods_per_year)
     max_dd = float(np.min(dd))
     total_return = float(cum_return[-1])
-    calmar = float(total_return / abs(max_dd)) if max_dd < 0 else 0.0
+    years = T / periods_per_year
+    ann_return = (equity[-1] ** (1.0 / years) - 1.0) if years > 0 and equity[-1] > 0 else 0.0
+    calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
     rho1 = pd.Series(pnl).autocorr(lag=1)
@@ -126,7 +128,7 @@ def compute_all_metrics(
         yearly_sharpes[yr] = _sharpe(year_pnl, periods_per_year=periods_per_year)
         total_year_pnl = float(np.cumprod(1.0 + year_pnl)[-1] - 1.0)
         yearly_pnl[yr] = total_year_pnl
-        if _is_full_calendar_year(year_dates):
+        if _is_full_calendar_year(year_dates, periods_per_year=periods_per_year):
             full_years_count += 1
             if total_year_pnl < -1e-12:
                 loss_years += 1
@@ -326,11 +328,10 @@ def _sharpe(pnl, periods_per_year=252):
 
 
 def _sortino(pnl, periods_per_year=252):
-    down = pnl[pnl < 0]
-    if len(down) < 2:
-        return 0.0
-    ds = np.std(down, ddof=1)
-    return float(np.mean(pnl) / ds * np.sqrt(periods_per_year)) if ds > 1e-10 else 0.0
+    """Sortino ratio using downside deviation (all observations, MAR=0)."""
+    downside = np.minimum(pnl, 0.0)
+    dd = np.sqrt(np.mean(downside**2))
+    return float(np.mean(pnl) / dd * np.sqrt(periods_per_year)) if dd > 1e-10 else 0.0
 
 
 def _max_true_run(mask) -> int:
@@ -346,7 +347,13 @@ def _max_true_run(mask) -> int:
     return int(max_run)
 
 
-def _is_full_calendar_year(year_dates: pd.DatetimeIndex) -> bool:
+def _is_full_calendar_year(year_dates: pd.DatetimeIndex, periods_per_year: int = 252) -> bool:
+    """Check if year_dates span a full calendar year.
+
+    Tolerance is profile-driven:
+      - Equity (252 periods/yr): ±5 days to handle non-trading Jan 1/Dec 31.
+      - Crypto/24-7 (365 periods/yr): ±1 day (trades every calendar day).
+    """
     if len(year_dates) == 0:
         return False
     year_dates = pd.DatetimeIndex(year_dates)
@@ -357,7 +364,9 @@ def _is_full_calendar_year(year_dates: pd.DatetimeIndex) -> bool:
     else:
         start = pd.Timestamp(year=year, month=1, day=1)
         end = pd.Timestamp(year=year, month=12, day=31)
-    return year_dates.min() <= start and year_dates.max() >= end
+    tolerance_days = 5 if periods_per_year <= 252 else 1
+    tolerance = pd.Timedelta(days=tolerance_days)
+    return year_dates.min() <= start + tolerance and year_dates.max() >= end - tolerance
 
 
 def _dsr(pnl, T, K=300, periods_per_year=252):
