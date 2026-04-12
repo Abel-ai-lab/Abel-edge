@@ -82,12 +82,31 @@ def run(strategy, config):
 @main.command()
 @click.option("--config", default="strategies.yaml", help="Config file path")
 @click.option("--output", default="dashboard.html", help="Output HTML path")
-def dashboard(config, output):
+@click.option("--strategy", default=None, help="Render a specific strategy as a Signal Demo page")
+def dashboard(config, output, strategy):
     """Generate dashboard HTML."""
     from causal_edge.dashboard.generator import generate
 
-    generate(config, output)
+    try:
+        generate(config, output, strategy_id=strategy)
+    except ValueError as e:
+        raise click.ClickException(str(e))
     click.echo(f"Dashboard generated: {output}")
+
+
+@main.command("tracking")
+@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--strategy", required=True, help="Render a specific strategy tracking page")
+@click.option("--output", default="tracking.html", help="Output HTML path")
+def tracking(config, strategy, output):
+    """Generate tracking HTML for a specific strategy."""
+    from causal_edge.dashboard.generator import generate_tracking_page
+
+    try:
+        generate_tracking_page(config, output, strategy_id=strategy)
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    click.echo(f"Tracking page generated: {output}")
 
 
 @main.command()

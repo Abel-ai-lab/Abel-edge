@@ -30,3 +30,9 @@ strategies:
     color: "#7C3AED"
     engine: strategies.ethusd_causal.engine
     trade_log: data/trade_log_ethusd_causal.csv
+    thesis: "ETHUSD stays on the board when its causal driver basket keeps pointing in the same direction."
+    audience: "Beginner signal followers who want a simple daily read"
+    cta_text: "Start tracking this signal"
+    why_now: "The latest driver mix is coherent enough to keep ETHUSD in an active watch state."
+    risk_note: "Crypto signals can change quickly; use this as a tracking cue, not a blind entry rule."
+    signal_label_rules: "Observe < 0.25, Track Lightly 0.25-0.74, Hold >= 0.75"

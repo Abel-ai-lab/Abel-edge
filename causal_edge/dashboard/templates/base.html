@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>causal-edge dashboard</title>
+    <title>{{ selected_strategy.asset ~ ' Signal Demo' if selected_strategy else 'causal-edge dashboard' }}</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -11,6 +11,7 @@
         .header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
         .header .meta { font-size: 12px; color: #888; }
+        .eyebrow { color: #7dd3fc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
         .tabs { display: flex; gap: 4px; padding: 8px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
         .tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; color: #aaa; background: transparent; border: none; }
         .tab:hover { color: #fff; background: #1a1a2e; }
@@ -32,13 +33,114 @@
         .strategy-header .dot { width: 12px; height: 12px; border-radius: 50%; }
         .strategy-header h2 { font-size: 18px; }
         .no-data { text-align: center; padding: 60px; color: #666; }
+        .signal-page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 56px; }
+        .hero { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr); gap: 20px; align-items: stretch; }
+        .hero-card, .info-card, .chart-shell { background: linear-gradient(180deg, #16213e 0%, #111827 100%); border: 1px solid #1f3a5f; border-radius: 20px; }
+        .hero-card { padding: 28px; }
+        .hero-card h2 { font-size: 44px; line-height: 1; margin-top: 10px; }
+        .hero-card p { color: #cbd5e1; margin-top: 14px; max-width: 640px; line-height: 1.6; }
+        .signal-pill { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; padding: 10px 14px; border-radius: 999px; background: rgba(125, 211, 252, 0.12); color: #e0f2fe; font-size: 14px; font-weight: 600; }
+        .hero-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; color: #94a3b8; font-size: 13px; }
+        .hero-side { padding: 24px; display: flex; flex-direction: column; justify-content: space-between; }
+        .hero-side h3 { font-size: 16px; margin-bottom: 12px; }
+        .hero-side p { color: #cbd5e1; line-height: 1.6; }
+        .cta { display: inline-flex; justify-content: center; align-items: center; width: 100%; margin-top: 18px; padding: 14px 18px; border-radius: 12px; background: {{ selected_strategy.color if selected_strategy else '#2563EB' }}; color: #fff; font-weight: 700; text-decoration: none; }
+        .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+        .info-card { padding: 18px 20px; }
+        .info-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; }
+        .info-card .value { font-size: 28px; font-weight: 700; margin-top: 10px; }
+        .info-card .subtext { margin-top: 6px; color: #94a3b8; font-size: 13px; }
+        .section { margin-top: 24px; }
+        .section h3 { font-size: 20px; margin-bottom: 12px; }
+        .section p { color: #cbd5e1; line-height: 1.7; }
+        .two-col { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr); gap: 18px; }
+        .chart-shell { padding: 18px; }
+        .bullet-list { display: grid; gap: 10px; margin-top: 14px; color: #cbd5e1; }
+        .bullet-item { padding: 14px 16px; background: rgba(148, 163, 184, 0.08); border-radius: 14px; }
+        code { color: #bfdbfe; }
+        @media (max-width: 900px) {
+            .hero, .two-col, .cards { grid-template-columns: 1fr; }
+            .hero-card h2 { font-size: 36px; }
+        }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>causal-edge</h1>
+        <h1>{{ selected_strategy.asset ~ ' Signal Demo' if selected_strategy else 'causal-edge' }}</h1>
         <div class="meta">Generated {{ generated_at }}</div>
     </div>
+
+    {% if selected_strategy %}
+    <div class="signal-page">
+        <div class="hero">
+            <section class="hero-card">
+                <div class="eyebrow">Signal Demo</div>
+                <h2>{{ selected_strategy.asset }}</h2>
+                <div class="signal-pill">Current Signal: {{ selected_strategy.signal_label }}</div>
+                <p>{{ selected_strategy.thesis }}</p>
+                <div class="hero-meta">
+                    <span>Audience: {{ selected_strategy.audience }}</span>
+                    <span>Latest date: {{ selected_strategy.latest_date if selected_strategy.has_data else 'No data yet' }}</span>
+                    <span>Position score: {{ '%.2f'|format(selected_strategy.latest_position) if selected_strategy.has_data else '0.00' }}</span>
+                </div>
+            </section>
+
+            <aside class="hero-side hero-card">
+                <div>
+                    <h3>What this means now</h3>
+                    <p>{{ selected_strategy.signal_summary }}</p>
+                    <p style="margin-top: 14px;">Why now: {{ selected_strategy.why_now }}</p>
+                </div>
+                <a href="{{ selected_strategy.tracking_href }}" class="cta">{{ selected_strategy.cta_text }}</a>
+            </aside>
+        </div>
+
+        <section class="cards">
+            {% for card in selected_strategy.summary_cards %}
+            <div class="info-card">
+                <div class="label">{{ card.label }}</div>
+                <div class="value">{{ card.value }}</div>
+                <div class="subtext">{{ selected_strategy.asset }}</div>
+            </div>
+            {% endfor %}
+        </section>
+
+        {% if selected_strategy.has_data %}
+        <section class="section two-col">
+            <div class="chart-shell">
+                <h3>Backtest vs Ticker Trend</h3>
+                <div id="equity-{{ selected_strategy.id }}"></div>
+            </div>
+            <div class="info-card">
+                <div class="label">Signal Rule</div>
+                <div class="value" style="font-size: 22px;">{{ selected_strategy.signal_label }}</div>
+                <div class="subtext">{{ selected_strategy.signal_label_rules }}</div>
+                <div class="bullet-list">
+                    <div class="bullet-item">Solid line: strategy backtest. Dashed line: {{ selected_strategy.asset }} itself.</div>
+                    <div class="bullet-item">Click the CTA to open the dedicated tracking page with a short preload of backtest context.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section two-col">
+            <div class="info-card" id="next-step">
+                <div class="label">Why it is on the list</div>
+                <div class="value" style="font-size: 22px;">{{ selected_strategy.asset }}</div>
+                <p style="margin-top: 12px;">{{ selected_strategy.thesis }}</p>
+                <p style="margin-top: 12px; color: #fca5a5;">Risk note: {{ selected_strategy.risk_note }}</p>
+            </div>
+            <div class="info-card">
+                <div class="label">Next Step</div>
+                <div class="value" style="font-size: 22px;">Start Tracking</div>
+                <p style="margin-top: 12px;">Open the follow-up page to continue from this setup and load a short pre-tracking context window.</p>
+                <p style="margin-top: 12px;"><a href="{{ selected_strategy.tracking_href }}" class="cta">Open Tracking View</a></p>
+            </div>
+        </section>
+        {% else %}
+        <div class="section no-data">No trade log data. Run <code>causal-edge run --strategy {{ selected_strategy.id }}</code></div>
+        {% endif %}
+    </div>
+    {% else %}
 
     <div class="tabs">
         <button class="tab active" onclick="showTab('overview')">Overview</button>
@@ -48,7 +150,9 @@
         </button>
         {% endfor %}
     </div>
+    {% endif %}
 
+    {% if not selected_strategy %}
     <div class="content">
         <!-- Overview Panel -->
         <div id="panel-overview" class="panel active">
@@ -117,22 +221,29 @@
         </div>
         {% endfor %}
     </div>
+    {% endif %}
 
     <script>
+        {% if not selected_strategy %}
         function showTab(id) {
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.getElementById('panel-' + id).classList.add('active');
             event.target.classList.add('active');
         }
+        {% endif %}
 
         // Render Plotly charts
+        {% if selected_strategy and selected_strategy.has_data %}
+        Plotly.newPlot('equity-{{ selected_strategy.id }}', {{ selected_strategy.equity_json }}.data, {{ selected_strategy.equity_json }}.layout, {responsive: true});
+        {% else %}
         {% for s in strategies %}
         {% if s.has_data %}
         Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive: true});
         Plotly.newPlot('position-{{ s.id }}', {{ s.position_json }}.data, {{ s.position_json }}.layout, {responsive: true});
         {% endif %}
         {% endfor %}
+        {% endif %}
     </script>
 </body>
 </html>
