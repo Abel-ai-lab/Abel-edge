@@ -24,7 +24,6 @@ from causal_edge.validation.metrics import (
     _sharpe,
     _sortino,
     _dsr,
-    _hill_estimator,
     _bootstrap_sharpe,
     compute_all_metrics,
     detect_profile,
@@ -161,17 +160,6 @@ class TestDSR:
         excess_based = float(sp_stats.norm.cdf((sr_d - emax) / np.sqrt(max(excess_var, 1e-20))))
         assert _dsr(pnl, 252, K=50, periods_per_year=252) == pytest.approx(expected, rel=1e-12)
         assert expected != pytest.approx(excess_based, rel=1e-12)
-
-
-class TestHillEstimator:
-    def test_normal_returns(self):
-        pnl = _make_pnl(n=1000)
-        alpha = _hill_estimator(pnl)
-        assert alpha > 2.0  # normal has finite moments
-
-    def test_too_few_losses(self):
-        pnl = np.ones(100)  # all positive
-        assert _hill_estimator(pnl) == 4.0  # default
 
 
 class TestBootstrap:

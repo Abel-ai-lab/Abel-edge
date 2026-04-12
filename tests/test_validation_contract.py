@@ -136,5 +136,9 @@ def test_contract_drift_public_claim_for_15_test_validation() -> None:
         ],
     )
     assert result.exit_code == 1
-    denominator = int("8/9".split("/")[1])
-    assert denominator == 9
+    import re
+
+    match = re.search(r"(\d+)/(\d+)", result.output)
+    assert match, f"No score found in output: {result.output!r}"
+    denominator = int(match.group(2))
+    assert denominator == 7

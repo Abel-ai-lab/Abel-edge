@@ -245,7 +245,7 @@ def generate(config_path: str, output_path: str, strategy_id: str | None = None)
 
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
-        autoescape=False,
+        autoescape=True,
     )
     # Register helper functions
     env.globals["fmt_pnl_pct"] = fmt_pnl_pct

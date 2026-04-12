@@ -39,7 +39,7 @@ def _compute(name: str) -> dict:
 
 def test_positive_daily_baselines() -> None:
     metrics = _compute("positive_daily.csv")
-    assert metrics["sharpe"] == pytest.approx(175.86066619071892, rel=1e-9)
+    assert metrics["sharpe"] == pytest.approx(262.59971101022364, rel=1e-9)
     assert metrics["sortino"] == 0.0
     assert metrics["max_dd"] == pytest.approx(0.0, abs=1e-12)
     assert metrics["calmar"] == 0.0

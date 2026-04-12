@@ -80,5 +80,3 @@ class StrategyEngine(ABC):
         Must include at least a 'position' key.
         """
 
-    def on_retrain(self) -> None:
-        """Hook for periodic model retraining.  Default is no-op."""

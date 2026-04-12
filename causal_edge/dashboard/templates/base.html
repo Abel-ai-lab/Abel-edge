@@ -239,8 +239,8 @@
         {% else %}
         {% for s in strategies %}
         {% if s.has_data %}
-        Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive: true});
-        Plotly.newPlot('position-{{ s.id }}', {{ s.position_json }}.data, {{ s.position_json }}.layout, {responsive: true});
+        Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json | safe }}.data, {{ s.equity_json | safe }}.layout, {responsive: true});
+        Plotly.newPlot('position-{{ s.id }}', {{ s.position_json | safe }}.data, {{ s.position_json | safe }}.layout, {responsive: true});
         {% endif %}
         {% endfor %}
         {% endif %}

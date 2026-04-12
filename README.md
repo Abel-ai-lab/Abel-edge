@@ -129,7 +129,6 @@ tests/
 
 - [`CAPABILITY.md`](CAPABILITY.md) — agent capability acquisition (start here)
 - [`docs/validation-audit-matrix.md`](docs/validation-audit-matrix.md) — long-lived validation timing/score contract and migration notes
-- [`docs/math-audit-index.md`](docs/math-audit-index.md) — index for temporary math audit workpapers under `docs/tmp-math-audit/`
 - [Adding a Strategy](docs/add-strategy.md) — three paths: CSV / engine / causal
 - [Why Causal?](docs/why-causal.md) — Pearl, DGP, intervention invariance
 - [Agent Developer Guide](docs/harness-guide.md) — how agents operate this framework

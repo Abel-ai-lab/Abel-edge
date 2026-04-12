@@ -54,6 +54,7 @@ def validate_strategy(
             "verdict": "FAIL",
             "score": "0/0",
             "failures": [f"Insufficient data: {len(df)} rows (need 30+)"],
+            "warnings": [],
             "metrics": {},
             "triangle": {"ratio": 0, "rank": 0, "shape": 0},
             "profile": "unknown",
@@ -65,6 +66,17 @@ def validate_strategy(
     asset_returns = (
         df["asset_return"].values.astype(float) if "asset_return" in df.columns else None
     )
+
+    # PnL consistency check: |pnl - position * asset_return| should be small
+    warnings: list[str] = []
+    if positions is not None and asset_returns is not None:
+        residuals = np.abs(pnl - positions * asset_returns)
+        p95 = float(np.percentile(residuals, 95))
+        if p95 >= 0.01:
+            warnings.append(
+                f"PnL consistency: 95th percentile of |pnl - position * asset_return| = {p95:.4f} "
+                f"(threshold 0.01). Check for fees, slippage, or data errors."
+            )
 
     # Auto-detect or load profile
     if profile is None:
@@ -113,6 +125,7 @@ def validate_strategy(
         "verdict": "PASS" if passed else "FAIL",
         "score": f"{total_tests - len(failures)}/{total_tests}",
         "failures": failures,
+        "warnings": warnings,
         "metrics": metrics,
         "triangle": triangle,
         "profile": profile_name,
@@ -136,6 +149,7 @@ def validate_all_strategies(config_path: str | Path | None = None) -> dict:
                 "verdict": "SKIP",
                 "score": "0/0",
                 "failures": [f"Trade log not found: {log_path}"],
+                "warnings": [],
                 "metrics": {},
                 "triangle": {"ratio": 0, "rank": 0, "shape": 0},
                 "profile": "unknown",
@@ -170,6 +184,8 @@ def print_validation_report(results: dict) -> None:
             for f in r["failures"]:
                 label = "SKIP" if verdict == "SKIP" else "FAIL"
                 print(f"      {label}: {f}")
+        for w in r.get("warnings", []):
+            print(f"      WARN: {w}")
 
     n_pass = sum(1 for r in results.values() if r["verdict"] == "PASS")
     n_fail = sum(1 for r in results.values() if r["verdict"] == "FAIL")

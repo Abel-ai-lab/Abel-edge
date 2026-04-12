@@ -23,8 +23,9 @@ def _empty_chart_json() -> str:
 
 
 def _chart_to_json(fig) -> str:
-    """Convert Plotly figure to JSON string."""
-    return json.dumps(fig.to_dict(), default=str)
+    """Convert Plotly figure to JSON string safe for inline <script> embedding."""
+    raw = json.dumps(fig.to_dict(), default=str)
+    return raw.replace("</", r"<\/")
 
 
 def _hex_to_rgba(hex_color: str, alpha: float) -> str:

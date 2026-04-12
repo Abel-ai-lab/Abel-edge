@@ -56,14 +56,3 @@ def load_bars_from_csv(
     if limit:
         filtered = filtered.groupby("symbol", group_keys=False).tail(limit)
     return filtered.reset_index(drop=True)
-
-
-def import_bars_loader(spec: str) -> BarsLoader:
-    from importlib import import_module
-
-    module_name, _, attr = spec.partition(":")
-    if not module_name or not attr:
-        raise ValueError(f"Invalid loader spec '{spec}'. Use module:function format.")
-    module = import_module(module_name)
-    loader = getattr(module, attr)
-    return loader

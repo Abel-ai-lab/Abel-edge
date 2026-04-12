@@ -195,6 +195,8 @@ class AbelClient:
         poll_token: str | None,
         poll_interval: float,
     ) -> dict[str, Any]:
+        import time
+
         if result_url:
             url = result_url
         elif poll_token:
@@ -204,6 +206,7 @@ class AbelClient:
         else:
             raise RuntimeError("OAuth handoff missing resultUrl and pollToken.")
 
+        polls = 0
         while True:
             response = self.session.get(url, timeout=20)
             response.raise_for_status()
@@ -216,8 +219,9 @@ class AbelClient:
                 raise RuntimeError(data.get("message") or "Abel authorization failed.")
             if status != "pending":
                 raise RuntimeError(f"Unexpected Abel authorization status: {status!r}")
-            import time
-
+            polls += 1
+            if polls % 15 == 0:
+                print("  Still waiting for browser authorization... (Ctrl+C to cancel)")
             time.sleep(poll_interval)
 
     def _post_cap(self, *, verb: str, params: dict[str, Any], api_key: str) -> dict[str, Any]:

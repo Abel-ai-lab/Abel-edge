@@ -172,42 +172,45 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
         old_stdout = sys.stdout
         sys.stdout = capture = io.StringIO()
 
-    print_validation_report(results)
+    try:
+        print_validation_report(results)
 
-    if verbose:
-        print()
-        for sid, r in results.items():
-            if r.get("metrics"):
-                print(f"  {sid} metrics:")
-                m = r["metrics"]
-                for key in (
-                    "sharpe",
-                    "lo_adjusted",
-                    "sortino",
-                    "total_return",
-                    "max_dd",
-                    "calmar",
-                    "dsr",
-                    "dsr_trials_used",
-                    "omega",
-                    "position_ic",
-                    "position_hit_rate",
-                ):
-                    if key.startswith("position_") and not m.get("position_ic_applicable", False):
-                        continue
-                    if key in m:
-                        print(f"    {key:20s} {m[key]:.4f}")
-                if "yearly_sharpes" in m:
-                    print(f"    yearly_sharpes:")
-                    for yr, sh in sorted(m["yearly_sharpes"].items()):
-                        print(f"      {yr}: {sh:.2f}")
-
-    if export_path:
-        sys.stdout = old_stdout
-        report_text = capture.getvalue() if capture is not None else ""
-        click.echo(report_text, nl=False)  # also print to terminal
-        Path(export_path).write_text(report_text, encoding="utf-8")
-        click.echo(f"\n  Report exported to {export_path}")
+        if verbose:
+            print()
+            for sid, r in results.items():
+                if r.get("metrics"):
+                    print(f"  {sid} metrics:")
+                    m = r["metrics"]
+                    for key in (
+                        "sharpe",
+                        "lo_adjusted",
+                        "sortino",
+                        "total_return",
+                        "max_dd",
+                        "calmar",
+                        "dsr",
+                        "dsr_trials_used",
+                        "omega",
+                        "position_ic",
+                        "position_hit_rate",
+                    ):
+                        if key.startswith("position_") and not m.get(
+                            "position_ic_applicable", False
+                        ):
+                            continue
+                        if key in m:
+                            print(f"    {key:20s} {m[key]:.4f}")
+                    if "yearly_sharpes" in m:
+                        print(f"    yearly_sharpes:")
+                        for yr, sh in sorted(m["yearly_sharpes"].items()):
+                            print(f"      {yr}: {sh:.2f}")
+    finally:
+        if export_path:
+            sys.stdout = old_stdout
+            report_text = capture.getvalue() if capture is not None else ""
+            click.echo(report_text, nl=False)  # also print to terminal
+            Path(export_path).write_text(report_text, encoding="utf-8")
+            click.echo(f"\n  Report exported to {export_path}")
 
     all_pass = all(r["verdict"] in ("PASS", "SKIP") for r in results.values())
     sys.exit(0 if all_pass else 1)
