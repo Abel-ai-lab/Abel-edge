@@ -79,6 +79,27 @@ def run(strategy, config):
     click.echo(f"Done. {len(results)} strategies executed.")
 
 
+@main.command("paper")
+@click.option("--strategy", default=None, help="Paper-trade a specific strategy by ID")
+@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--as-of", default=None, help="Only process bars up to this timestamp")
+def paper(strategy, config, as_of):
+    """Append live paper-trading rows using the latest closed bars."""
+    from causal_edge.config import load_config
+    from causal_edge.engine.trader import paper_run_all
+
+    cfg = load_config(config)
+    if not cfg["strategies"]:
+        click.echo("No strategies configured. Add strategies to strategies.yaml.")
+        return
+
+    bars_loader = _build_bars_loader(cfg)
+
+    click.echo(f"Paper trading {len(cfg['strategies'])} strategies...")
+    results = paper_run_all(cfg, strategy_id=strategy, bars_loader=bars_loader, as_of=as_of)
+    click.echo(f"Done. {len(results)} strategies processed.")
+
+
 @main.command()
 @click.option("--config", default="strategies.yaml", help="Config file path")
 @click.option("--output", default="dashboard.html", help="Output HTML path")

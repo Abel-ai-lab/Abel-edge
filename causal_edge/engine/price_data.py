@@ -41,6 +41,8 @@ def load_bars_from_csv(
     path: str | Path,
     *,
     symbols: list[str],
+    start=None,
+    end=None,
     limit: int | None = None,
     **_: object,
 ) -> pd.DataFrame:
@@ -53,6 +55,10 @@ def load_bars_from_csv(
 
     bars = normalize_bars(df)
     filtered = bars[bars["symbol"].isin(symbols)]
+    if start is not None:
+        filtered = filtered[filtered["timestamp"] >= pd.to_datetime(start, utc=True)]
+    if end is not None:
+        filtered = filtered[filtered["timestamp"] <= pd.to_datetime(end, utc=True)]
     if limit:
         filtered = filtered.groupby("symbol", group_keys=False).tail(limit)
     return filtered.reset_index(drop=True)

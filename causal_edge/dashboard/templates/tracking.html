@@ -44,6 +44,7 @@
             <p>{{ selected_strategy.thesis }}</p>
             {% if selected_strategy.has_tracking_data %}
             <p>Tracking window: {{ selected_strategy.tracking_start_date }} to {{ selected_strategy.tracking_latest_date }}</p>
+            <p>Next position after latest close: {{ '%.2f'|format(selected_strategy.tracking_latest_signal_position) }}</p>
             {% if selected_strategy.has_tracking_preview %}
             <p>This view preloads the final {{ selected_strategy.tracking_preload_days }} backtest days before live tracking begins.</p>
             {% endif %}

@@ -130,6 +130,58 @@ strategies:
         assert "signal-track-ethusd.html" in html
 
 
+def test_dashboard_strategy_surfaces_live_tracking_status(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        Path("strategies.yaml").write_text(
+            """
+settings: {}
+strategies:
+  - id: demo_signal
+    name: "Demo Signal"
+    asset: ETHUSD
+    color: "#2563EB"
+    engine: strategies.demo_signal.engine
+    trade_log: data/trade_log_demo_signal.csv
+    thesis: "Signal thesis"
+    cta_text: "Start tracking this signal"
+""".strip()
+            + "\n",
+            encoding="utf-8",
+        )
+        Path("strategies").mkdir()
+        Path("strategies/__init__.py").write_text("", encoding="utf-8")
+        Path("strategies/demo_signal").mkdir(parents=True)
+        Path("strategies/demo_signal/__init__.py").write_text("", encoding="utf-8")
+        Path("strategies/demo_signal/engine.py").write_text(
+            "from causal_edge.engine.base import StrategyEngine\n"
+            "class DemoSignalEngine(StrategyEngine):\n"
+            "    def compute_signals(self):\n"
+            "        raise NotImplementedError\n"
+            "    def get_latest_signal(self):\n"
+            "        return {'position': 0.0}\n",
+            encoding="utf-8",
+        )
+        Path("data").mkdir()
+        Path("data/trade_log_demo_signal.csv").write_text(
+            "date,asset_return,pnl,position,cum_return,source,close,next_position\n"
+            "2024-01-01,0.00,0.00,0.00,0.00,backfill,,\n"
+            "2024-01-02,0.02,0.01,0.50,0.01,backfill,,\n"
+            "2024-01-03,0.03,0.01,0.50,0.02,live,101.0,1.00\n",
+            encoding="utf-8",
+        )
+
+        result = runner.invoke(
+            main, ["dashboard", "--strategy", "demo_signal", "--output", "signal-demo.html"]
+        )
+
+        assert result.exit_code == 0, result.output
+        html = Path("signal-demo.html").read_text(encoding="utf-8")
+        assert "Tracking started" in html
+        assert "Continue tracking" in html
+        assert "Tracking Snapshot" in html
+
+
 def test_dashboard_strategy_missing_id_fails():
     runner = CliRunner()
     with runner.isolated_filesystem():

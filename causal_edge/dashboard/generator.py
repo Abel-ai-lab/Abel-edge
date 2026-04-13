@@ -91,21 +91,66 @@ def _filter_tracking_rows(df: pd.DataFrame | None) -> pd.DataFrame | None:
     return tracked
 
 
+def _attach_tracking_status(strategy: dict, full_df: pd.DataFrame | None, s_cfg: dict) -> dict:
+    tracked = _filter_tracking_rows(full_df)
+    if tracked is None:
+        return {
+            **strategy,
+            "has_tracking_data": False,
+            "tracking_status": "Tracking not started",
+            "tracking_status_detail": "Run paper trading to start appending live rows.",
+            "tracking_summary_cards": [],
+        }
+
+    pnl = tracked["pnl"].values.astype(float)
+    next_positions = (
+        tracked["next_position"].values.astype(float)
+        if "next_position" in tracked.columns
+        else tracked["position"].values.astype(float)
+    )
+    tracking_metrics = compute_metrics(pnl)
+    latest_live_date = pd.to_datetime(tracked["date"].iloc[-1]).date()
+    latest_close = tracked["close"].iloc[-1] if "close" in tracked.columns else None
+    latest_signal_position = float(next_positions[-1]) if len(next_positions) > 0 else 0.0
+    return {
+        **strategy,
+        "has_tracking_data": True,
+        "tracking_status": "Tracking started",
+        "tracking_status_detail": f"Live paper rows are available through {latest_live_date}.",
+        "tracking_latest_date": str(latest_live_date),
+        "tracking_latest_close": None if pd.isna(latest_close) else float(latest_close),
+        "tracking_latest_signal_position": latest_signal_position,
+        "tracking_signal_label": _signal_label(latest_signal_position),
+        "tracking_summary_cards": [
+            {
+                "label": "Tracked Return",
+                "value": fmt_pnl_pct(tracking_metrics.get("cum_return", 0.0)),
+            },
+            {"label": "Days Tracked", "value": str(tracking_metrics.get("n_days", 0))},
+            {"label": "Next Position", "value": f"{latest_signal_position:.2f}"},
+        ],
+    }
+
+
 def _prepare_strategy(s_cfg: dict) -> dict:
     """Prepare data dict for a single strategy."""
     df = _load_trade_log(s_cfg["trade_log"])
     if df is None or len(df) == 0:
-        return {
-            "id": s_cfg["id"],
-            "name": s_cfg["name"],
-            "color": s_cfg["color"],
-            "asset": s_cfg["asset"],
-            "has_data": False,
-            "metrics": {},
-            "equity_json": "{}",
-            "asset_price_json": "{}",
-            **_strategy_copy(s_cfg),
-        }
+        return _attach_tracking_status(
+            {
+                "id": s_cfg["id"],
+                "name": s_cfg["name"],
+                "color": s_cfg["color"],
+                "asset": s_cfg["asset"],
+                "has_data": False,
+                "metrics": {},
+                "equity_json": "{}",
+                "asset_price_json": "{}",
+                **_strategy_copy(s_cfg),
+            },
+            df,
+            s_cfg,
+        )
 
     pnl = df["pnl"].values.astype(float)
     asset_returns = (
@@ -126,29 +171,33 @@ def _prepare_strategy(s_cfg: dict) -> dict:
     latest_position = float(positions[-1]) if len(positions) > 0 else 0.0
     asset_index = asset_index_from_returns(asset_returns if asset_returns is not None else pnl)
 
-    return {
-        "id": s_cfg["id"],
-        "name": s_cfg["name"],
-        "color": s_cfg["color"],
-        "asset": s_cfg["asset"],
-        "has_data": True,
-        "metrics": metrics,
-        "equity_json": equity_chart(
-            dates,
-            cum_return,
-            s_cfg["name"],
-            s_cfg["color"],
-            asset_index=asset_index,
-            asset=s_cfg["asset"],
-        ),
-        "asset_price_json": asset_price_chart(
-            dates, asset_returns, s_cfg["asset"], s_cfg["color"]
-        ),
-        "position_json": position_chart(dates, positions, s_cfg["name"], s_cfg["color"]),
-        "latest_date": str(dates[-1].date()) if len(dates) > 0 else "N/A",
-        "latest_position": latest_position,
-        **_strategy_copy(s_cfg, metrics=metrics, latest_position=latest_position),
-    }
+    return _attach_tracking_status(
+        {
+            "id": s_cfg["id"],
+            "name": s_cfg["name"],
+            "color": s_cfg["color"],
+            "asset": s_cfg["asset"],
+            "has_data": True,
+            "metrics": metrics,
+            "equity_json": equity_chart(
+                dates,
+                cum_return,
+                s_cfg["name"],
+                s_cfg["color"],
+                asset_index=asset_index,
+                asset=s_cfg["asset"],
+            ),
+            "asset_price_json": asset_price_chart(
+                dates, asset_returns, s_cfg["asset"], s_cfg["color"]
+            ),
+            "position_json": position_chart(dates, positions, s_cfg["name"], s_cfg["color"]),
+            "latest_date": str(dates[-1].date()) if len(dates) > 0 else "N/A",
+            "latest_position": latest_position,
+            **_strategy_copy(s_cfg, metrics=metrics, latest_position=latest_position),
+        },
+        df,
+        s_cfg,
+    )
 
 
 def _prepare_tracking_strategy(s_cfg: dict) -> dict:
@@ -195,17 +244,25 @@ def _prepare_tracking_strategy(s_cfg: dict) -> dict:
     positions = (
         df["position"].values.astype(float) if "position" in df.columns else np.zeros(len(pnl))
     )
+    next_positions = (
+        df["next_position"].values.astype(float)
+        if "next_position" in df.columns
+        else positions.copy()
+    )
     dates = pd.DatetimeIndex(df["date"])
     cum_return = np.cumprod(1.0 + pnl) - 1.0
     tracking_metrics = compute_metrics(pnl)
+    live_signal_position = float(next_positions[-1]) if len(next_positions) > 0 else 0.0
 
     return {
         **base,
+        **_strategy_copy(s_cfg, metrics=tracking_metrics, latest_position=live_signal_position),
         "has_tracking_data": True,
         "has_tracking_preview": preload is not None and len(preload) > 0,
         "tracking_start_date": str(dates[0].date()),
         "tracking_latest_date": str(dates[-1].date()),
         "tracking_latest_position": float(positions[-1]) if len(positions) > 0 else 0.0,
+        "tracking_latest_signal_position": live_signal_position,
         "tracking_preload_days": int(len(preload)) if preload is not None else 0,
         "tracking_metrics": tracking_metrics,
         "tracking_equity_json": equity_chart(

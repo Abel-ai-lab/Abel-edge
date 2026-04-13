@@ -50,6 +50,14 @@ def split_public_node_id(node_id: str) -> tuple[str, str]:
     return ticker, field
 
 
+def _serialize_timestamp(value):
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
 def load_env_file(path: str | Path) -> None:
     env_path = Path(path)
     if not env_path.exists():
@@ -164,8 +172,8 @@ class AbelClient:
                     normalize_public_node_id(symbol, default_field="price").split(".")[0]
                     for symbol in symbols
                 ],
-                "start": start,
-                "end": end,
+                "start": _serialize_timestamp(start),
+                "end": _serialize_timestamp(end),
                 "timeframe": timeframe,
                 "limit": limit,
                 "fields": fields or ["open", "high", "low", "close", "volume"],
