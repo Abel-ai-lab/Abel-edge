@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from causal_edge.plugins.abel.client import AbelClient
+from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError, require_api_key
 
 
 def fetch_bars(
@@ -18,8 +19,14 @@ def fetch_bars(
     config: dict | None = None,
     client: AbelClient | None = None,
 ) -> pd.DataFrame:
+    env_path = (config or {}).get("env_path", ".env")
+    try:
+        api_key = require_api_key(env_path=env_path)
+    except MissingAbelApiKeyError as e:
+        raise MissingAbelApiKeyError(
+            f"{e} Or set price_data.source to 'csv' for local bar data."
+        ) from e
     abel = client or AbelClient()
-    api_key = abel.ensure_api_key(env_path=(config or {}).get("env_path", ".env"))
     payload = abel.fetch_bars(
         symbols=symbols,
         start=start,

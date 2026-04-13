@@ -109,9 +109,12 @@ strategies:
 """
 
 _ENV_EXAMPLE = """\
-# Abel CAP API key (optional — for causal discovery)
+# Abel CAP API key (optional — for causal discovery and live price data)
 # Get one at https://abel.ai
 # ABEL_API_KEY=your_key_here
+
+# Optional: override the public CAP base URL
+# ABEL_CAP_BASE_URL=https://cap.abel.ai/api
 
 # Optional: point real-price strategies at a local CSV instead of Abel
 # PRICE_DATA_SOURCE=csv

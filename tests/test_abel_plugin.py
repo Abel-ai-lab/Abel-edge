@@ -1,12 +1,16 @@
 """Tests for the optional Abel plugin."""
 
-import builtins
 import os
-from pathlib import Path
 
 import pandas as pd
 
-from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id, persist_api_key
+from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
+from causal_edge.plugins.abel.credentials import (
+    MissingAbelApiKeyError,
+    require_api_key,
+    resolve_api_key,
+    resolve_cap_base_url,
+)
 from examples.causal_demo.engine import CausalDemoEngine, resolve_price_column
 
 
@@ -16,99 +20,73 @@ def test_normalize_public_node_id_ethusd():
     assert normalize_public_node_id("ETHUSD_close") == "ETHUSD.price"
 
 
-def test_persist_api_key(tmp_path):
-    env_path = tmp_path / ".env"
-    persist_api_key(env_path, "abel_123")
-    assert "ABEL_API_KEY=abel_123" in env_path.read_text(encoding="utf-8")
+def test_resolve_api_key_prefers_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("ABEL_API_KEY", "Bearer abel_env")
+    (tmp_path / ".env").write_text("ABEL_API_KEY=abel_file\n", encoding="utf-8")
+
+    api_key = resolve_api_key(env_path=tmp_path / ".env")
+
+    assert api_key == "abel_env"
 
 
-def test_ensure_api_key_polls_until_authorized(tmp_path, monkeypatch):
-    class StubSession:
-        def __init__(self):
-            self.poll_count = 0
-
-        def get(self, url, timeout=20):
-            if url.endswith("/authorize/agent"):
-                return StubResponse(
-                    {
-                        "data": {
-                            "authUrl": "https://example.com/auth",
-                            "pollToken": "poll-123",
-                        }
-                    }
-                )
-            self.poll_count += 1
-            if self.poll_count == 1:
-                return StubResponse({"data": {"status": "pending"}})
-            return StubResponse({"data": {"status": "authorized", "apiKey": "abel_key"}})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
+def test_resolve_api_key_reads_dotenv(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
-    opened_urls = []
-    slept = []
-    monkeypatch.setattr("webbrowser.open", opened_urls.append)
-    monkeypatch.setattr("time.sleep", slept.append)
-    client = AbelClient(session=StubSession())
+    (tmp_path / ".env").write_text("CAP_API_KEY=Bearer cap_file\n", encoding="utf-8")
 
-    api_key = client.ensure_api_key(env_path=tmp_path / ".env", poll_interval=0.01)
+    api_key = resolve_api_key(env_path=tmp_path / ".env")
 
-    assert api_key == "abel_key"
-    assert os.environ["ABEL_API_KEY"] == "abel_key"
-    assert opened_urls == ["https://example.com/auth"]
-    assert slept == [0.01]
-    assert "ABEL_API_KEY=abel_key" in (tmp_path / ".env").read_text(encoding="utf-8")
+    assert api_key == "cap_file"
 
 
-def test_ensure_api_key_waits_for_enter_in_tty(tmp_path, monkeypatch):
-    class StubSession:
-        def get(self, url, timeout=20):
-            if url.endswith("/authorize/agent"):
-                return StubResponse(
-                    {
-                        "data": {
-                            "authUrl": "https://example.com/auth",
-                            "pollToken": "poll-123",
-                        }
-                    }
-                )
-            return StubResponse({"data": {"status": "authorized", "apiKey": "abel_key_tty"}})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    class StubStdin:
-        def isatty(self):
-            return True
-
+def test_require_api_key_raises_when_missing(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
-    monkeypatch.setattr("sys.stdin", StubStdin())
-    monkeypatch.setattr("webbrowser.open", lambda url: True)
-    prompted = []
-    monkeypatch.setattr(builtins, "input", lambda: prompted.append(True) or "")
-    client = AbelClient(session=StubSession())
 
-    api_key = client.ensure_api_key(env_path=tmp_path / ".env", poll_interval=0.01)
+    try:
+        require_api_key(env_path=tmp_path / ".env")
+    except MissingAbelApiKeyError as e:
+        assert "ABEL_API_KEY" in str(e)
+    else:
+        raise AssertionError("Expected MissingAbelApiKeyError")
 
-    assert api_key == "abel_key_tty"
-    assert prompted == [True]
+
+def test_resolve_cap_base_url_uses_public_default(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
+
+    base_url = resolve_cap_base_url(env_path=tmp_path / ".env")
+
+    assert base_url == "https://cap.abel.ai/api"
+
+
+def test_resolve_cap_base_url_reads_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("ABEL_CAP_BASE_URL", "https://cap.custom.abel.ai/api/")
+
+    base_url = resolve_cap_base_url(env_path=tmp_path / ".env")
+
+    assert base_url == "https://cap.custom.abel.ai/api"
+
+
+def test_resolve_cap_base_url_reads_dotenv(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
+    (tmp_path / ".env").write_text(
+        "ABEL_CAP_BASE_URL=https://cap.file.abel.ai/api/\n", encoding="utf-8"
+    )
+
+    base_url = resolve_cap_base_url(env_path=tmp_path / ".env")
+
+    assert base_url == "https://cap.file.abel.ai/api"
+
+
+def test_resolve_api_key_does_not_mutate_process_env(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    (tmp_path / ".env").write_text("ABEL_API_KEY=abel_file\n", encoding="utf-8")
+
+    api_key = resolve_api_key(env_path=tmp_path / ".env")
+
+    assert api_key == "abel_file"
+    assert os.getenv("ABEL_API_KEY") is None
 
 
 def test_resolve_price_column_prefers_close():
@@ -137,7 +115,9 @@ def test_causal_demo_realistic_csv_mapping_demo(tmp_path):
     assert resolve_price_column(df, "price") == "close"
 
 
-def test_fetch_bars_uses_market_prod_base_url():
+def test_fetch_bars_uses_market_prod_base_url(monkeypatch):
+    monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
+
     class StubSession:
         def __init__(self):
             self.calls = []
@@ -172,7 +152,43 @@ def test_fetch_bars_uses_market_prod_base_url():
     assert session.calls[0]["json"]["symbols"] == ["ETHUSD"]
 
 
-def test_discover_uses_cap_prod_base_url():
+def test_fetch_bars_uses_custom_base_url():
+    class StubSession:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, json=None, headers=None, timeout=20):
+            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+            return StubResponse({"data": []})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    session = StubSession()
+    client = AbelClient(cap_base_url="https://cap.custom.abel.ai/api/", session=session)
+    client.fetch_bars(
+        symbols=["ETHUSD"],
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=10,
+        fields=None,
+        api_key="abel_test",
+    )
+
+    assert session.calls[0]["url"] == "https://cap.custom.abel.ai/api/market/day_bar"
+
+
+def test_discover_uses_cap_prod_base_url(monkeypatch):
+    monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
+
     class StubSession:
         def __init__(self):
             self.calls = []
@@ -197,3 +213,29 @@ def test_discover_uses_cap_prod_base_url():
 
     assert session.calls[0]["url"] == "https://cap.abel.ai/api/cap"
     assert session.calls[0]["json"]["verb"] == "traverse.parents"
+
+
+def test_discover_uses_custom_base_url():
+    class StubSession:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, json=None, headers=None, timeout=20):
+            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+            return StubResponse({"result": []})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    session = StubSession()
+    client = AbelClient(cap_base_url="https://cap.custom.abel.ai/api/", session=session)
+    client.discover_parents(node_id="ETHUSD", limit=5, api_key="abel_test")
+
+    assert session.calls[0]["url"] == "https://cap.custom.abel.ai/api/cap"

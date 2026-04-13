@@ -7,7 +7,7 @@ Optional integrations. Removing this entire directory must not break anything.
 
 ### Use Abel causal discovery
 1. Run: `causal-edge discover <TICKER>`
-2. Complete browser OAuth if prompted; key is stored in `.env`
+2. Set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
 3. Use `--mode parents` or `--mode mb` depending on the discovery need
 4. Copy the output YAML into your `strategies.yaml`
 5. No API key? Fill `parents:` manually — framework works identically
@@ -16,9 +16,9 @@ Optional integrations. Removing this entire directory must not break anything.
 - Default real-price source is Abel market data
 - See `docs/abel-price-api.md` for the request/response contract
 - Abel currently uses the prod stack for both graph discovery and market data
-- OAuth base: `https://api.abel.ai/echo`
 - CAP endpoint: `POST https://cap.abel.ai/api/cap`
 - Market endpoint: `POST https://cap.abel.ai/api/market/day_bar`
+- Override the CAP base with `ABEL_CAP_BASE_URL`
 
 ## Abel-Pro Mapping
 

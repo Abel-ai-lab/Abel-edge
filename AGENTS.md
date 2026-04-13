@@ -33,7 +33,7 @@ Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loo
 #### Use Abel causal discovery (optional)
 1. Read `causal_edge/plugins/AGENTS.md`
 2. Run `causal-edge discover <TICKER>`
-3. Complete browser OAuth against Abel prod when prompted (stored in `.env`)
+3. Set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
 
 ## Abel-Pro Mapping
 

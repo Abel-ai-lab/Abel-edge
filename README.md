@@ -42,7 +42,7 @@ causal-edge validate --csv my_backtest.csv
 
 - Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
 - Abel-edge branch for that worktree: `abel-pro-demo`
-- Abel discovery and market data defaults use Abel prod: `https://api.abel.ai/echo` and `https://cap.abel.ai/api`
+- Abel discovery and market data default to the public CAP base: `https://cap.abel.ai/api`
 
 ## Why Causal?
 
@@ -112,7 +112,8 @@ causal-edge discover <TICKER>        # find causal parents (Abel API key)
 ```
 
 Real-price strategies default to Abel price APIs. Override per strategy with
-`price_data.source: csv` to load local bar data instead.
+`price_data.source: csv` to load local bar data instead. Configure Abel access
+with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`.
 
 ## Architecture
 
