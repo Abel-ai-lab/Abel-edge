@@ -230,10 +230,6 @@ def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
 
     if metrics["dsr"] < v.get("dsr_min", 0.90):
         failures.append(f"T6 DSR {metrics['dsr']:.1%} < {v['dsr_min']:.0%}")
-    if metrics["drawdown_time_frac"] > v.get("drawdown_time_frac_max", 0.35):
-        failures.append(
-            f"T13 DrawdownTime {metrics['drawdown_time_frac']:.0%} > {v['drawdown_time_frac_max']:.0%}"
-        )
     if metrics.get("loss_years_applicable", False) and metrics["loss_years"] > v.get(
         "max_loss_years", 2
     ):

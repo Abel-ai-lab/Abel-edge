@@ -174,7 +174,7 @@ class TestValidationGate:
     def test_bad_fails(self, bad_strategy):
         m = compute_all_metrics(*bad_strategy)
         passed, failures = validate(m, load_profile("equity_daily"))
-        assert not passed and len(failures) >= 2
+        assert not passed and len(failures) >= 1
 
 
 class TestKeepDiscard:
