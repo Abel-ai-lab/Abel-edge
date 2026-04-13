@@ -10,8 +10,8 @@ from typing import Any
 
 import requests
 
-DEFAULT_OAUTH_BASE_URL = "https://api-sit.abel.ai/echo"
-DEFAULT_CAP_BASE_URL = "https://cap-sit.abel.ai/api"
+DEFAULT_OAUTH_BASE_URL = "https://api.abel.ai/echo"
+DEFAULT_CAP_BASE_URL = "https://cap.abel.ai/api"
 CRYPTO_ALIASES = {"BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX"}
 SUPPORTED_FIELDS = {"price", "volume"}
 
@@ -48,6 +48,14 @@ def normalize_public_node_id(value: str, *, default_field: str = "price") -> str
 def split_public_node_id(node_id: str) -> tuple[str, str]:
     ticker, _, field = normalize_public_node_id(node_id).rpartition(".")
     return ticker, field
+
+
+def _serialize_timestamp(value):
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
 
 
 def load_env_file(path: str | Path) -> None:
@@ -164,8 +172,8 @@ class AbelClient:
                     normalize_public_node_id(symbol, default_field="price").split(".")[0]
                     for symbol in symbols
                 ],
-                "start": start,
-                "end": end,
+                "start": _serialize_timestamp(start),
+                "end": _serialize_timestamp(end),
                 "timeframe": timeframe,
                 "limit": limit,
                 "fields": fields or ["open", "high", "low", "close", "volume"],

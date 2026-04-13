@@ -119,6 +119,14 @@ class TestDashboardMetrics:
         assert crypto["sharpe"] != pytest.approx(daily["sharpe"], rel=1e-12)
 
 
+class TestCalendarYearCoverage:
+    def test_tz_aware_dates_supported(self):
+        from causal_edge.validation.metrics import _is_full_calendar_year
+
+        year_dates = pd.date_range("2024-01-01", "2024-12-31", freq="D", tz="UTC")
+        assert _is_full_calendar_year(pd.DatetimeIndex(year_dates)) is True
+
+
 class TestDSR:
     def test_strong_signal(self):
         pnl = _make_pnl(mean=0.002, std=0.01, n=500)

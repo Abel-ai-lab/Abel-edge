@@ -38,6 +38,12 @@ Or validate any existing backtest:
 causal-edge validate --csv my_backtest.csv
 ```
 
+## Abel-Pro Mapping
+
+- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
+- Abel-edge branch for that worktree: `abel-pro-demo`
+- Abel discovery and market data defaults use Abel prod: `https://api.abel.ai/echo` and `https://cap.abel.ai/api`
+
 ## Why Causal?
 
 Correlation is a property of *data*. Causation is a property of the *data generating process*.
@@ -93,7 +99,12 @@ Verified across 38 controlled experiments.
 ```bash
 causal-edge init <name>              # scaffold project with 3 demo strategies
 causal-edge run [--strategy ID]      # run strategies, write trade logs
+causal-edge paper [--strategy ID]    # append latest live paper-trading rows
 causal-edge dashboard                # generate dark-theme dashboard HTML
+causal-edge dashboard --strategy ethusd_causal --output signal-demo-ethusd.html
+                                # generate a single-strategy Signal Demo page
+causal-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
+                                # generate a separate tracking page for live rows
 causal-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
 causal-edge validate --csv file.csv  # validate any backtest CSV directly
 causal-edge validate --export r.txt  # export report for sharing

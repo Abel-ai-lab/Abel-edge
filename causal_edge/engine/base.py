@@ -80,3 +80,13 @@ class StrategyEngine(ABC):
         Must include at least a 'position' key.
         """
 
+    def get_paper_signal(self, *, as_of=None) -> dict:
+        """Return the next position decided at the close of ``as_of``.
+
+        Engines can override this to support incrementally appending live paper-trading rows.
+        The returned dict must include at least ``next_position``.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement paper trading. "
+            "Add get_paper_signal(as_of=...) to the engine."
+        )

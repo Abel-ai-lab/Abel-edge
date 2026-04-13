@@ -112,8 +112,13 @@ causal-edge discover ETHUSD
 Get an Abel API key via OAuth (agent-friendly):
 ```bash
 causal-edge discover ETHUSD
-# → opens browser auth handoff if needed, persists ABEL_API_KEY to .env, then discovers nodes
+# → opens browser auth handoff against Abel prod if needed, persists ABEL_API_KEY to .env, then discovers nodes
 ```
+
+## Abel-Pro Mapping
+
+- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
+- Abel-edge branch for that worktree: `abel-pro-demo`
 
 ## 7. Build a Strategy
 

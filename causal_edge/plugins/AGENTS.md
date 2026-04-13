@@ -15,10 +15,15 @@ Optional integrations. Removing this entire directory must not break anything.
 ### Align Abel price APIs
 - Default real-price source is Abel market data
 - See `docs/abel-price-api.md` for the request/response contract
-- Abel currently uses the SIT stack for both graph discovery and market data
-- OAuth base: `https://api-sit.abel.ai/echo`
-- CAP endpoint: `POST https://cap-sit.abel.ai/api/cap`
-- Market endpoint: `POST https://cap-sit.abel.ai/api/market/day_bar`
+- Abel currently uses the prod stack for both graph discovery and market data
+- OAuth base: `https://api.abel.ai/echo`
+- CAP endpoint: `POST https://cap.abel.ai/api/cap`
+- Market endpoint: `POST https://cap.abel.ai/api/market/day_bar`
+
+## Abel-Pro Mapping
+
+- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
+- Abel-edge branch for that worktree: `abel-pro-demo`
 
 ### Understand plugin isolation
 - Framework uses `try/except ImportError` to detect plugins, not registry

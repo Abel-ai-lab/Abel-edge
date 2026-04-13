@@ -66,15 +66,10 @@ def compute_metrics(pnl: np.ndarray, periods_per_year: int = 252) -> dict:
     )
 
 
-def equity_chart(dates, cum_return, name: str, color: str) -> str:
-    """Equity curve chart. Returns JSON string.
-
-    Args:
-        dates: array-like of dates
-        cum_return: array-like of cumulative return values
-        name: strategy name for legend
-        color: hex color string
-    """
+def equity_chart(
+    dates, cum_return, name: str, color: str, asset_index=None, asset: str | None = None
+) -> str:
+    """Equity curve chart, optionally overlaid with underlying asset trend."""
     if go is None:
         return _empty_chart_json()
 
@@ -90,16 +85,59 @@ def equity_chart(dates, cum_return, name: str, color: str) -> str:
             fillcolor=_hex_to_rgba(color, 0.12),
         )
     )
+    if asset_index is not None and asset is not None:
+        fig.add_trace(
+            go.Scatter(
+                x=list(dates),
+                y=list(np.asarray(asset_index, dtype=float) - 1.0),
+                mode="lines",
+                name=f"{asset} Price",
+                line=dict(color="#94A3B8", width=2, dash="dash"),
+            )
+        )
     fig.update_layout(
-        title=f"{name} — Equity Curve",
+        title=f"{name} — Backtest vs {asset or 'Asset'}",
         xaxis_title="Date",
-        yaxis_title="Cumulative PnL",
+        yaxis_title="Normalized Return",
         yaxis_tickformat=".1%",
         template="plotly_dark",
         height=400,
         margin=dict(l=60, r=20, t=50, b=40),
     )
     return _chart_to_json(fig)
+
+
+def asset_price_chart(dates, asset_returns, asset: str, color: str) -> str:
+    """Underlying asset normalized price chart. Returns JSON string."""
+    if go is None:
+        return _empty_chart_json()
+
+    asset_index = np.cumprod(1.0 + np.asarray(asset_returns, dtype=float))
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=list(dates),
+            y=list(asset_index),
+            mode="lines",
+            name=asset,
+            line=dict(color=color, width=2),
+        )
+    )
+    fig.update_layout(
+        title=f"{asset} — Price Trend",
+        xaxis_title="Date",
+        yaxis_title="Normalized Price",
+        template="plotly_dark",
+        height=400,
+        margin=dict(l=60, r=20, t=50, b=40),
+    )
+    return _chart_to_json(fig)
+
+
+def asset_index_from_returns(asset_returns) -> np.ndarray:
+    """Build normalized asset index from simple returns."""
+    return np.cumprod(1.0 + np.asarray(asset_returns, dtype=float))
 
 
 def position_chart(dates, positions, name: str, color: str) -> str:

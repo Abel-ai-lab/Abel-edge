@@ -24,6 +24,8 @@ def write_trade_log(
     positions: np.ndarray,
     path: str | Path,
     source: str = "backfill",
+    close_prices: np.ndarray | None = None,
+    next_positions: np.ndarray | None = None,
 ) -> None:
     """Write a trade log CSV from strategy output arrays.
 
@@ -44,8 +46,42 @@ def write_trade_log(
             "asset_return": asset_returns,
             "pnl": pnl,
             "position": positions,
-            "cum_return": np.cumprod(1.0 + pnl) - 1.0,
             "source": source,
         }
     )
+    if close_prices is not None:
+        df["close"] = close_prices
+    if next_positions is not None:
+        df["next_position"] = next_positions
+    df["cum_return"] = np.cumprod(1.0 + df["pnl"].to_numpy(dtype=float)) - 1.0
     df.to_csv(path, index=False)
+
+
+def append_trade_log_rows(path: str | Path, rows: list[dict]) -> pd.DataFrame:
+    """Append live paper-trading rows and recompute cumulative return."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    incoming = pd.DataFrame(rows)
+    if incoming.empty:
+        return read_trade_log(path) if path.exists() else incoming
+
+    incoming["date"] = pd.to_datetime(incoming["date"], utc=True)
+
+    if path.exists():
+        existing = read_trade_log(path)
+    else:
+        existing = pd.DataFrame(columns=incoming.columns)
+
+    combined = pd.concat([existing, incoming], ignore_index=True, sort=False)
+    if "date" in combined.columns:
+        combined["date"] = pd.to_datetime(combined["date"], utc=True)
+    if "source" not in combined.columns:
+        combined["source"] = "backfill"
+
+    combined = combined.sort_values(["date", "source"], kind="mergesort")
+    combined = combined.drop_duplicates(subset=["date", "source"], keep="last")
+    combined["pnl"] = combined["pnl"].astype(float)
+    combined["cum_return"] = np.cumprod(1.0 + combined["pnl"].to_numpy(dtype=float)) - 1.0
+    combined.to_csv(path, index=False)
+    return combined.reset_index(drop=True)

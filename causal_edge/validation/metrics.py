@@ -29,8 +29,6 @@ PROFILES_DIR = os.path.join(os.path.dirname(__file__), "profiles")
 # ═══════════════════════════════════════════════════════════════════
 # Profile Loading
 # ═══════════════════════════════════════════════════════════════════
-
-
 def load_profile(name_or_path: str) -> dict:
     """Load a metric profile by name ('crypto_daily') or file path."""
     if os.path.exists(name_or_path):
@@ -369,10 +367,15 @@ def _is_full_calendar_year(
     """
     if len(year_dates) == 0:
         return False
+    year_dates = pd.DatetimeIndex(year_dates)
     validation_cfg = validation_cfg or {}
     year = int(year_dates[0].year)
-    start = pd.Timestamp(year=year, month=1, day=1)
-    end = pd.Timestamp(year=year, month=12, day=31)
+    if year_dates.tz is not None:
+        start = pd.Timestamp(year=year, month=1, day=1, tz=year_dates.tz)
+        end = pd.Timestamp(year=year, month=12, day=31, tz=year_dates.tz)
+    else:
+        start = pd.Timestamp(year=year, month=1, day=1)
+        end = pd.Timestamp(year=year, month=12, day=31)
     calendar_type = validation_cfg.get("calendar_type", "business_day")
     tolerance_days = {
         "business_day": 5,

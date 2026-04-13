@@ -137,7 +137,7 @@ def test_causal_demo_realistic_csv_mapping_demo(tmp_path):
     assert resolve_price_column(df, "price") == "close"
 
 
-def test_fetch_bars_uses_market_sit_base_url():
+def test_fetch_bars_uses_market_prod_base_url():
     class StubSession:
         def __init__(self):
             self.calls = []
@@ -168,11 +168,11 @@ def test_fetch_bars_uses_market_sit_base_url():
         api_key="abel_test",
     )
 
-    assert session.calls[0]["url"] == "https://cap-sit.abel.ai/api/market/day_bar"
+    assert session.calls[0]["url"] == "https://cap.abel.ai/api/market/day_bar"
     assert session.calls[0]["json"]["symbols"] == ["ETHUSD"]
 
 
-def test_discover_uses_cap_sit_base_url():
+def test_discover_uses_cap_prod_base_url():
     class StubSession:
         def __init__(self):
             self.calls = []
@@ -195,5 +195,5 @@ def test_discover_uses_cap_sit_base_url():
     client = AbelClient(session=session)
     client.discover_parents(node_id="ETHUSD", limit=5, api_key="abel_test")
 
-    assert session.calls[0]["url"] == "https://cap-sit.abel.ai/api/cap"
+    assert session.calls[0]["url"] == "https://cap.abel.ai/api/cap"
     assert session.calls[0]["json"]["verb"] == "traverse.parents"
