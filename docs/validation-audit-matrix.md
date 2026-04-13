@@ -50,6 +50,7 @@ Apply these checks when auditing strategy math:
 - The validation score uses an applicable-gate denominator, not a fixed legacy count.
 - The base denominator starts from the always-considered checks, then adds optional
   checks only when their supporting inputs and applicability conditions are present.
+- `max_drawdown_duration_bars` remains a diagnostic metric in the payload, but no longer contributes a live gate failure or denominator slot.
 - `Omega`, `LossYrs`, and Position-Return IC family checks are conditional.
 - `validation.max_dd` is the single MaxDD policy key used both for PASS/FAIL and for
   the absolute KEEP/DISCARD veto.

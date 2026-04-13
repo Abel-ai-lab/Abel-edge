@@ -289,3 +289,17 @@ entries:
       - Split provenance is provided to runtime
       - Gate definition and threshold policy are documented and tested
     docs_updated: true
+
+  - name: T13 MaxDDDuration
+    type: gate
+    status: deferred
+    removed_from:
+      - causal_edge/validation/metrics.py
+    reason: Removed from the live validation gate because underwater-duration thresholds depend on bar cadence and recovery semantics that are not yet justified as a universal PASS/FAIL contract.
+    required_inputs:
+      - explicit bar cadence policy
+      - recovery-duration contract by profile
+    reentry_conditions:
+      - Duration threshold semantics are documented per profile cadence
+      - Runtime denominator and failure semantics are tested end-to-end
+    docs_updated: true

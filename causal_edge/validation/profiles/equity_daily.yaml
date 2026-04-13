@@ -24,6 +24,7 @@ anti_gaming:
   position_ic_stability_min: 0.55
 
 validation:
+  calendar_type: business_day
   periods_per_year: 252
   dsr_min: 0.90
   dsr_K: 500

@@ -12,7 +12,7 @@ Three leverage-invariant dimensions:
 
 ### Contract notes
 - The audited live validation contract uses applicable-gate denominators rather than legacy `20/21` score narratives.
-- Typical denominators start at `7`, add `+1` for `Omega` applicability, `+1` for full-year `LossYrs` applicability, `+1` for `position_ic_applicable`, and `+1` for `position_ic_stability_applicable`.
+- Typical denominators start at `6`, add `+1` for `Omega` applicability, `+1` for full-year `LossYrs` applicability, `+1` for `position_ic_applicable`, and `+1` for `position_ic_stability_applicable`.
 - DSR accepts optional externally declared exploration counts via `dsr_trials`; otherwise it falls back to the profile default `validation.dsr_K`.
 - Deferred/removed gates and profile keys are tracked in `causal_edge/validation/deferred_registry.yaml`.
 - The long-lived timing and audit contract is summarized in `docs/validation-audit-matrix.md`.
@@ -23,7 +23,6 @@ Three leverage-invariant dimensions:
 |------|-----|-----|
 | T6 DSR | Reduce trials | Fewer param combos in grid search. Declare realistic `dsr_trials`; K<50 ideal |
 | T13 DrawdownTime | Add trend filter | `if price < sma_50: position = 0` |
-| T13 MaxDDDuration | Shorten underwater spells | Add kill-switch or faster de-risking after losses |
 | T14 LossYrs | Reduce full-year losses | Split regimes, de-risk bad periods, or narrow the strategy to the years it truly supports |
 | T15-Lo | Fix serial corr | Persistence penalty: `pos[t] *= max(0.3, 1-0.1*hold_days)` |
 | T15-Omega | Stop clipping | Use raw returns for PnL: `pnl = pos * returns` not `clip()` |
@@ -52,6 +51,9 @@ positions *= np.maximum(0.3, 1.0 - 0.1 * hold_days)
 
 ### Understand the metric triangle
 Read docstring at top of `metrics.py`. No known transformation improves all three simultaneously except genuine signal improvement.
+
+### Diagnostic-only metrics
+- `max_drawdown_duration_bars` remains in the payload for audit and diagnostics, but it is no longer a live PASS/FAIL gate.
 
 ## Key Files
 - `metrics.py` — `compute_all_metrics()`, `validate()`, `decide_keep_discard()`

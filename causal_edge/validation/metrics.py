@@ -102,8 +102,12 @@ def compute_all_metrics(
     sortino = _sortino(pnl, periods_per_year=periods_per_year)
     max_dd = float(np.min(dd))
     total_return = float(cum_return[-1])
-    years = T / periods_per_year
-    ann_return = (equity[-1] ** (1.0 / years) - 1.0) if years > 0 and equity[-1] > 0 else 0.0
+    elapsed_years = _elapsed_years(dates, periods_per_year=periods_per_year)
+    ann_return = (
+        (equity[-1] ** (1.0 / elapsed_years) - 1.0)
+        if elapsed_years > 0 and equity[-1] > 0
+        else 0.0
+    )
     calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
@@ -128,7 +132,7 @@ def compute_all_metrics(
         yearly_sharpes[yr] = _sharpe(year_pnl, periods_per_year=periods_per_year)
         total_year_pnl = float(np.cumprod(1.0 + year_pnl)[-1] - 1.0)
         yearly_pnl[yr] = total_year_pnl
-        if _is_full_calendar_year(year_dates, periods_per_year=periods_per_year):
+        if _is_full_calendar_year(year_dates, validation_cfg):
             full_years_count += 1
             if total_year_pnl < -1e-12:
                 loss_years += 1
@@ -229,11 +233,6 @@ def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
     if metrics["drawdown_time_frac"] > v.get("drawdown_time_frac_max", 0.35):
         failures.append(
             f"T13 DrawdownTime {metrics['drawdown_time_frac']:.0%} > {v['drawdown_time_frac_max']:.0%}"
-        )
-    max_dd_bars_limit = v.get("max_drawdown_duration_bars_max")
-    if max_dd_bars_limit is not None and metrics["max_drawdown_duration_bars"] > max_dd_bars_limit:
-        failures.append(
-            f"T13 MaxDDDuration {metrics['max_drawdown_duration_bars']} > {max_dd_bars_limit} bars"
         )
     if metrics.get("loss_years_applicable", False) and metrics["loss_years"] > v.get(
         "max_loss_years", 2
@@ -347,16 +346,29 @@ def _max_true_run(mask) -> int:
     return int(max_run)
 
 
-def _is_full_calendar_year(year_dates: pd.DatetimeIndex, periods_per_year: int = 252) -> bool:
+def _elapsed_years(dates: pd.DatetimeIndex, periods_per_year: int = 252) -> float:
+    if len(dates) == 0:
+        return 0.0
+    if len(dates) == 1:
+        return 1.0 / periods_per_year
+    span = dates.max() - dates.min()
+    median_gap = pd.Series(dates).diff().dropna().median()
+    total_span = span + median_gap
+    seconds_per_year = 365.25 * 24 * 60 * 60
+    return max(total_span.total_seconds() / seconds_per_year, 1.0 / periods_per_year)
+
+
+def _is_full_calendar_year(
+    year_dates: pd.DatetimeIndex, validation_cfg: dict | None = None
+) -> bool:
     """Check if year_dates span a full calendar year.
 
-    Tolerance is profile-driven:
-      - Equity (252 periods/yr): ±5 days to handle non-trading Jan 1/Dec 31.
-      - Crypto/24-7 (365 periods/yr): ±1 day (trades every calendar day).
+    Tolerance is profile-driven by explicit calendar class rather than by annualization.
     """
     if len(year_dates) == 0:
         return False
     year_dates = pd.DatetimeIndex(year_dates)
+    validation_cfg = validation_cfg or {}
     year = int(year_dates[0].year)
     if year_dates.tz is not None:
         start = pd.Timestamp(year=year, month=1, day=1, tz=year_dates.tz)
@@ -364,9 +376,16 @@ def _is_full_calendar_year(year_dates: pd.DatetimeIndex, periods_per_year: int =
     else:
         start = pd.Timestamp(year=year, month=1, day=1)
         end = pd.Timestamp(year=year, month=12, day=31)
-    tolerance_days = 5 if periods_per_year <= 252 else 1
+    calendar_type = validation_cfg.get("calendar_type", "business_day")
+    tolerance_days = {
+        "business_day": 5,
+        "calendar_day": 1,
+        "intraday": 0,
+    }.get(calendar_type, 0)
     tolerance = pd.Timedelta(days=tolerance_days)
-    return year_dates.min() <= start + tolerance and year_dates.max() >= end - tolerance
+    min_date = year_dates.min().normalize()
+    max_date = year_dates.max().normalize()
+    return min_date <= start + tolerance and max_date >= end - tolerance
 
 
 def _dsr(pnl, T, K=300, periods_per_year=252):

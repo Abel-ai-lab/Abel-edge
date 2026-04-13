@@ -41,12 +41,14 @@ def generate_positive_daily() -> None:
     # Realistic equity asset returns (mean ~0.001, std ~0.01) → ann_vol ~15.9%
     asset_return = rng.randn(n) * 0.01 + 0.001
 
-    df = pd.DataFrame({
-        "date": dates.strftime("%Y-%m-%d"),
-        "pnl": np.round(pnl, 8),
-        "position": np.round(positions, 6),
-        "asset_return": np.round(asset_return, 8),
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "pnl": np.round(pnl, 8),
+            "position": np.round(positions, 6),
+            "asset_return": np.round(asset_return, 8),
+        }
+    )
     df.to_csv(FIXTURES / "positive_daily.csv", index=False)
     print(f"positive_daily.csv: {len(df)} rows, last date {dates[-1].date()}")
 
@@ -61,12 +63,14 @@ def generate_positive_clipped() -> None:
     positions = 0.5 + rng.randn(n) * 0.05
     asset_return = rng.randn(n) * 0.01 + 0.001
 
-    df = pd.DataFrame({
-        "date": dates.strftime("%Y-%m-%d"),
-        "pnl": pnl,
-        "position": np.round(positions, 6),
-        "asset_return": np.round(asset_return, 8),
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "pnl": pnl,
+            "position": np.round(positions, 6),
+            "asset_return": np.round(asset_return, 8),
+        }
+    )
     df.to_csv(FIXTURES / "positive_clipped.csv", index=False)
     print(f"positive_clipped.csv: {len(df)} rows")
 
@@ -92,12 +96,14 @@ def generate_autocorrelated() -> None:
     positions = 0.5 + rng.randn(n) * 0.05
     asset_return = rng.randn(n) * 0.01 + 0.001
 
-    df = pd.DataFrame({
-        "date": dates.strftime("%Y-%m-%d"),
-        "pnl": np.round(pnl, 8),
-        "position": np.round(positions, 6),
-        "asset_return": np.round(asset_return, 8),
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "pnl": np.round(pnl, 8),
+            "position": np.round(positions, 6),
+            "asset_return": np.round(asset_return, 8),
+        }
+    )
     df.to_csv(FIXTURES / "autocorrelated.csv", index=False)
     print(f"autocorrelated.csv: {len(df)} rows")
 
@@ -122,12 +128,14 @@ def generate_ic_supported() -> None:
     base_pnl = positions * asset_return
     pnl = base_pnl + rng.randn(n) * 0.0005  # small additive noise
 
-    df = pd.DataFrame({
-        "date": dates.strftime("%Y-%m-%d"),
-        "pnl": np.round(pnl, 8),
-        "position": np.round(positions, 6),
-        "asset_return": np.round(asset_return, 8),
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "pnl": np.round(pnl, 8),
+            "position": np.round(positions, 6),
+            "asset_return": np.round(asset_return, 8),
+        }
+    )
     df.to_csv(FIXTURES / "ic_supported.csv", index=False)
     print(f"ic_supported.csv: {len(df)} rows")
 
@@ -135,7 +143,7 @@ def generate_ic_supported() -> None:
 def generate_ic_unsupported_no_position() -> None:
     """No 'position' column. total_return ~0.041 so export shows '+4.1%'.
 
-    Tests expect score "6/7" with equity_daily profile.
+    Tests expect score "5/6" with equity_daily profile.
     """
     rng = np.random.RandomState(42)
     n = 210
@@ -148,13 +156,13 @@ def generate_ic_unsupported_no_position() -> None:
     # Need mix of positive and negative (omega must not be applicable → wait, test says omega_applicable is False)
     # Actually test says omega_applicable is False. Let's check: omega_applicable = len(losses) > 0 and loss_mass > 1e-12
     # If omega_applicable is False, it means either no losses or loss_mass is negligible.
-    # But test also says verdict=FAIL, score="6/7". Let's check what fails:
+    # But test also says verdict=FAIL, score="5/6". Let's check what fails:
     # With equity_daily: return_floor = 0.30, total_return = 0.041 < 0.30 → 1 failure
-    # score = (total - failures) / total, "6/7" means total=7, failures=1
-    # _count_total: base 6 + sharpe_lo_ratio = 7 (no loss_years, no omega, no IC, no IC_stability)
+    # score = (total - failures) / total, "5/6" means total=6, failures=1
+    # _count_total: base 5 + sharpe_lo_ratio = 6 (no loss_years, no omega, no IC, no IC_stability)
     # So we need: loss_years_applicable=False, omega_applicable=False, position_ic_applicable=False
     # omega_applicable=False means no negative pnl (all positive or zero)
-    # But then only 1 failure (return_floor), giving 6/7. Perfect.
+    # But then only 1 failure (return_floor), giving 5/6. Perfect.
     # All-positive pnl with total_return ~0.041
 
     # target: prod(1+pnl_i) = 1.041
@@ -178,11 +186,13 @@ def generate_ic_unsupported_no_position() -> None:
     # Asset returns for detect_profile (equity_daily requires ann_vol <= 0.60)
     asset_return = rng.randn(n) * 0.01 + 0.001
 
-    df = pd.DataFrame({
-        "date": dates.strftime("%Y-%m-%d"),
-        "pnl": np.round(pnl_scaled, 8),
-        "asset_return": np.round(asset_return, 8),
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "pnl": np.round(pnl_scaled, 8),
+            "asset_return": np.round(asset_return, 8),
+        }
+    )
     df.to_csv(FIXTURES / "ic_unsupported_no_position.csv", index=False)
 
     actual_tr = np.prod(1.0 + pnl_scaled) - 1.0
@@ -196,10 +206,12 @@ def generate_insufficient_rows() -> None:
     dates = _bdays("2020-01-02", n)
     pnl = rng.randn(n) * 0.01
 
-    df = pd.DataFrame({
-        "date": dates.strftime("%Y-%m-%d"),
-        "pnl": np.round(pnl, 8),
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates.strftime("%Y-%m-%d"),
+            "pnl": np.round(pnl, 8),
+        }
+    )
     df.to_csv(FIXTURES / "insufficient_rows.csv", index=False)
     print(f"insufficient_rows.csv: {len(df)} rows")
 

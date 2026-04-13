@@ -20,7 +20,7 @@ from causal_edge.validation.gate import validate_strategy
 
 result = validate_strategy("backtest.csv")  # needs: date, pnl columns
 # result["verdict"]  → "PASS" or "FAIL"
-# result["score"]    → "8/9"  # denominator depends on applicable gates in the audited contract
+# result["score"]    → "7/8"  # denominator depends on applicable gates in the audited contract
 # result["failures"] → ["T6 DSR 12% < 90%", "T13 DrawdownTime 45% > 35%", ...]
 # result["triangle"] → {"ratio": 1.82, "rank": 0.12, "shape": 1.45}
 ```
@@ -46,7 +46,6 @@ When validation fails, apply fixes, revalidate, repeat until stable.
 |---------|-------|------------------|
 | T6 DSR | Too many trials | Reduce param grid. Declare realistic `--dsr-trials`; K<50 ideal |
 | T13 DrawdownTime | Too much time underwater | Add regime filter to reduce time spent below prior equity peaks |
-| T13 MaxDDDuration | Drawdowns recover too slowly | Add kill-switch or faster de-risking to shorten underwater spells |
 | T14 LossYrs | Full-year losses | Reduce regime exposure or treat unstable years as separate strategy variants |
 | T15-Lo | Serial corr | `positions *= np.maximum(0.3, 1 - 0.1 * hold_days)` |
 | T15-Omega | Clipped PnL | `pnl = positions * returns` (never clip PnL, only features) |
@@ -79,10 +78,11 @@ No known transformation improves all three except genuine signal improvement.
 
 - The audited live contract uses **applicable-gate denominators**, not the old `21`-style narrative.
 - Typical score denominators are:
-  - `7` when only the unconditional gates apply
+  - `6` when only the unconditional gates apply
   - add `+2` when the Position-Return IC family is applicable
   - add `+1` when downside mass exists for `Omega`
   - add `+1` when at least one full calendar year is present for `LossYrs`
+- `max_drawdown_duration_bars` still appears in `result["metrics"]`, but it is diagnostic-only and does not affect PASS/FAIL.
 - See `docs/validation-audit-matrix.md` and `CHANGELOG.md` for migration/comparability notes.
 
 **Proof by demo** — same framework, same tests, three strategies:

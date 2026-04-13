@@ -25,6 +25,8 @@ from causal_edge.validation.metrics import (
     _sortino,
     _dsr,
     _bootstrap_sharpe,
+    _elapsed_years,
+    _is_full_calendar_year,
     compute_all_metrics,
     detect_profile,
     load_profile,
@@ -255,3 +257,28 @@ class TestComputeAllMetrics:
         dates = _make_dates(n=100)
         m = compute_all_metrics(pnl, dates)
         assert np.isfinite(m["sharpe"])
+
+    def test_calmar_uses_elapsed_time_for_intraday_data(self):
+        dates = pd.date_range("2020-01-01", periods=60, freq="h")
+        pnl = np.array([0.02] * 20 + [-0.01] + [0.003] * 39)
+        m = compute_all_metrics(pnl, dates, profile=load_profile("hft"))
+        naive_years = len(dates) / load_profile("hft")["validation"]["periods_per_year"]
+        naive_ann_return = (np.cumprod(1.0 + pnl)[-1] ** (1.0 / naive_years)) - 1.0
+        naive_calmar = naive_ann_return / abs(m["max_dd"])
+        assert _elapsed_years(dates, periods_per_year=252) < naive_years
+        assert m["calmar"] > 0.0
+        assert m["calmar"] > naive_calmar
+
+
+class TestCalendarYearDetection:
+    def test_equity_business_day_tolerance_allows_boundary_holidays(self):
+        dates = pd.bdate_range("2020-01-02", "2020-12-31")
+        assert _is_full_calendar_year(dates, {"calendar_type": "business_day"}) is True
+
+    def test_crypto_calendar_day_requires_near_complete_calendar_coverage(self):
+        dates = pd.date_range("2020-01-06", "2020-12-26", freq="D")
+        assert _is_full_calendar_year(dates, {"calendar_type": "calendar_day"}) is False
+
+    def test_hft_intraday_does_not_use_equity_boundary_tolerance(self):
+        dates = pd.date_range("2020-01-02", "2020-12-31 23:00:00", freq="h")
+        assert _is_full_calendar_year(dates, {"calendar_type": "intraday"}) is False
