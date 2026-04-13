@@ -77,7 +77,7 @@ def test_dashboard_empty():
         assert Path("dashboard.html").exists()
 
 
-def test_dashboard_strategy_renders_single_signal_page(tmp_path):
+def test_signal_demo_renders_single_signal_page(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         Path("strategies.yaml").write_text(
@@ -118,7 +118,7 @@ strategies:
         )
 
         result = runner.invoke(
-            main, ["dashboard", "--strategy", "demo_signal", "--output", "signal-demo.html"]
+            main, ["signal-demo", "--strategy", "demo_signal", "--output", "signal-demo.html"]
         )
 
         assert result.exit_code == 0, result.output
@@ -135,7 +135,7 @@ strategies:
         assert "Live Rows" in html
 
 
-def test_dashboard_strategy_surfaces_live_tracking_status(tmp_path):
+def test_signal_demo_surfaces_live_tracking_status(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         Path("strategies.yaml").write_text(
@@ -177,7 +177,7 @@ strategies:
         )
 
         result = runner.invoke(
-            main, ["dashboard", "--strategy", "demo_signal", "--output", "signal-demo.html"]
+            main, ["signal-demo", "--strategy", "demo_signal", "--output", "signal-demo.html"]
         )
 
         assert result.exit_code == 0, result.output
@@ -189,16 +189,23 @@ strategies:
         assert "Abel Causal Graph" in html
 
 
-def test_dashboard_strategy_missing_id_fails():
+def test_signal_demo_missing_id_fails():
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("strategies.yaml").write_text(
             "settings: {}\nstrategies:\n  - id: only_one\n    name: 'Only One'\n    asset: ETHUSD\n    color: '#2563EB'\n    engine: strategies.only_one.engine\n    trade_log: data/only.csv\n",
             encoding="utf-8",
         )
-        result = runner.invoke(main, ["dashboard", "--strategy", "missing"])
+        result = runner.invoke(main, ["signal-demo", "--strategy", "missing"])
         assert result.exit_code != 0
         assert "Strategy 'missing' not found" in result.output
+
+
+def test_dashboard_rejects_strategy_option():
+    runner = CliRunner()
+    result = runner.invoke(main, ["dashboard", "--strategy", "demo_signal"])
+    assert result.exit_code != 0
+    assert "No such option: --strategy" in result.output
 
 
 def test_tracking_strategy_renders_empty_state(tmp_path):

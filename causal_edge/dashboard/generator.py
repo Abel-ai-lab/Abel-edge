@@ -305,46 +305,10 @@ def _prepare_tracking_strategy(s_cfg: dict) -> dict:
     }
 
 
-def generate(config_path: str, output_path: str, strategy_id: str | None = None) -> None:
-    """Generate dashboard.html from config and trade logs.
-
-    Args:
-        config_path: Path to strategies.yaml
-        output_path: Path to write dashboard.html
-    """
+def generate(config_path: str, output_path: str) -> None:
+    """Generate dashboard.html from config and trade logs."""
     cfg = load_config(config_path)
-    all_strategies_cfg = cfg["strategies"]
-    strategies_cfg = all_strategies_cfg
-    if strategy_id:
-        strategies_cfg = [s for s in strategies_cfg if s["id"] == strategy_id]
-        if not strategies_cfg:
-            available = ", ".join(s["id"] for s in cfg["strategies"]) or "none"
-            raise ValueError(
-                f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
-            )
-
-    strategies = [_prepare_strategy(s) for s in strategies_cfg]
-    selected_strategy = strategies[0] if strategy_id and strategies else None
-    if strategy_id and strategies_cfg:
-        tracking_strategy = _prepare_tracking_strategy(strategies_cfg[0])
-        selected_strategy = {
-            **selected_strategy,
-            "has_tracking_data": tracking_strategy.get("has_tracking_data", False),
-            "has_tracking_preview": tracking_strategy.get("has_tracking_preview", False),
-            "tracking_start_date": tracking_strategy.get("tracking_start_date"),
-            "tracking_latest_date": tracking_strategy.get("tracking_latest_date"),
-            "tracking_latest_position": tracking_strategy.get("tracking_latest_position"),
-            "tracking_latest_signal_position": tracking_strategy.get(
-                "tracking_latest_signal_position"
-            ),
-            "tracking_preload_days": tracking_strategy.get("tracking_preload_days", 0),
-            "tracking_metrics": tracking_strategy.get("tracking_metrics", {}),
-            "tracking_asset_price_json": tracking_strategy.get("tracking_asset_price_json", "{}"),
-            "tracking_position_json": tracking_strategy.get("tracking_position_json", "{}"),
-            "tracking_preview_json": tracking_strategy.get("tracking_preview_json", "{}"),
-            "tracking_rows": tracking_strategy.get("tracking_rows", []),
-        }
-    tracked_tickers = [_tracked_ticker_item(s) for s in all_strategies_cfg]
+    strategies = [_prepare_strategy(s) for s in cfg["strategies"]]
 
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
@@ -357,6 +321,53 @@ def generate(config_path: str, output_path: str, strategy_id: str | None = None)
     template = env.get_template("base.html")
     html = template.render(
         strategies=strategies,
+        settings=cfg["settings"],
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+    )
+
+    Path(output_path).write_text(html, encoding="utf-8")
+
+
+def generate_signal_demo(config_path: str, output_path: str, strategy_id: str) -> None:
+    """Generate a single-strategy Signal Demo page."""
+    cfg = load_config(config_path)
+    strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
+    if not strategies_cfg:
+        available = ", ".join(s["id"] for s in cfg["strategies"]) or "none"
+        raise ValueError(
+            f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
+        )
+
+    selected_strategy = _prepare_strategy(strategies_cfg[0])
+    tracking_strategy = _prepare_tracking_strategy(strategies_cfg[0])
+    selected_strategy = {
+        **selected_strategy,
+        "has_tracking_data": tracking_strategy.get("has_tracking_data", False),
+        "has_tracking_preview": tracking_strategy.get("has_tracking_preview", False),
+        "tracking_start_date": tracking_strategy.get("tracking_start_date"),
+        "tracking_latest_date": tracking_strategy.get("tracking_latest_date"),
+        "tracking_latest_position": tracking_strategy.get("tracking_latest_position"),
+        "tracking_latest_signal_position": tracking_strategy.get(
+            "tracking_latest_signal_position"
+        ),
+        "tracking_preload_days": tracking_strategy.get("tracking_preload_days", 0),
+        "tracking_metrics": tracking_strategy.get("tracking_metrics", {}),
+        "tracking_asset_price_json": tracking_strategy.get("tracking_asset_price_json", "{}"),
+        "tracking_position_json": tracking_strategy.get("tracking_position_json", "{}"),
+        "tracking_preview_json": tracking_strategy.get("tracking_preview_json", "{}"),
+        "tracking_rows": tracking_strategy.get("tracking_rows", []),
+    }
+    tracked_tickers = [_tracked_ticker_item(s) for s in cfg["strategies"]]
+
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=True,
+    )
+    env.globals["fmt_pnl_pct"] = fmt_pnl_pct
+    env.globals["fmt_dollar"] = fmt_dollar
+
+    template = env.get_template("signal_demo.html")
+    html = template.render(
         selected_strategy=selected_strategy,
         tracked_tickers=tracked_tickers,
         settings=cfg["settings"],

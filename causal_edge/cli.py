@@ -103,16 +103,27 @@ def paper(strategy, config, as_of):
 @main.command()
 @click.option("--config", default="strategies.yaml", help="Config file path")
 @click.option("--output", default="dashboard.html", help="Output HTML path")
-@click.option("--strategy", default=None, help="Render a specific strategy as a Signal Demo page")
-def dashboard(config, output, strategy):
+def dashboard(config, output):
     """Generate dashboard HTML."""
     from causal_edge.dashboard.generator import generate
 
+    generate(config, output)
+    click.echo(f"Dashboard generated: {output}")
+
+
+@main.command("signal-demo")
+@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--strategy", required=True, help="Render a specific strategy signal demo page")
+@click.option("--output", default="signal-demo.html", help="Output HTML path")
+def signal_demo(config, strategy, output):
+    """Generate a single-strategy Signal Demo page."""
+    from causal_edge.dashboard.generator import generate_signal_demo
+
     try:
-        generate(config, output, strategy_id=strategy)
+        generate_signal_demo(config, output, strategy_id=strategy)
     except ValueError as e:
         raise click.ClickException(str(e))
-    click.echo(f"Dashboard generated: {output}")
+    click.echo(f"Signal demo generated: {output}")
 
 
 @main.command("tracking")
