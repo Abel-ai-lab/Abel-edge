@@ -124,10 +124,15 @@ strategies:
         assert result.exit_code == 0, result.output
         html = Path("signal-demo.html").read_text(encoding="utf-8")
         assert "ETHUSD" in html
-        assert "Current Signal" in html
-        assert "Start tracking this signal" in html
-        assert "Backtest vs Ticker Trend" in html
+        assert "Live Signal: Track Lightly" in html
+        assert "Paper Trading" in html
+        assert "Strategy vs Hold" in html
         assert "signal-track-ethusd.html" in html
+        assert "Watchlist" in html
+        assert "showSectionTab('strategy')" in html
+        assert "Strategy" in html
+        assert "Abel Causal Graph" in html
+        assert "Live Rows" in html
 
 
 def test_dashboard_strategy_surfaces_live_tracking_status(tmp_path):
@@ -177,9 +182,11 @@ strategies:
 
         assert result.exit_code == 0, result.output
         html = Path("signal-demo.html").read_text(encoding="utf-8")
-        assert "Tracking started" in html
-        assert "Continue tracking" in html
-        assert "Tracking Snapshot" in html
+        assert "Paper Trading" in html
+        assert "Live Signal: Hold" in html or "Live Signal: Observe" in html
+        assert "Strategy vs Hold" in html
+        assert "Live through" in html
+        assert "Abel Causal Graph" in html
 
 
 def test_dashboard_strategy_missing_id_fails():

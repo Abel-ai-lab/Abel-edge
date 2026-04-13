@@ -18,7 +18,7 @@
         .hero p { margin-top: 14px; color: #cbd5e1; line-height: 1.7; }
         .eyebrow { color: #67e8f9; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
         .pill { display: inline-block; margin-top: 16px; padding: 10px 14px; border-radius: 999px; background: rgba(103, 232, 249, 0.12); color: #cffafe; font-weight: 600; }
-        .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+        .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
         .card { padding: 18px; }
         .label { color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
         .value { margin-top: 10px; font-size: 28px; font-weight: 700; }
@@ -56,9 +56,8 @@
         {% if selected_strategy.has_tracking_data %}
         <section class="cards">
             <div class="card"><div class="label">Tracking Return</div><div class="value">{{ fmt_pnl_pct(selected_strategy.tracking_metrics.cum_return) }}</div><div class="subtext">Since tracking started</div></div>
-            <div class="card"><div class="label">Max Drawdown</div><div class="value">-{{ '%.1f'|format(selected_strategy.tracking_metrics.max_dd * 100) }}%</div><div class="subtext">Tracking window</div></div>
-            <div class="card"><div class="label">Win Rate</div><div class="value">{{ '%.0f'|format(selected_strategy.tracking_metrics.win_rate * 100) }}%</div><div class="subtext">Active tracked days</div></div>
             <div class="card"><div class="label">Days Tracked</div><div class="value">{{ selected_strategy.tracking_metrics.n_days }}</div><div class="subtext">Live rows only</div></div>
+            <div class="card"><div class="label">Next Position</div><div class="value">{{ '%.2f'|format(selected_strategy.tracking_latest_signal_position) }}</div><div class="subtext">After latest close</div></div>
         </section>
 
         <section class="grid">
@@ -67,12 +66,12 @@
                 <div id="tracking-preview"></div>
             </div>
             <div class="chart">
-                <h3>Tracked Signal Performance</h3>
-                <div id="tracking-equity"></div>
-            </div>
-            <div class="chart">
                 <h3>Ticker Price Since Tracking Began</h3>
                 <div id="tracking-asset"></div>
+            </div>
+            <div class="chart">
+                <h3>Signal Changes Since Tracking Began</h3>
+                <div id="tracking-position"></div>
             </div>
         </section>
         {% else %}
@@ -93,8 +92,8 @@
     <script>
         {% if selected_strategy.has_tracking_data %}
         Plotly.newPlot('tracking-preview', {{ selected_strategy.tracking_preview_json }}.data, {{ selected_strategy.tracking_preview_json }}.layout, {responsive: true});
-        Plotly.newPlot('tracking-equity', {{ selected_strategy.tracking_equity_json }}.data, {{ selected_strategy.tracking_equity_json }}.layout, {responsive: true});
         Plotly.newPlot('tracking-asset', {{ selected_strategy.tracking_asset_price_json }}.data, {{ selected_strategy.tracking_asset_price_json }}.layout, {responsive: true});
+        Plotly.newPlot('tracking-position', {{ selected_strategy.tracking_position_json }}.data, {{ selected_strategy.tracking_position_json }}.layout, {responsive: true});
         {% elif selected_strategy.has_tracking_preview %}
         Plotly.newPlot('tracking-preview', {{ selected_strategy.tracking_preview_json }}.data, {{ selected_strategy.tracking_preview_json }}.layout, {responsive: true});
         {% endif %}

@@ -18,6 +18,8 @@ from causal_edge.dashboard.components import (
     equity_chart,
     position_chart,
 )
+from causal_edge.dashboard.story import strategy_story
+from causal_edge.dashboard.rows import filter_backtest_rows, filter_tracking_rows, paper_rows
 from causal_edge.validation.metrics import detect_profile, load_profile
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -73,33 +75,26 @@ def _strategy_copy(s_cfg: dict, metrics: dict | None = None, latest_position: fl
         "signal_summary": _signal_summary(latest_position),
         "summary_cards": [
             {"label": "Backtest Return", "value": fmt_pnl_pct(metrics.get("cum_return", 0.0))},
-            {"label": "Max Drawdown", "value": f"-{metrics.get('max_dd', 0.0) * 100:.1f}%"},
-            {"label": "Win Rate", "value": f"{metrics.get('win_rate', 0.0) * 100:.0f}%"},
             {"label": "Days Tested", "value": str(metrics.get("n_days", 0))},
+            {"label": "Signal State", "value": _signal_label(latest_position)},
         ],
     }
 
 
-def _filter_tracking_rows(df: pd.DataFrame | None) -> pd.DataFrame | None:
-    if df is None or len(df) == 0:
-        return None
-    if "source" not in df.columns:
-        return None
-    tracked = df[df["source"].astype(str).str.lower() == "live"].copy()
-    if len(tracked) == 0:
-        return None
-    return tracked
-
-
 def _attach_tracking_status(strategy: dict, full_df: pd.DataFrame | None, s_cfg: dict) -> dict:
-    tracked = _filter_tracking_rows(full_df)
+    tracked = filter_tracking_rows(full_df)
     if tracked is None:
         return {
             **strategy,
+            **strategy_story(s_cfg),
             "has_tracking_data": False,
             "tracking_status": "Tracking not started",
             "tracking_status_detail": "Run paper trading to start appending live rows.",
             "tracking_summary_cards": [],
+            "display_signal_label": strategy.get(
+                "signal_label", _signal_label(strategy.get("latest_position", 0.0))
+            ),
+            "display_signal_source": "Backtest",
         }
 
     pnl = tracked["pnl"].values.astype(float)
@@ -114,6 +109,7 @@ def _attach_tracking_status(strategy: dict, full_df: pd.DataFrame | None, s_cfg:
     latest_signal_position = float(next_positions[-1]) if len(next_positions) > 0 else 0.0
     return {
         **strategy,
+        **strategy_story(s_cfg),
         "has_tracking_data": True,
         "tracking_status": "Tracking started",
         "tracking_status_detail": f"Live paper rows are available through {latest_live_date}.",
@@ -121,6 +117,8 @@ def _attach_tracking_status(strategy: dict, full_df: pd.DataFrame | None, s_cfg:
         "tracking_latest_close": None if pd.isna(latest_close) else float(latest_close),
         "tracking_latest_signal_position": latest_signal_position,
         "tracking_signal_label": _signal_label(latest_signal_position),
+        "display_signal_label": _signal_label(latest_signal_position),
+        "display_signal_source": "Live",
         "tracking_summary_cards": [
             {
                 "label": "Tracked Return",
@@ -132,9 +130,27 @@ def _attach_tracking_status(strategy: dict, full_df: pd.DataFrame | None, s_cfg:
     }
 
 
+def _tracked_ticker_item(s_cfg: dict) -> dict:
+    strategy = _prepare_strategy(s_cfg)
+    return {
+        "id": strategy["id"],
+        "asset": strategy["asset"],
+        "tracking_href": strategy["tracking_href"],
+        "status": strategy.get("tracking_status", "Tracking not started"),
+        "signal_label": strategy.get(
+            "display_signal_label", strategy.get("signal_label", "Observe")
+        ),
+        "latest_date": strategy.get("tracking_latest_date")
+        or strategy.get("latest_date")
+        or "N/A",
+        "has_tracking_data": strategy.get("has_tracking_data", False),
+    }
+
+
 def _prepare_strategy(s_cfg: dict) -> dict:
     """Prepare data dict for a single strategy."""
-    df = _load_trade_log(s_cfg["trade_log"])
+    full_df = _load_trade_log(s_cfg["trade_log"])
+    df = filter_backtest_rows(full_df)
     if df is None or len(df) == 0:
         return _attach_tracking_status(
             {
@@ -146,9 +162,12 @@ def _prepare_strategy(s_cfg: dict) -> dict:
                 "metrics": {},
                 "equity_json": "{}",
                 "asset_price_json": "{}",
+                "paper_rows": paper_rows(
+                    full_df, signal_label=_signal_label, fmt_pnl_pct=fmt_pnl_pct
+                ),
                 **_strategy_copy(s_cfg),
             },
-            df,
+            full_df,
             s_cfg,
         )
 
@@ -193,9 +212,10 @@ def _prepare_strategy(s_cfg: dict) -> dict:
             "position_json": position_chart(dates, positions, s_cfg["name"], s_cfg["color"]),
             "latest_date": str(dates[-1].date()) if len(dates) > 0 else "N/A",
             "latest_position": latest_position,
+            "paper_rows": paper_rows(full_df, signal_label=_signal_label, fmt_pnl_pct=fmt_pnl_pct),
             **_strategy_copy(s_cfg, metrics=metrics, latest_position=latest_position),
         },
-        df,
+        full_df,
         s_cfg,
     )
 
@@ -203,7 +223,7 @@ def _prepare_strategy(s_cfg: dict) -> dict:
 def _prepare_tracking_strategy(s_cfg: dict) -> dict:
     base = _prepare_strategy(s_cfg)
     full_df = _load_trade_log(s_cfg["trade_log"])
-    df = _filter_tracking_rows(full_df)
+    df = filter_tracking_rows(full_df)
     if df is None:
         preview_df = full_df.tail(30).copy() if full_df is not None and len(full_df) > 0 else None
         return {
@@ -223,6 +243,7 @@ def _prepare_tracking_strategy(s_cfg: dict) -> dict:
                 if preview_df is not None and "asset_return" in preview_df.columns
                 else "{}"
             ),
+            "tracking_rows": [],
         }
 
     live_start = df["date"].iloc[0]
@@ -271,12 +292,16 @@ def _prepare_tracking_strategy(s_cfg: dict) -> dict:
         "tracking_asset_price_json": asset_price_chart(
             dates, asset_returns, s_cfg["asset"], s_cfg["color"]
         ),
+        "tracking_position_json": position_chart(
+            dates, next_positions, f"{s_cfg['asset']} Signal", s_cfg["color"]
+        ),
         "tracking_preview_json": asset_price_chart(
             pd.DatetimeIndex(tracking_df["date"]),
             tracking_df["asset_return"].values.astype(float),
             s_cfg["asset"],
             s_cfg["color"],
         ),
+        "tracking_rows": paper_rows(df, signal_label=_signal_label, fmt_pnl_pct=fmt_pnl_pct),
     }
 
 
@@ -288,7 +313,8 @@ def generate(config_path: str, output_path: str, strategy_id: str | None = None)
         output_path: Path to write dashboard.html
     """
     cfg = load_config(config_path)
-    strategies_cfg = cfg["strategies"]
+    all_strategies_cfg = cfg["strategies"]
+    strategies_cfg = all_strategies_cfg
     if strategy_id:
         strategies_cfg = [s for s in strategies_cfg if s["id"] == strategy_id]
         if not strategies_cfg:
@@ -299,6 +325,26 @@ def generate(config_path: str, output_path: str, strategy_id: str | None = None)
 
     strategies = [_prepare_strategy(s) for s in strategies_cfg]
     selected_strategy = strategies[0] if strategy_id and strategies else None
+    if strategy_id and strategies_cfg:
+        tracking_strategy = _prepare_tracking_strategy(strategies_cfg[0])
+        selected_strategy = {
+            **selected_strategy,
+            "has_tracking_data": tracking_strategy.get("has_tracking_data", False),
+            "has_tracking_preview": tracking_strategy.get("has_tracking_preview", False),
+            "tracking_start_date": tracking_strategy.get("tracking_start_date"),
+            "tracking_latest_date": tracking_strategy.get("tracking_latest_date"),
+            "tracking_latest_position": tracking_strategy.get("tracking_latest_position"),
+            "tracking_latest_signal_position": tracking_strategy.get(
+                "tracking_latest_signal_position"
+            ),
+            "tracking_preload_days": tracking_strategy.get("tracking_preload_days", 0),
+            "tracking_metrics": tracking_strategy.get("tracking_metrics", {}),
+            "tracking_asset_price_json": tracking_strategy.get("tracking_asset_price_json", "{}"),
+            "tracking_position_json": tracking_strategy.get("tracking_position_json", "{}"),
+            "tracking_preview_json": tracking_strategy.get("tracking_preview_json", "{}"),
+            "tracking_rows": tracking_strategy.get("tracking_rows", []),
+        }
+    tracked_tickers = [_tracked_ticker_item(s) for s in all_strategies_cfg]
 
     env = Environment(
         loader=FileSystemLoader(str(TEMPLATES_DIR)),
@@ -312,6 +358,7 @@ def generate(config_path: str, output_path: str, strategy_id: str | None = None)
     html = template.render(
         strategies=strategies,
         selected_strategy=selected_strategy,
+        tracked_tickers=tracked_tickers,
         settings=cfg["settings"],
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
