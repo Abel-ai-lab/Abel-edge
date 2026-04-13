@@ -109,10 +109,11 @@ causal-edge discover ETHUSD
 # → outputs parents or markov_blanket YAML snippet for strategies.yaml
 ```
 
-Get an Abel API key via OAuth (agent-friendly):
+Provide an Abel API key before using live discovery:
 ```bash
+export ABEL_API_KEY=...
 causal-edge discover ETHUSD
-# → opens browser auth handoff against Abel prod if needed, persists ABEL_API_KEY to .env, then discovers nodes
+# → outputs discovered nodes using the configured CAP endpoint
 ```
 
 ## Abel-Pro Mapping

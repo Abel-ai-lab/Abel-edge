@@ -303,12 +303,16 @@ def _dispatch_bars_loader(cfg: dict):
             return load_bars_from_csv(path, **kwargs)
         if source == "abel":
             try:
+                from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError
                 from causal_edge.plugins.abel.prices import fetch_bars
             except ImportError as e:
                 raise click.ClickException(
                     "Abel price source is unavailable. See: causal_edge/plugins/AGENTS.md"
                 ) from e
-            return fetch_bars(**kwargs)
+            try:
+                return fetch_bars(**kwargs)
+            except MissingAbelApiKeyError as e:
+                raise click.ClickException(str(e)) from e
         raise click.ClickException(f"Unsupported price_data.source '{source}'.")
 
     return _loader

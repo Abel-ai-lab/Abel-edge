@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import sys
+from pathlib import Path
 
 import click
 import numpy as np
@@ -14,6 +16,13 @@ from causal_edge.engine.price_data import resolve_price_config
 
 def _load_engine(engine_path: str):
     """Import engine module and find the StrategyEngine subclass."""
+    if engine_path.startswith("strategies.") and (Path.cwd() / "strategies").exists():
+        stale = [
+            name for name in sys.modules if name == "strategies" or name.startswith("strategies.")
+        ]
+        for name in stale:
+            sys.modules.pop(name, None)
+    importlib.invalidate_caches()
     mod = importlib.import_module(engine_path)
     from causal_edge.engine.base import StrategyEngine
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from causal_edge.plugins.abel.client import AbelClient, split_public_node_id
+from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError, require_api_key
 
 
 def discover_graph_nodes(
@@ -15,8 +16,13 @@ def discover_graph_nodes(
     env_path: str = ".env",
     client: AbelClient | None = None,
 ) -> str:
+    try:
+        api_key = require_api_key(env_path=env_path)
+    except MissingAbelApiKeyError as e:
+        raise MissingAbelApiKeyError(
+            f"{e} Optionally set ABEL_CAP_BASE_URL to target a non-default CAP endpoint."
+        ) from e
     abel = client or AbelClient()
-    api_key = abel.ensure_api_key(env_path=env_path)
     limit = min(max(limit, 1), 20)
 
     if mode == "parents":
