@@ -7,6 +7,46 @@ from click.testing import CliRunner
 from causal_edge.cli import main
 
 
+DEMO_ENGINE = (
+    "from causal_edge.engine.base import StrategyEngine\n"
+    "class DemoSignalEngine(StrategyEngine):\n"
+    "    def compute_signals(self):\n"
+    "        raise NotImplementedError\n"
+    "    def get_latest_signal(self):\n"
+    "        return {'position': 0.0}\n"
+)
+
+
+def _write_demo_project(*, paper_log=False, cta=False, backtest_csv=None, paper_csv=None):
+    config = [
+        "settings: {}",
+        "strategies:",
+        "  - id: demo_signal",
+        '    name: "Demo Signal"',
+        "    asset: ETHUSD",
+        '    color: "#2563EB"',
+        "    engine: strategies.demo_signal.engine",
+        "    trade_log: data/trade_log_demo_signal.csv",
+    ]
+    if paper_log:
+        config.append("    paper_log: data/paper_log_demo_signal.csv")
+    config.append('    thesis: "Signal thesis"')
+    if cta:
+        config.append('    cta_text: "Start tracking this signal"')
+
+    Path("strategies.yaml").write_text("\n".join(config) + "\n", encoding="utf-8")
+    Path("strategies").mkdir()
+    Path("strategies/__init__.py").write_text("", encoding="utf-8")
+    Path("strategies/demo_signal").mkdir(parents=True)
+    Path("strategies/demo_signal/__init__.py").write_text("", encoding="utf-8")
+    Path("strategies/demo_signal/engine.py").write_text(DEMO_ENGINE, encoding="utf-8")
+    Path("data").mkdir()
+    if backtest_csv is not None:
+        Path("data/trade_log_demo_signal.csv").write_text(backtest_csv, encoding="utf-8")
+    if paper_csv is not None:
+        Path("data/paper_log_demo_signal.csv").write_text(paper_csv, encoding="utf-8")
+
+
 def test_help():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
@@ -77,48 +117,48 @@ def test_dashboard_empty():
         assert Path("dashboard.html").exists()
 
 
-def test_dashboard_strategy_renders_single_signal_page(tmp_path):
+def test_dashboard_renders_paper_trading_section(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
-        Path("strategies.yaml").write_text(
-            """
-settings: {}
-strategies:
-  - id: demo_signal
-    name: "Demo Signal"
-    asset: ETHUSD
-    color: "#2563EB"
-    engine: strategies.demo_signal.engine
-    trade_log: data/trade_log_demo_signal.csv
-    thesis: "Signal thesis"
-    cta_text: "Start tracking this signal"
-""".strip()
-            + "\n",
-            encoding="utf-8",
+        _write_demo_project(
+            paper_log=True,
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+                "2024-01-02,0.02,0.01,0.50,0.01,backfill\n"
+            ),
+            paper_csv=(
+                "date,asset_return,pnl,position,source,close,next_position\n"
+                "2024-01-03,0.03,0.01,0.50,live,101.0,1.00\n"
+            ),
         )
-        Path("strategies").mkdir()
-        Path("strategies/__init__.py").write_text("", encoding="utf-8")
-        Path("strategies/demo_signal").mkdir(parents=True)
-        Path("strategies/demo_signal/__init__.py").write_text("", encoding="utf-8")
-        Path("strategies/demo_signal/engine.py").write_text(
-            "from causal_edge.engine.base import StrategyEngine\n"
-            "class DemoSignalEngine(StrategyEngine):\n"
-            "    def compute_signals(self):\n"
-            "        raise NotImplementedError\n"
-            "    def get_latest_signal(self):\n"
-            "        return {'position': 0.0}\n",
-            encoding="utf-8",
-        )
-        Path("data").mkdir()
-        Path("data/trade_log_demo_signal.csv").write_text(
-            "date,asset_return,pnl,position,cum_return,source\n"
-            "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
-            "2024-01-02,0.02,0.01,0.50,0.01,backfill\n",
-            encoding="utf-8",
+
+        result = runner.invoke(main, ["dashboard", "--output", "dashboard.html"])
+
+        assert result.exit_code == 0, result.output
+        html = Path("dashboard.html").read_text(encoding="utf-8")
+        assert "Paper Trading" in html
+        assert "Tracking started" in html
+        assert "Live through: 2024-01-03" in html
+        assert "Live Rows" in html
+        assert "showSectionTab('demo_signal', 'paper'" in html
+
+
+def test_signal_demo_renders_single_signal_page(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_demo_project(
+            paper_log=True,
+            cta=True,
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+                "2024-01-02,0.02,0.01,0.50,0.01,backfill\n"
+            ),
         )
 
         result = runner.invoke(
-            main, ["dashboard", "--strategy", "demo_signal", "--output", "signal-demo.html"]
+            main, ["signal-demo", "--strategy", "demo_signal", "--output", "signal-demo.html"]
         )
 
         assert result.exit_code == 0, result.output
@@ -135,49 +175,25 @@ strategies:
         assert "Live Rows" in html
 
 
-def test_dashboard_strategy_surfaces_live_tracking_status(tmp_path):
+def test_signal_demo_surfaces_live_tracking_status(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
-        Path("strategies.yaml").write_text(
-            """
-settings: {}
-strategies:
-  - id: demo_signal
-    name: "Demo Signal"
-    asset: ETHUSD
-    color: "#2563EB"
-    engine: strategies.demo_signal.engine
-    trade_log: data/trade_log_demo_signal.csv
-    thesis: "Signal thesis"
-    cta_text: "Start tracking this signal"
-""".strip()
-            + "\n",
-            encoding="utf-8",
-        )
-        Path("strategies").mkdir()
-        Path("strategies/__init__.py").write_text("", encoding="utf-8")
-        Path("strategies/demo_signal").mkdir(parents=True)
-        Path("strategies/demo_signal/__init__.py").write_text("", encoding="utf-8")
-        Path("strategies/demo_signal/engine.py").write_text(
-            "from causal_edge.engine.base import StrategyEngine\n"
-            "class DemoSignalEngine(StrategyEngine):\n"
-            "    def compute_signals(self):\n"
-            "        raise NotImplementedError\n"
-            "    def get_latest_signal(self):\n"
-            "        return {'position': 0.0}\n",
-            encoding="utf-8",
-        )
-        Path("data").mkdir()
-        Path("data/trade_log_demo_signal.csv").write_text(
-            "date,asset_return,pnl,position,cum_return,source,close,next_position\n"
-            "2024-01-01,0.00,0.00,0.00,0.00,backfill,,\n"
-            "2024-01-02,0.02,0.01,0.50,0.01,backfill,,\n"
-            "2024-01-03,0.03,0.01,0.50,0.02,live,101.0,1.00\n",
-            encoding="utf-8",
+        _write_demo_project(
+            paper_log=True,
+            cta=True,
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+                "2024-01-02,0.02,0.01,0.50,0.01,backfill\n"
+            ),
+            paper_csv=(
+                "date,asset_return,pnl,position,source,close,next_position\n"
+                "2024-01-03,0.03,0.01,0.50,live,101.0,1.00\n"
+            ),
         )
 
         result = runner.invoke(
-            main, ["dashboard", "--strategy", "demo_signal", "--output", "signal-demo.html"]
+            main, ["signal-demo", "--strategy", "demo_signal", "--output", "signal-demo.html"]
         )
 
         assert result.exit_code == 0, result.output
@@ -189,54 +205,33 @@ strategies:
         assert "Abel Causal Graph" in html
 
 
-def test_dashboard_strategy_missing_id_fails():
+def test_signal_demo_missing_id_fails():
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("strategies.yaml").write_text(
             "settings: {}\nstrategies:\n  - id: only_one\n    name: 'Only One'\n    asset: ETHUSD\n    color: '#2563EB'\n    engine: strategies.only_one.engine\n    trade_log: data/only.csv\n",
             encoding="utf-8",
         )
-        result = runner.invoke(main, ["dashboard", "--strategy", "missing"])
+        result = runner.invoke(main, ["signal-demo", "--strategy", "missing"])
         assert result.exit_code != 0
         assert "Strategy 'missing' not found" in result.output
+
+
+def test_dashboard_rejects_strategy_option():
+    runner = CliRunner()
+    result = runner.invoke(main, ["dashboard", "--strategy", "demo_signal"])
+    assert result.exit_code != 0
+    assert "No such option: --strategy" in result.output
 
 
 def test_tracking_strategy_renders_empty_state(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
-        Path("strategies.yaml").write_text(
-            """
-settings: {}
-strategies:
-  - id: demo_signal
-    name: "Demo Signal"
-    asset: ETHUSD
-    color: "#2563EB"
-    engine: strategies.demo_signal.engine
-    trade_log: data/trade_log_demo_signal.csv
-    thesis: "Signal thesis"
-""".strip()
-            + "\n",
-            encoding="utf-8",
-        )
-        Path("strategies").mkdir()
-        Path("strategies/__init__.py").write_text("", encoding="utf-8")
-        Path("strategies/demo_signal").mkdir(parents=True)
-        Path("strategies/demo_signal/__init__.py").write_text("", encoding="utf-8")
-        Path("strategies/demo_signal/engine.py").write_text(
-            "from causal_edge.engine.base import StrategyEngine\n"
-            "class DemoSignalEngine(StrategyEngine):\n"
-            "    def compute_signals(self):\n"
-            "        raise NotImplementedError\n"
-            "    def get_latest_signal(self):\n"
-            "        return {'position': 0.0}\n",
-            encoding="utf-8",
-        )
-        Path("data").mkdir()
-        Path("data/trade_log_demo_signal.csv").write_text(
-            "date,asset_return,pnl,position,cum_return,source\n"
-            "2024-01-01,0.00,0.00,0.00,0.00,backfill\n",
-            encoding="utf-8",
+        _write_demo_project(
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+            ),
         )
 
         result = runner.invoke(
@@ -248,6 +243,33 @@ strategies:
         assert "Tracking View" in html
         assert "No live tracking data yet" in html
         assert "Tracking Launch Context" in html
+
+
+def test_tracking_strategy_renders_live_rows(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_demo_project(
+            paper_log=True,
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+                "2024-01-02,0.02,0.01,0.50,0.01,backfill\n"
+            ),
+            paper_csv=(
+                "date,asset_return,pnl,position,source,close,next_position\n"
+                "2024-01-03,0.03,0.01,0.50,live,101.0,1.00\n"
+            ),
+        )
+
+        result = runner.invoke(
+            main, ["tracking", "--strategy", "demo_signal", "--output", "tracking.html"]
+        )
+
+        assert result.exit_code == 0, result.output
+        html = Path("tracking.html").read_text(encoding="utf-8")
+        assert "Live Rows" in html
+        assert "2024-01-03" in html
+        assert "101.00" in html
 
 
 def test_validate_empty():

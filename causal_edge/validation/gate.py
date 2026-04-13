@@ -49,6 +49,11 @@ def validate_strategy(
         profile: profile name used
     """
     df = pd.read_csv(trade_log, parse_dates=["date"])
+    if "source" in df.columns:
+        source = df["source"].astype(str).str.lower()
+        backtest_df = df[source != "live"].copy()
+        if len(backtest_df) > 0:
+            df = backtest_df
     if len(df) < 30:
         return {
             "verdict": "FAIL",

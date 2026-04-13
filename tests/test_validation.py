@@ -119,6 +119,27 @@ class TestDashboardMetrics:
         assert crypto["sharpe"] != pytest.approx(daily["sharpe"], rel=1e-12)
 
 
+class TestValidationDataSource:
+    def test_validate_strategy_ignores_live_rows_in_mixed_trade_log(self, tmp_path):
+        dates = pd.date_range("2024-01-01", periods=35, freq="D", tz="UTC")
+        df = pd.DataFrame(
+            {
+                "date": list(dates[:32]) + list(dates[32:]),
+                "pnl": [0.01] * 32 + [-0.9, -0.9, -0.9],
+                "position": [1.0] * 35,
+                "asset_return": [0.01] * 32 + [-0.9, -0.9, -0.9],
+                "source": ["backfill"] * 32 + ["live", "live", "live"],
+            }
+        )
+        path = tmp_path / "mixed.csv"
+        df.to_csv(path, index=False)
+
+        result = validate_strategy(path)
+
+        assert result["metrics"]
+        assert result["metrics"]["total_return"] > 0
+
+
 class TestCalendarYearCoverage:
     def test_tz_aware_dates_supported(self):
         from causal_edge.validation.metrics import _is_full_calendar_year

@@ -98,10 +98,10 @@ Verified across 38 controlled experiments.
 
 ```bash
 causal-edge init <name>              # scaffold project with 3 demo strategies
-causal-edge run [--strategy ID]      # run strategies, write trade logs
+causal-edge run [--strategy ID]      # run strategies, write backtest trade logs
 causal-edge paper [--strategy ID]    # append latest live paper-trading rows
 causal-edge dashboard                # generate dark-theme dashboard HTML
-causal-edge dashboard --strategy ethusd_causal --output signal-demo-ethusd.html
+causal-edge signal-demo --strategy ethusd_causal --output signal-demo-ethusd.html
                                 # generate a single-strategy Signal Demo page
 causal-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
                                 # generate a separate tracking page for live rows
@@ -114,6 +114,10 @@ causal-edge discover <TICKER>        # find causal parents (Abel API key)
 Real-price strategies default to Abel price APIs. Override per strategy with
 `price_data.source: csv` to load local bar data instead. Configure Abel access
 with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`.
+
+When a strategy declares `paper_log`, backtests stay in `trade_log` and live paper rows
+append to `paper_log`. If `paper_log` is omitted, causal-edge falls back to the legacy
+single-log format and reads `source=live` rows as paper-trading data.
 
 ## Architecture
 

@@ -25,9 +25,14 @@
         .subtext { margin-top: 6px; color: #94a3b8; font-size: 13px; }
         .grid { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 22px; }
         .chart { padding: 18px; }
+        .row-list { margin-top: 12px; }
+        .row-head, .row-item { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; gap: 12px; padding: 10px 0; }
+        .row-head { color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(148, 163, 184, 0.2); }
+        .row-item { color: #e2e8f0; border-bottom: 1px solid rgba(148, 163, 184, 0.08); }
+        .row-item:last-child { border-bottom: none; }
         .empty { margin-top: 20px; padding: 34px; text-align: center; border-radius: 18px; background: #111827; color: #94a3b8; border: 1px dashed #334155; }
         code { color: #bfdbfe; }
-        @media (max-width: 900px) { .cards { grid-template-columns: 1fr; } .hero h2 { font-size: 34px; } }
+        @media (max-width: 900px) { .cards { grid-template-columns: 1fr; } .hero h2 { font-size: 34px; } .row-head, .row-item { grid-template-columns: repeat(2, 1fr); } }
     </style>
 </head>
 <body>
@@ -72,6 +77,15 @@
             <div class="chart">
                 <h3>Signal Changes Since Tracking Began</h3>
                 <div id="tracking-position"></div>
+            </div>
+            <div class="chart">
+                <h3>Live Rows</h3>
+                <div class="row-list">
+                    <div class="row-head"><span>Date</span><span>Close</span><span>Signal</span><span>Next</span><span>PnL</span></div>
+                    {% for row in selected_strategy.tracking_rows %}
+                    <div class="row-item"><span>{{ row.date }}</span><span>{{ row.close }}</span><span>{{ row.signal }}</span><span>{{ row.next_position }}</span><span>{{ row.pnl }}</span></div>
+                    {% endfor %}
+                </div>
             </div>
         </section>
         {% else %}

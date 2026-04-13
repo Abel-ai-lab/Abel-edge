@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ selected_strategy.asset }} Signal Demo</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        .header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
+        .header .meta { font-size: 12px; color: #888; }
+        .eyebrow { color: #7dd3fc; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+        .signal-page { max-width: 1100px; margin: 0 auto; padding: 32px 24px 56px; }
+        .section-tabs { display: flex; gap: 8px; margin-top: 22px; }
+        .section-tab { padding: 10px 14px; border-radius: 999px; border: 1px solid #1f3a5f; background: transparent; color: #94a3b8; cursor: pointer; font-size: 13px; }
+        .section-tab.active { background: #16213e; color: #fff; }
+        .section-panel { display: none; }
+        .section-panel.active { display: block; }
+        .hero { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 0.9fr); gap: 20px; align-items: stretch; }
+        .hero-card, .info-card, .chart-shell { background: linear-gradient(180deg, #16213e 0%, #111827 100%); border: 1px solid #1f3a5f; border-radius: 20px; }
+        .hero-card { padding: 28px; }
+        .hero-card h2 { font-size: 44px; line-height: 1; margin-top: 10px; }
+        .hero-card p { color: #cbd5e1; margin-top: 14px; max-width: 640px; line-height: 1.5; }
+        .signal-pill { display: inline-flex; align-items: center; gap: 8px; margin-top: 18px; padding: 10px 14px; border-radius: 999px; background: rgba(125, 211, 252, 0.12); color: #e0f2fe; font-size: 14px; font-weight: 600; }
+        .hero-meta { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 18px; color: #94a3b8; font-size: 13px; }
+        .hero-side { padding: 24px; display: flex; flex-direction: column; justify-content: space-between; }
+        .hero-side h3 { font-size: 16px; margin-bottom: 12px; }
+        .hero-side p { color: #cbd5e1; line-height: 1.5; }
+        .cta { display: inline-flex; justify-content: center; align-items: center; width: 100%; margin-top: 18px; padding: 14px 18px; border-radius: 12px; background: {{ selected_strategy.color }}; color: #fff; font-weight: 700; text-decoration: none; }
+        .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+        .info-card { padding: 18px 20px; }
+        .mini-card { padding: 16px 18px; background: linear-gradient(180deg, #16213e 0%, #111827 100%); border: 1px solid #1f3a5f; border-radius: 16px; }
+        .graph-card { display: flex; align-items: center; justify-content: center; min-height: 280px; }
+        .graph-svg { width: 100%; max-width: 360px; height: 220px; }
+        .info-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; }
+        .info-card .value { font-size: 28px; font-weight: 700; margin-top: 10px; }
+        .info-card .subtext { margin-top: 6px; color: #94a3b8; font-size: 13px; }
+        .section { margin-top: 24px; }
+        .section h3 { font-size: 20px; margin-bottom: 12px; }
+        .section p { color: #cbd5e1; line-height: 1.5; }
+        .two-col { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.7fr); gap: 18px; }
+        .chart-shell { padding: 18px; }
+        .ticker-list { display: grid; gap: 10px; margin-top: 12px; }
+        .ticker-row { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.12); color: #cbd5e1; }
+        .ticker-row:last-child { border-bottom: none; }
+        .tight { margin-top: 10px; }
+        .row-list { margin-top: 12px; }
+        .row-head, .row-item { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; gap: 12px; padding: 10px 0; }
+        .row-head { color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(148, 163, 184, 0.2); }
+        .row-item { color: #e2e8f0; border-bottom: 1px solid rgba(148, 163, 184, 0.08); }
+        .row-item:last-child { border-bottom: none; }
+        .no-data { text-align: center; padding: 60px; color: #666; }
+        code { color: #bfdbfe; }
+        @media (max-width: 900px) {
+            .hero, .two-col, .cards { grid-template-columns: 1fr; }
+            .hero-card h2 { font-size: 36px; }
+            .row-head, .row-item { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ selected_strategy.asset }} Signal Demo</h1>
+        <div class="meta">Generated {{ generated_at }}</div>
+    </div>
+
+    <div class="signal-page">
+        <div class="hero">
+            <section class="hero-card">
+                <div class="eyebrow">Signal Demo</div>
+                <h2>{{ selected_strategy.asset }}</h2>
+                <div class="signal-pill">Live Signal: {{ selected_strategy.display_signal_label }}</div>
+                <p>{{ selected_strategy.thesis }}</p>
+                <div class="hero-meta">
+                    <span>Latest date: {{ selected_strategy.latest_date if selected_strategy.has_data else 'No data yet' }}</span>
+                    {% if selected_strategy.has_tracking_data %}
+                    <span>Live through {{ selected_strategy.tracking_latest_date }}</span>
+                    {% endif %}
+                </div>
+            </section>
+
+            <aside class="hero-side hero-card">
+                <div>
+                    <h3>Strategy</h3>
+                    <p>Found by Abel.</p>
+                    <p class="tight">Causal graph.</p>
+                </div>
+                <a href="{{ selected_strategy.tracking_href }}" class="cta">Paper Trading</a>
+            </aside>
+        </div>
+
+        <div class="section-tabs">
+            <button class="section-tab active" onclick="showSectionTab('strategy')">Strategy</button>
+            <button class="section-tab" onclick="showSectionTab('paper')">Paper Trading</button>
+        </div>
+
+        <div id="section-strategy" class="section-panel active">
+            <section class="cards">
+                {% for card in selected_strategy.summary_cards %}
+                <div class="info-card">
+                    <div class="label">{{ card.label }}</div>
+                    <div class="value">{{ card.value }}</div>
+                    <div class="subtext">{{ selected_strategy.asset }}</div>
+                </div>
+                {% endfor %}
+            </section>
+
+            {% if selected_strategy.has_data %}
+            <section class="section two-col">
+                <div class="chart-shell">
+                    <h3>Strategy vs Hold</h3>
+                    <div id="equity-{{ selected_strategy.id }}"></div>
+                </div>
+                <div class="mini-card graph-card">
+                    <svg class="graph-svg" viewBox="0 0 360 220" xmlns="http://www.w3.org/2000/svg" aria-label="Abel causal graph">
+                        <defs>
+                            <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                                <path d="M0,0 L0,6 L6,3 z" fill="#7dd3fc" />
+                            </marker>
+                        </defs>
+                        <line x1="70" y1="60" x2="160" y2="108" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)" />
+                        <line x1="70" y1="160" x2="160" y2="112" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)" />
+                        <line x1="180" y1="40" x2="180" y2="92" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)" />
+                        <circle cx="70" cy="60" r="18" fill="#16213e" stroke="#7dd3fc" stroke-width="2" />
+                        <circle cx="70" cy="160" r="18" fill="#16213e" stroke="#7dd3fc" stroke-width="2" />
+                        <circle cx="180" cy="40" r="18" fill="#16213e" stroke="#7dd3fc" stroke-width="2" />
+                        <circle cx="180" cy="110" r="34" fill="{{ selected_strategy.color }}" fill-opacity="0.2" stroke="{{ selected_strategy.color }}" stroke-width="2" />
+                        <text x="180" y="116" text-anchor="middle" fill="#ffffff" font-size="16" font-weight="700">{{ selected_strategy.asset }}</text>
+                        <text x="180" y="198" text-anchor="middle" fill="#94a3b8" font-size="12">Abel Causal Graph</text>
+                    </svg>
+                </div>
+            </section>
+            {% else %}
+            <div class="section no-data">No trade log data. Run <code>causal-edge run --strategy {{ selected_strategy.id }}</code></div>
+            {% endif %}
+        </div>
+
+        <div id="section-paper" class="section-panel">
+            <section class="cards">
+                {% if selected_strategy.has_tracking_data %}
+                {% for card in selected_strategy.tracking_summary_cards %}
+                <div class="info-card"><div class="label">{{ card.label }}</div><div class="value">{{ card.value }}</div></div>
+                {% endfor %}
+                {% else %}
+                <div class="info-card"><div class="label">Live</div><div class="value">No live data</div></div>
+                <div class="info-card"><div class="label">Next</div><div class="value">N/A</div></div>
+                <div class="info-card"><div class="label">Days</div><div class="value">0</div></div>
+                {% endif %}
+            </section>
+
+            <section class="section">
+                <div class="info-card">
+                    <div class="label">Live Rows</div>
+                    {% if selected_strategy.tracking_rows %}
+                    <div class="row-list">
+                        <div class="row-head"><span>Date</span><span>Close</span><span>Signal</span><span>Next</span><span>PnL</span></div>
+                        {% for row in selected_strategy.tracking_rows %}
+                        <div class="row-item"><span>{{ row.date }}</span><span>{{ row.close }}</span><span>{{ row.signal }}</span><span>{{ row.next_position }}</span><span>{{ row.pnl }}</span></div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p>No live data</p>
+                    {% endif %}
+                </div>
+            </section>
+
+            <section class="section">
+                <div class="info-card">
+                    <div class="label">Watchlist</div>
+                    <div class="ticker-list">
+                        {% for item in tracked_tickers %}
+                        <div class="ticker-row"><span>{{ item.asset }}</span><span>{{ item.signal_label }}</span><span>{{ item.latest_date }}</span></div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        function showSectionTab(id) {
+            document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('section-' + id).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        {% if selected_strategy.has_data %}
+        Plotly.newPlot('equity-{{ selected_strategy.id }}', {{ selected_strategy.equity_json | safe }}.data, {{ selected_strategy.equity_json | safe }}.layout, {responsive: true});
+        {% endif %}
+    </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Dashboard Subsystem
 
-Template-driven HTML dashboard. Strategies come from `strategies.yaml`, not hardcoded.
+Template-driven HTML pages. Strategies come from `strategies.yaml`, not hardcoded.
 
 ## I want to...
 
@@ -22,8 +22,8 @@ Templates are in `causal_edge/dashboard/templates/`. Rules:
 3. Or prefix with `_` to mark it private (won't be checked)
 
 ## Key Files
-- `generator.py` — main entry: config + trade logs -> Jinja2 -> HTML
+- `generator.py` — page generators: dashboard, signal demo, tracking
 - `components.py` — stateless Plotly chart builders (pure functions)
 - `_helpers.py` — formatting utilities (pnl%, dollar amounts)
 - `server.py` — HTTP server for serving generated dashboard
-- `templates/` — Jinja2 templates
+- `templates/` — Jinja2 templates for dashboard, signal demo, tracking
