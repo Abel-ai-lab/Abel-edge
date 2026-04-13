@@ -10,8 +10,8 @@ from typing import Any
 
 import requests
 
-DEFAULT_OAUTH_BASE_URL = "https://api-sit.abel.ai/echo"
-DEFAULT_CAP_BASE_URL = "https://cap-sit.abel.ai/api"
+DEFAULT_OAUTH_BASE_URL = "https://api.abel.ai/echo"
+DEFAULT_CAP_BASE_URL = "https://cap.abel.ai/api"
 CRYPTO_ALIASES = {"BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX"}
 SUPPORTED_FIELDS = {"price", "volume"}
 
