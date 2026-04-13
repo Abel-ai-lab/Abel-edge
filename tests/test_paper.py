@@ -1,4 +1,5 @@
 from pathlib import Path
+import importlib
 import sys
 
 import pandas as pd
@@ -40,6 +41,10 @@ class PaperDemoEngine(StrategyEngine):
 
 
 def _write_strategy_project(tmp_path: Path) -> None:
+    for name in list(sys.modules):
+        if name == "strategies" or name.startswith("strategies."):
+            sys.modules.pop(name, None)
+    importlib.invalidate_caches()
     (tmp_path / "strategies").mkdir()
     (tmp_path / "strategies" / "__init__.py").write_text("", encoding="utf-8")
     (tmp_path / "strategies" / "paper_demo").mkdir()
@@ -69,6 +74,7 @@ strategies:
     color: "#2563EB"
     engine: strategies.paper_demo.engine
     trade_log: data/trade_log_paper_demo.csv
+    paper_log: data/paper_log_paper_demo.csv
     price_data:
       source: csv
       path: data/ethusd.csv
@@ -104,14 +110,19 @@ def test_paper_appends_live_rows_with_close_fill_semantics(tmp_path):
         )
 
         assert result.exit_code == 0, result.output
-        df = read_trade_log("data/trade_log_paper_demo.csv")
-        assert list(df["source"].tail(2)) == ["live", "live"]
-        assert list(df["date"].dt.strftime("%Y-%m-%d").tail(2)) == ["2026-01-03", "2026-01-04"]
-        assert list(df["position"].tail(2).round(2)) == [1.0, 0.0]
-        assert list(df["next_position"].tail(2).round(2)) == [0.0, 1.0]
-        assert list(df["close"].tail(2).round(2)) == [90.0, 120.0]
-        assert float(df.iloc[-2]["pnl"]) < 0
-        assert float(df.iloc[-1]["pnl"]) == 0.0
+        trade_df = read_trade_log("data/trade_log_paper_demo.csv")
+        paper_df = read_trade_log("data/paper_log_paper_demo.csv")
+        assert len(trade_df) == 2
+        assert list(paper_df["source"].tail(2)) == ["live", "live"]
+        assert list(paper_df["date"].dt.strftime("%Y-%m-%d").tail(2)) == [
+            "2026-01-03",
+            "2026-01-04",
+        ]
+        assert list(paper_df["position"].tail(2).round(2)) == [1.0, 0.0]
+        assert list(paper_df["next_position"].tail(2).round(2)) == [0.0, 1.0]
+        assert list(paper_df["close"].tail(2).round(2)) == [90.0, 120.0]
+        assert float(paper_df.iloc[-2]["pnl"]) < 0
+        assert float(paper_df.iloc[-1]["pnl"]) == 0.0
         sys.path.pop(0)
 
 
@@ -148,7 +159,9 @@ def test_paper_is_idempotent_when_no_new_bars(tmp_path):
         assert second.exit_code == 0, second.output
         assert "no new closed bars" in second.output
 
-        df = read_trade_log("data/trade_log_paper_demo.csv")
-        assert len(df) == 4
-        assert int((df["source"] == "live").sum()) == 2
+        trade_df = read_trade_log("data/trade_log_paper_demo.csv")
+        paper_df = read_trade_log("data/paper_log_paper_demo.csv")
+        assert len(trade_df) == 2
+        assert len(paper_df) == 2
+        assert int((paper_df["source"] == "live").sum()) == 2
         sys.path.pop(0)

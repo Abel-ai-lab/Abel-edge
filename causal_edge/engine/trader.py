@@ -100,6 +100,25 @@ def _resolve_last_logged_row(trade_log_path: str):
     return log_df, log_df.iloc[-1]
 
 
+def _paper_log_path(strategy_cfg: dict) -> str:
+    return strategy_cfg.get("paper_log") or strategy_cfg["trade_log"]
+
+
+def _resolve_paper_state(strategy_cfg: dict):
+    trade_log_path = strategy_cfg["trade_log"]
+    paper_log_path = _paper_log_path(strategy_cfg)
+
+    if paper_log_path != trade_log_path:
+        try:
+            paper_df, paper_last_row = _resolve_last_logged_row(paper_log_path)
+            return paper_log_path, paper_df, paper_last_row
+        except click.ClickException:
+            pass
+
+    trade_df, trade_last_row = _resolve_last_logged_row(trade_log_path)
+    return paper_log_path, trade_df, trade_last_row
+
+
 def paper_run_one(
     strategy_cfg: dict,
     *,
@@ -109,7 +128,7 @@ def paper_run_one(
 ) -> dict:
     sid = strategy_cfg["id"]
     engine_path = strategy_cfg["engine"]
-    trade_log_path = strategy_cfg["trade_log"]
+    paper_log_path = _paper_log_path(strategy_cfg)
 
     click.echo(f"  Paper trading {sid}...")
     engine_cls = _load_engine(engine_path)
@@ -136,7 +155,7 @@ def paper_run_one(
     if len(prices) > 1:
         returns[1:] = prices[1:] / prices[:-1] - 1.0
 
-    log_df, last_row = _resolve_last_logged_row(trade_log_path)
+    _, paper_df, last_row = _resolve_paper_state(strategy_cfg)
     last_logged_date = pd.to_datetime(last_row["date"], utc=True)
     new_mask = dates > last_logged_date
     new_dates = dates[new_mask]
@@ -144,11 +163,11 @@ def paper_run_one(
         return {
             "id": sid,
             "n_rows": 0,
-            "trade_log": trade_log_path,
+            "trade_log": paper_log_path,
             "last_date": str(last_logged_date),
         }
 
-    if "next_position" in log_df.columns and pd.notna(last_row.get("next_position")):
+    if "next_position" in paper_df.columns and pd.notna(last_row.get("next_position")):
         carry_position = float(last_row["next_position"])
     else:
         bootstrap = _ensure_paper_signal(engine, as_of=last_logged_date)
@@ -173,11 +192,11 @@ def paper_run_one(
         )
         carry_position = next_position
 
-    append_trade_log_rows(trade_log_path, rows)
+    append_trade_log_rows(paper_log_path, rows)
     return {
         "id": sid,
         "n_rows": len(rows),
-        "trade_log": trade_log_path,
+        "trade_log": paper_log_path,
         "last_date": str(new_dates[-1].date()),
     }
 

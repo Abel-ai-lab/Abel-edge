@@ -45,6 +45,7 @@ strategies:
     color: "#FF2D55"
     engine: strategies.my_strategy.engine
     trade_log: "data/trade_log_my_strategy.csv"
+    paper_log: "data/paper_log_my_strategy.csv"
     # Optional: default live price source is Abel. Override with CSV if needed.
     # price_data:
     #   source: csv
@@ -102,3 +103,4 @@ cumprod(1 + pnl[:t]) - 1 -> cum_return[t]
 - No decision path may use `price[t]` or `asset_return[t]` when setting `position[t]`.
 - No alignment step may propagate future observations backward into earlier timestamps.
 - The emitted trade log must preserve `pnl[t] = position[t] * asset_return[t]`.
+- If you enable paper trading, keep live paper rows in `paper_log` so validation and backtests stay isolated.

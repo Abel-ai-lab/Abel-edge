@@ -92,6 +92,7 @@ strategies:
     color: "#0A84FF"
     engine: strategies.sma_crossover.engine
     trade_log: "data/trade_log_sma_crossover.csv"
+    paper_log: "data/paper_log_sma_crossover.csv"
 
   - id: momentum_ml
     name: "Momentum ML"
@@ -99,6 +100,7 @@ strategies:
     color: "#FF9500"
     engine: strategies.momentum_ml.engine
     trade_log: "data/trade_log_momentum_ml.csv"
+    paper_log: "data/paper_log_momentum_ml.csv"
 
   - id: causal_demo
     name: "Causal Voting (TON)"
@@ -106,6 +108,7 @@ strategies:
     color: "#30D158"
     engine: strategies.causal_demo.engine
     trade_log: "data/trade_log_causal_demo.csv"
+    paper_log: "data/paper_log_causal_demo.csv"
 """
 
 _ENV_EXAMPLE = """\

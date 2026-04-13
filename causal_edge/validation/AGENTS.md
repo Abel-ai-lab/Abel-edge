@@ -6,7 +6,6 @@ Three leverage-invariant dimensions:
 - **Shape** (Omega) — guardrail, catches clipping
 
 ## I want to...
-
 ### Validate a strategy
     causal-edge validate --strategy <ID> --verbose
 
@@ -14,11 +13,10 @@ Three leverage-invariant dimensions:
 - The audited live validation contract uses applicable-gate denominators rather than legacy `20/21` score narratives.
 - Typical denominators start at `6`, add `+1` for `Omega` applicability, `+1` for full-year `LossYrs` applicability, `+1` for `position_ic_applicable`, and `+1` for `position_ic_stability_applicable`.
 - DSR accepts optional externally declared exploration counts via `dsr_trials`; otherwise it falls back to the profile default `validation.dsr_K`.
-- Deferred/removed gates and profile keys are tracked in `causal_edge/validation/deferred_registry.yaml`.
-- The long-lived timing and audit contract is summarized in `docs/validation-audit-matrix.md`.
+- Deferred gates/profile keys: `causal_edge/validation/deferred_registry.yaml`.
+- Timing/audit contract: `docs/validation-audit-matrix.md`.
 
 ### Understand why it failed
-
 | Code | Fix | How |
 |------|-----|-----|
 | T6 DSR | Reduce trials | Fewer param combos in grid search. Declare realistic `dsr_trials`; K<50 ideal |
@@ -53,7 +51,7 @@ positions *= np.maximum(0.3, 1.0 - 0.1 * hold_days)
 Read docstring at top of `metrics.py`. No known transformation improves all three simultaneously except genuine signal improvement.
 
 ### Diagnostic-only metrics
-- `max_drawdown_duration_bars` remains in the payload for audit and diagnostics, but it is no longer a live PASS/FAIL gate.
+- `max_drawdown_duration_bars` stays in the payload for audit/diagnostics, but it is no longer a live PASS/FAIL gate.
 
 ## Key Files
 - `metrics.py` — `compute_all_metrics()`, `validate()`, `decide_keep_discard()`

@@ -61,6 +61,12 @@ def _validate_strategy(strategy: dict, index: int) -> None:
     if price_data is not None:
         _validate_price_data(price_data, scope=f"strategy '{strategy.get('id', index)}'")
 
+    paper_log = strategy.get("paper_log")
+    if paper_log is not None and not isinstance(paper_log, str):
+        raise ValueError(
+            f"strategy '{strategy.get('id', index)}' paper_log must be a string path when provided."
+        )
+
 
 def _validate_price_data(price_data: Any, *, scope: str) -> None:
     if not isinstance(price_data, dict):
