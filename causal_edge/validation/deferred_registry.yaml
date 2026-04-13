@@ -303,3 +303,17 @@ entries:
       - Duration threshold semantics are documented per profile cadence
       - Runtime denominator and failure semantics are tested end-to-end
     docs_updated: true
+
+  - name: T13 DrawdownTime
+    type: gate
+    status: deferred
+    removed_from:
+      - causal_edge/validation/metrics.py
+    reason: Removed from the live validation gate because underwater-time thresholds depend on market structure and bar cadence semantics that are not yet justified as a universal PASS/FAIL contract.
+    required_inputs:
+      - explicit bar cadence policy
+      - underwater-time semantics by profile
+    reentry_conditions:
+      - Duration-fraction threshold semantics are documented per profile cadence
+      - Runtime denominator and failure semantics are tested end-to-end
+    docs_updated: true

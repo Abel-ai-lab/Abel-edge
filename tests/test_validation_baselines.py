@@ -170,13 +170,14 @@ def test_defer_candidate_metrics_are_not_gate_failures() -> None:
     assert "cvar_var_ratio" not in joined
     assert "T7 PBO" not in joined
     assert "T13 NegRoll" not in joined
+    assert "T13 DrawdownTime" not in joined
     assert "T13 MaxDDDuration" not in joined
 
 
 def test_public_claim_denominator_drift_is_visible() -> None:
     result = validate_strategy(FIXTURES / "positive_daily.csv", profile="equity_daily")
     denominator = int(result["score"].split("/")[1])
-    assert denominator == 7
+    assert denominator == 6
 
 
 def test_removed_oos_family_metrics_are_not_in_payload() -> None:

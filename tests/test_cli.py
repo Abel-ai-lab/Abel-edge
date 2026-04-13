@@ -291,10 +291,6 @@ def test_validate_csv_missing_file():
 
 def test_discover_ethusd_parents(monkeypatch, tmp_path):
     class StubClient:
-        def ensure_api_key(self, *, env_path=".env"):
-            assert env_path == ".env"
-            return "abel_test"
-
         def discover_parents(self, *, node_id, limit, api_key):
             assert node_id == "ETHUSD"
             assert limit == 20
@@ -304,6 +300,7 @@ def test_discover_ethusd_parents(monkeypatch, tmp_path):
     from causal_edge.plugins.abel import discover as discover_module
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(discover_module, "require_api_key", lambda env_path=".env": "abel_test")
     monkeypatch.setattr(discover_module, "AbelClient", StubClient)
     result = CliRunner().invoke(main, ["discover", "ETHUSD", "--limit", "50"])
     assert result.exit_code == 0, result.output
@@ -314,9 +311,6 @@ def test_discover_ethusd_parents(monkeypatch, tmp_path):
 
 def test_discover_ethusd_markov_blanket(monkeypatch, tmp_path):
     class StubClient:
-        def ensure_api_key(self, *, env_path=".env"):
-            return "abel_test"
-
         def markov_blanket(self, *, node_id, limit, api_key):
             assert node_id == "ETHUSD"
             assert limit == 12
@@ -328,9 +322,71 @@ def test_discover_ethusd_markov_blanket(monkeypatch, tmp_path):
     from causal_edge.plugins.abel import discover as discover_module
 
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(discover_module, "require_api_key", lambda env_path=".env": "abel_test")
     monkeypatch.setattr(discover_module, "AbelClient", StubClient)
     result = CliRunner().invoke(main, ["discover", "ETHUSD", "--mode", "mb", "--limit", "12"])
     assert result.exit_code == 0, result.output
     assert "markov_blanket:" in result.output
     assert "roles: [parent]" in result.output
     assert "roles: [spouse]" in result.output
+
+
+def test_discover_missing_api_key_fails(monkeypatch, tmp_path):
+    from causal_edge.plugins.abel import discover as discover_module
+    from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError
+
+    monkeypatch.chdir(tmp_path)
+
+    def _raise(env_path=".env"):
+        raise MissingAbelApiKeyError("Abel API key not found.")
+
+    monkeypatch.setattr(discover_module, "require_api_key", _raise)
+    result = CliRunner().invoke(main, ["discover", "ETHUSD"])
+
+    assert result.exit_code != 0
+    assert "Abel API key not found." in result.output
+    assert "ABEL_CAP_BASE_URL" in result.output
+
+
+def test_run_with_abel_source_missing_api_key_fails(monkeypatch, tmp_path):
+    from causal_edge.engine.base import StrategyEngine
+    from causal_edge.engine import trader as trader_module
+
+    class DemoEngine(StrategyEngine):
+        def compute_signals(self):
+            bars = self.load_bars(limit=2)
+            prices = bars["close"].to_numpy()
+            dates = bars["timestamp"]
+            return prices * 0.0, dates, prices
+
+        def get_latest_signal(self):
+            return {"position": 0.0}
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        monkeypatch.delenv("ABEL_API_KEY", raising=False)
+        monkeypatch.delenv("CAP_API_KEY", raising=False)
+        monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
+        monkeypatch.setattr(trader_module, "_load_engine", lambda engine_path: DemoEngine)
+        Path("strategies.yaml").write_text(
+            """
+settings:
+  price_data:
+    default_source: abel
+strategies:
+  - id: demo
+    name: Demo
+    asset: ETHUSD
+    color: '#123456'
+    engine: strategies.demo.engine
+    trade_log: data/demo.csv
+""",
+            encoding="utf-8",
+        )
+        Path("data").mkdir()
+
+        result = runner.invoke(main, ["run", "--strategy", "demo"])
+
+        assert result.exit_code != 0
+        assert "Abel API key not found." in result.output
+        assert "price_data.source to 'csv'" in result.output

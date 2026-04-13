@@ -23,7 +23,7 @@ def test_csv_insufficient_rows_contract() -> None:
 def test_csv_without_position_has_current_conditional_denominator() -> None:
     result = validate_strategy(FIXTURES / "ic_unsupported_no_position.csv", profile="equity_daily")
     assert result["verdict"] == "FAIL"
-    assert result["score"] == "5/6"
+    assert result["score"] == "4/5"
     assert result["metrics"]["position_ic_applicable"] is False
     assert result["metrics"]["loss_years_applicable"] is False
     assert result["metrics"]["omega_applicable"] is False
@@ -35,7 +35,7 @@ def test_csv_with_position_marks_ic_family_applicable() -> None:
     result = validate_strategy(FIXTURES / "ic_supported.csv", profile="equity_daily")
     assert result["metrics"]["position_ic_applicable"] is True
     assert result["metrics"]["position_ic_stability_applicable"] is False
-    assert result["score"] == "8/8"
+    assert result["score"] == "7/7"
 
 
 def test_position_aware_csv_without_ic_failures_uses_15_test_contract() -> None:
@@ -44,7 +44,7 @@ def test_position_aware_csv_without_ic_failures_uses_15_test_contract() -> None:
     assert result["metrics"]["position_ic_stability_applicable"] is False
     assert result["metrics"]["loss_years_applicable"] is False
     assert result["metrics"]["omega_applicable"] is False
-    assert result["score"] == "6/7"
+    assert result["score"] == "5/6"
 
 
 def test_csv_without_position_omits_ic_gate_labels_from_failures() -> None:
@@ -54,6 +54,7 @@ def test_csv_without_position_omits_ic_gate_labels_from_failures() -> None:
     assert "IC stab" not in joined
     assert "T7 PBO" not in joined
     assert "T13 NegRoll" not in joined
+    assert "T13 DrawdownTime" not in joined
     assert "T13 MaxDDDuration" not in joined
     assert "T14 LossYrs" not in joined
     assert "T15 Omega" not in joined
@@ -79,7 +80,7 @@ def test_verbose_output_includes_current_metric_section() -> None:
         ],
     )
     assert result.exit_code == 1
-    assert "ic_unsupported_no_position     5/6  FAIL" in result.output
+    assert "ic_unsupported_no_position     4/5  FAIL" in result.output
     assert "ic_unsupported_no_position metrics:" in result.output
     assert "sharpe" in result.output
     assert "dsr_trials_used" in result.output
@@ -121,7 +122,7 @@ def test_export_output_matches_current_report_contract(tmp_path) -> None:
     assert result.exit_code == 1
     exported = export_path.read_text(encoding="utf-8")
     assert "ABEL PROOF VALIDATION REPORT" in exported
-    assert "ic_unsupported_no_position     5/6  FAIL" in exported
+    assert "ic_unsupported_no_position     4/5  FAIL" in exported
     assert "Return floor +4.1% < +30%" in exported
     assert "Report exported to" in result.output
 
@@ -142,4 +143,4 @@ def test_contract_drift_public_claim_for_15_test_validation() -> None:
     match = re.search(r"(\d+)/(\d+)", result.output)
     assert match, f"No score found in output: {result.output!r}"
     denominator = int(match.group(2))
-    assert denominator == 6
+    assert denominator == 5

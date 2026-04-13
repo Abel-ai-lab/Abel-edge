@@ -143,7 +143,7 @@ def generate_ic_supported() -> None:
 def generate_ic_unsupported_no_position() -> None:
     """No 'position' column. total_return ~0.041 so export shows '+4.1%'.
 
-    Tests expect score "5/6" with equity_daily profile.
+    Tests expect score "4/5" with equity_daily profile.
     """
     rng = np.random.RandomState(42)
     n = 210
@@ -156,13 +156,13 @@ def generate_ic_unsupported_no_position() -> None:
     # Need mix of positive and negative (omega must not be applicable → wait, test says omega_applicable is False)
     # Actually test says omega_applicable is False. Let's check: omega_applicable = len(losses) > 0 and loss_mass > 1e-12
     # If omega_applicable is False, it means either no losses or loss_mass is negligible.
-    # But test also says verdict=FAIL, score="5/6". Let's check what fails:
+    # But test also says verdict=FAIL, score="4/5". Let's check what fails:
     # With equity_daily: return_floor = 0.30, total_return = 0.041 < 0.30 → 1 failure
-    # score = (total - failures) / total, "5/6" means total=6, failures=1
-    # _count_total: base 5 + sharpe_lo_ratio = 6 (no loss_years, no omega, no IC, no IC_stability)
+    # score = (total - failures) / total, "4/5" means total=5, failures=1
+    # _count_total: base 4 + sharpe_lo_ratio = 5 (no loss_years, no omega, no IC, no IC_stability)
     # So we need: loss_years_applicable=False, omega_applicable=False, position_ic_applicable=False
     # omega_applicable=False means no negative pnl (all positive or zero)
-    # But then only 1 failure (return_floor), giving 5/6. Perfect.
+    # But then only 1 failure (return_floor), giving 4/5. Perfect.
     # All-positive pnl with total_return ~0.041
 
     # target: prod(1+pnl_i) = 1.041

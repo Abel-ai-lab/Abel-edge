@@ -3,9 +3,10 @@
 ## [Unreleased]
 
 ### Changed
-- **Validation contract migration**: `validate` no longer uses the legacy `20/21`-style denominator narrative. The audited live contract now reports denominators based on applicable gates: typically `6` or `8`, rising further when `Omega` and full-year loss accounting are applicable.
-- **Stability gate redesign**: `T13 NegRoll` was replaced by a direct drawdown-time gate on underwater bar fraction, while longest underwater duration now remains diagnostic-only in the payload.
+- **Validation contract migration**: `validate` no longer uses the legacy `20/21`-style denominator narrative. The audited live contract now reports denominators based on applicable gates: typically `5` or `7`, rising further when `Omega` and full-year loss accounting are applicable.
+- **Stability gate redesign**: `T13 NegRoll` was replaced by diagnostic drawdown-time payloads on underwater bar fraction and longest underwater duration rather than live PASS/FAIL gates.
 - **Longest drawdown duration downgraded**: `max_drawdown_duration_bars` remains in the validation payload for audit, but `T13 MaxDDDuration` no longer acts as a live PASS/FAIL gate or score denominator slot.
+- **Drawdown-time fraction downgraded**: `drawdown_time_frac` remains in the validation payload for audit, but `T13 DrawdownTime` no longer acts as a live PASS/FAIL gate or score denominator slot.
 - **Loss-year contract redesign**: `T14 LossYrs` now counts only full calendar years with negative total PnL, and partial-year backtests no longer activate the gate.
 - **Mathematical corrections**: no-loss `omega` now becomes an applicability case instead of a live gate failure, zero-drawdown `calmar` now normalizes to `0.0` instead of sentinel `999`, and constant-series `skew` now normalizes to `0.0` instead of `NaN`.
 - **Applicability semantics**: Position-Return IC behavior is now explicit via `position_ic_*_applicable` flags rather than inferred from zero-valued IC metrics.
