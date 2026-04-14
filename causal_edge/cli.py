@@ -11,6 +11,10 @@ import click
 from causal_edge.cli_support import build_bars_loader
 from causal_edge.research.cli import research
 
+CONFIG_OPTION_HELP = (
+    "Config file path (defaults to strategies.local.yaml if present, else strategies.yaml)"
+)
+
 
 def _get_version() -> str:
     """Return installed package version, or fall back to source version."""
@@ -129,7 +133,7 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
 
 @main.command()
 @click.option("--strategy", default=None, help="Run a specific strategy by ID")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 def run(strategy, config):
     """Run strategies and write trade logs."""
     from causal_edge.config import load_config
@@ -149,7 +153,7 @@ def run(strategy, config):
 
 @main.command("paper")
 @click.option("--strategy", default=None, help="Paper-trade a specific strategy by ID")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--as-of", default=None, help="Only process bars up to this timestamp")
 def paper(strategy, config, as_of):
     """Append live paper-trading rows using the latest closed bars."""
@@ -169,7 +173,7 @@ def paper(strategy, config, as_of):
 
 
 @main.command()
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--output", default="dashboard.html", help="Output HTML path")
 def dashboard(config, output):
     """Generate dashboard HTML."""
@@ -180,7 +184,7 @@ def dashboard(config, output):
 
 
 @main.command("signal-demo")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--strategy", required=True, help="Render a specific strategy signal demo page")
 @click.option("--output", default="signal-demo.html", help="Output HTML path")
 def signal_demo(config, strategy, output):
@@ -195,7 +199,7 @@ def signal_demo(config, strategy, output):
 
 
 @main.command("tracking")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--strategy", required=True, help="Render a specific strategy tracking page")
 @click.option("--output", default="tracking.html", help="Output HTML path")
 def tracking(config, strategy, output):
@@ -222,7 +226,7 @@ def tracking(config, strategy, output):
     help="Declared strategy exploration count used by DSR (overrides profile default)",
 )
 @click.option("--export", "export_path", default=None, help="Export report to file")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
     """Run Abel Proof validation on strategies."""
     import io
@@ -340,7 +344,7 @@ def discover(ticker, mode, limit):
 
 
 @main.command()
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 def status(config):
     """Show strategy status summary."""
     from causal_edge.config import load_config
