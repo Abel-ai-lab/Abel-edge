@@ -17,9 +17,12 @@ DEMO_ENGINE = (
 )
 
 
-def _write_demo_project(*, paper_log=False, cta=False, backtest_csv=None, paper_csv=None):
-    config = [
-        "settings: {}",
+def _write_demo_project(
+    *, paper_log=False, cta=False, backtest_csv=None, paper_csv=None, settings_lines=None
+):
+    config = list(settings_lines or ["settings: {}"])
+    config.extend(
+        [
         "strategies:",
         "  - id: demo_signal",
         '    name: "Demo Signal"',
@@ -27,7 +30,8 @@ def _write_demo_project(*, paper_log=False, cta=False, backtest_csv=None, paper_
         '    color: "#2563EB"',
         "    engine: strategies.demo_signal.engine",
         "    trade_log: data/trade_log_demo_signal.csv",
-    ]
+        ]
+    )
     if paper_log:
         config.append("    paper_log: data/paper_log_demo_signal.csv")
     config.append('    thesis: "Signal thesis"')
@@ -168,6 +172,39 @@ def test_dashboard_renders_paper_trading_section(tmp_path):
         assert "Live through: 2024-01-03" in html
         assert "Live Rows" in html
         assert "showSectionTab('demo_signal', 'paper'" in html
+
+
+def test_dashboard_renders_live_overview_sections(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        _write_demo_project(
+            paper_log=True,
+            settings_lines=[
+                "settings:",
+                "  paper_trading_start: 2024-01-03",
+                "  ledger_days: 5",
+            ],
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+                "2024-01-02,0.02,0.01,0.50,0.01,backfill\n"
+            ),
+            paper_csv=(
+                "date,asset_return,pnl,position,source,close,next_position\n"
+                "2024-01-03,0.03,0.01,0.50,live,101.0,1.00\n"
+                "2024-01-04,-0.02,-0.01,1.00,live,99.0,0.00\n"
+            ),
+        )
+
+        result = runner.invoke(main, ["dashboard", "--output", "dashboard.html"])
+
+        assert result.exit_code == 0, result.output
+        html = Path("dashboard.html").read_text(encoding="utf-8")
+        assert "Live Performance" in html
+        assert "Live Ledger" in html
+        assert "Recent Live Days" in html
+        assert "Since 2024-01-03" in html
+        assert "2024-01-04" in html
 
 
 def test_signal_demo_renders_single_signal_page(tmp_path):
