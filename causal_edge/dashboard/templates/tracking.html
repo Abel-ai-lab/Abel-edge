@@ -50,7 +50,7 @@
             {% if selected_strategy.has_tracking_data %}
             <p>Tracking window: {{ selected_strategy.tracking_start_date }} to {{ selected_strategy.tracking_latest_date }}</p>
             <p>Next position after latest close: {{ '%.2f'|format(selected_strategy.tracking_latest_signal_position) }}</p>
-            {% if selected_strategy.has_tracking_preview %}
+            {% if selected_strategy.has_tracking_preview_chart %}
             <p>This view preloads the final {{ selected_strategy.tracking_preload_days }} backtest days before live tracking begins.</p>
             {% endif %}
             {% else %}
@@ -68,14 +68,22 @@
         <section class="grid">
             <div class="chart">
                 <h3>Tracking Launch Context</h3>
+                {% if selected_strategy.has_tracking_preview_chart %}
                 <div id="tracking-preview"></div>
+                {% else %}
+                <div class="empty">Legacy logs do not include backtest asset returns for a launch-context chart.</div>
+                {% endif %}
             </div>
             <div class="chart">
                 <h3>Ticker Price Since Tracking Began</h3>
+                {% if selected_strategy.has_tracking_asset_chart %}
                 <div id="tracking-asset"></div>
+                {% else %}
+                <div class="empty">Legacy live rows do not include asset price returns, so this chart is hidden.</div>
+                {% endif %}
             </div>
             <div class="chart">
-                <h3>Signal Changes Since Tracking Began</h3>
+                <h3>{{ selected_strategy.tracking_signal_chart_title }}</h3>
                 <div id="tracking-position"></div>
             </div>
             <div class="chart">
@@ -105,10 +113,14 @@
 
     <script>
         {% if selected_strategy.has_tracking_data %}
+        {% if selected_strategy.has_tracking_preview_chart %}
         Plotly.newPlot('tracking-preview', {{ selected_strategy.tracking_preview_json }}.data, {{ selected_strategy.tracking_preview_json }}.layout, {responsive: true});
+        {% endif %}
+        {% if selected_strategy.has_tracking_asset_chart %}
         Plotly.newPlot('tracking-asset', {{ selected_strategy.tracking_asset_price_json }}.data, {{ selected_strategy.tracking_asset_price_json }}.layout, {responsive: true});
+        {% endif %}
         Plotly.newPlot('tracking-position', {{ selected_strategy.tracking_position_json }}.data, {{ selected_strategy.tracking_position_json }}.layout, {responsive: true});
-        {% elif selected_strategy.has_tracking_preview %}
+        {% elif selected_strategy.has_tracking_preview_chart %}
         Plotly.newPlot('tracking-preview', {{ selected_strategy.tracking_preview_json }}.data, {{ selected_strategy.tracking_preview_json }}.layout, {responsive: true});
         {% endif %}
     </script>

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
@@ -15,6 +13,7 @@ from causal_edge.dashboard.components import (
     equity_chart,
     position_chart,
 )
+from causal_edge.dashboard.price_overlay import fetch_price_overlay
 from causal_edge.dashboard.rows import filter_backtest_rows, filter_tracking_rows, paper_rows
 from causal_edge.dashboard.story import strategy_story
 from causal_edge.validation.metrics import detect_profile, load_profile
@@ -97,7 +96,13 @@ def _load_strategy_frames(s_cfg: dict) -> tuple[pd.DataFrame | None, pd.DataFram
 
 
 def _build_tracking_payload(
-    base: dict, backtest_df: pd.DataFrame | None, paper_df: pd.DataFrame | None, s_cfg: dict
+    base: dict,
+    backtest_df: pd.DataFrame | None,
+    paper_df: pd.DataFrame | None,
+    s_cfg: dict,
+    *,
+    settings: dict,
+    bars_loader,
 ) -> dict:
     if paper_df is None or len(paper_df) == 0:
         preview_df = (
@@ -111,6 +116,10 @@ def _build_tracking_payload(
             "has_tracking_data": False,
             "has_tracking_preview": preview_df is not None
             and "asset_return" in preview_df.columns,
+            "has_tracking_preview_chart": preview_df is not None
+            and "asset_return" in preview_df.columns,
+            "has_tracking_asset_chart": False,
+            "tracking_signal_chart_title": "Signal Changes Since Tracking Began",
             "tracking_status": "Tracking not started",
             "tracking_status_detail": "Run paper trading to start appending live rows.",
             "tracking_latest_date": None,
@@ -142,11 +151,11 @@ def _build_tracking_payload(
 
     paper_df = paper_df.sort_values("date").reset_index(drop=True)
     pnl = paper_df["pnl"].values.astype(float)
+    has_asset_returns = "asset_return" in paper_df.columns
     asset_returns = (
-        paper_df["asset_return"].values.astype(float)
-        if "asset_return" in paper_df.columns
-        else np.zeros(len(pnl))
+        paper_df["asset_return"].values.astype(float) if has_asset_returns else np.zeros(len(pnl))
     )
+    has_next_positions = "next_position" in paper_df.columns
     positions = (
         paper_df["position"].values.astype(float)
         if "position" in paper_df.columns
@@ -171,12 +180,46 @@ def _build_tracking_payload(
     )
     cum_return = np.cumprod(1.0 + pnl) - 1.0
 
+    price_overlay = fetch_price_overlay(
+        s_cfg, settings, bars_loader, start=dates[0], end=dates[-1]
+    )
+    if not has_asset_returns and price_overlay is not None:
+        has_asset_returns = True
+        asset_returns = price_overlay["returns"]
+        latest_close = float(price_overlay["close"][-1])
+
+    preview_price_overlay = None
+    if preview_df is not None and len(preview_df) > 0:
+        preview_dates = pd.DatetimeIndex(preview_df["date"])
+        preview_price_overlay = fetch_price_overlay(
+            s_cfg,
+            settings,
+            bars_loader,
+            start=preview_dates[0],
+            end=preview_dates[-1],
+        )
+
     return {
         **base,
         **strategy_story(s_cfg),
-        **_strategy_copy(s_cfg, metrics=tracking_metrics, latest_position=live_signal_position),
+        "signal_label": _signal_label(live_signal_position),
+        "signal_summary": _signal_summary(live_signal_position),
         "has_tracking_data": True,
         "has_tracking_preview": preview_df is not None and len(preview_df) > len(paper_df),
+        "has_tracking_preview_chart": (
+            preview_price_overlay is not None
+            or (
+                preview_df is not None
+                and len(preview_df) > len(paper_df)
+                and "asset_return" in preview_df.columns
+            )
+        ),
+        "has_tracking_asset_chart": has_asset_returns,
+        "tracking_signal_chart_title": (
+            "Signal Changes Since Tracking Began"
+            if has_next_positions
+            else "Position Since Tracking Began"
+        ),
         "tracking_status": "Tracking started",
         "tracking_status_detail": f"Live paper rows are available through {dates[-1].date()}.",
         "tracking_start_date": str(dates[0].date()),
@@ -189,20 +232,33 @@ def _build_tracking_payload(
         "tracking_equity_json": equity_chart(
             dates, cum_return, f"{s_cfg['asset']} Tracking", s_cfg["color"]
         ),
-        "tracking_asset_price_json": asset_price_chart(
-            dates, asset_returns, s_cfg["asset"], s_cfg["color"]
+        "tracking_asset_price_json": (
+            asset_price_chart(
+                price_overlay["dates"] if price_overlay is not None else dates,
+                asset_returns,
+                s_cfg["asset"],
+                s_cfg["color"],
+            )
+            if has_asset_returns
+            else "{}"
         ),
         "tracking_position_json": position_chart(
             dates, next_positions, f"{s_cfg['asset']} Signal", s_cfg["color"]
         ),
-        "tracking_preview_json": asset_price_chart(
-            pd.DatetimeIndex(preview_df["date"]),
-            preview_df["asset_return"].values.astype(float),
-            s_cfg["asset"],
-            s_cfg["color"],
-        )
-        if "asset_return" in preview_df.columns
-        else "{}",
+        "tracking_preview_json": (
+            asset_price_chart(
+                preview_price_overlay["dates"]
+                if preview_price_overlay is not None
+                else pd.DatetimeIndex(preview_df["date"]),
+                preview_price_overlay["returns"]
+                if preview_price_overlay is not None
+                else preview_df["asset_return"].values.astype(float),
+                s_cfg["asset"],
+                s_cfg["color"],
+            )
+            if preview_price_overlay is not None or "asset_return" in preview_df.columns
+            else "{}"
+        ),
         "tracking_rows": paper_rows(paper_df, signal_label=_signal_label, fmt_pnl_pct=fmt_pnl_pct),
         "tracking_summary_cards": [
             {
@@ -221,7 +277,8 @@ def _build_tracking_payload(
     }
 
 
-def prepare_strategy(s_cfg: dict) -> dict:
+def prepare_strategy(s_cfg: dict, settings: dict | None = None, bars_loader=None) -> dict:
+    settings = settings or {}
     backtest_full, paper_df = _load_strategy_frames(s_cfg)
     backtest_df = filter_backtest_rows(backtest_full)
 
@@ -232,6 +289,7 @@ def prepare_strategy(s_cfg: dict) -> dict:
             "color": s_cfg["color"],
             "asset": s_cfg["asset"],
             "has_data": False,
+            "has_backtest_asset_chart": False,
             "metrics": {},
             "equity_json": "{}",
             "asset_price_json": "{}",
@@ -240,7 +298,14 @@ def prepare_strategy(s_cfg: dict) -> dict:
             "latest_position": 0.0,
             **_strategy_copy(s_cfg),
         }
-        return _build_tracking_payload(base, backtest_df, paper_df, s_cfg)
+        return _build_tracking_payload(
+            base,
+            backtest_df,
+            paper_df,
+            s_cfg,
+            settings=settings,
+            bars_loader=bars_loader,
+        )
 
     pnl = backtest_df["pnl"].values.astype(float)
     asset_returns = (
@@ -248,19 +313,28 @@ def prepare_strategy(s_cfg: dict) -> dict:
         if "asset_return" in backtest_df.columns
         else None
     )
+    dates = pd.DatetimeIndex(backtest_df["date"])
+    price_overlay = None
+    if asset_returns is None and len(dates) > 0:
+        price_overlay = fetch_price_overlay(
+            s_cfg, settings, bars_loader, start=dates[0], end=dates[-1]
+        )
+        if price_overlay is not None:
+            asset_returns = price_overlay["returns"]
+
+    has_backtest_asset_chart = asset_returns is not None
     positions = (
         backtest_df["position"].values.astype(float)
         if "position" in backtest_df.columns
         else np.zeros(len(pnl))
     )
-    dates = pd.DatetimeIndex(backtest_df["date"])
     cum_return = np.cumprod(1.0 + pnl) - 1.0
     profile_name = detect_profile(pnl, dates, asset_returns=asset_returns)
     profile = load_profile(profile_name)
     periods_per_year = profile.get("validation", {}).get("periods_per_year", 252)
     metrics = compute_metrics(pnl, periods_per_year=periods_per_year)
     latest_position = float(positions[-1]) if len(positions) > 0 else 0.0
-    asset_index = asset_index_from_returns(asset_returns if asset_returns is not None else pnl)
+    asset_index = asset_index_from_returns(asset_returns) if asset_returns is not None else None
 
     base = {
         "id": s_cfg["id"],
@@ -268,6 +342,7 @@ def prepare_strategy(s_cfg: dict) -> dict:
         "color": s_cfg["color"],
         "asset": s_cfg["asset"],
         "has_data": True,
+        "has_backtest_asset_chart": has_backtest_asset_chart,
         "metrics": metrics,
         "equity_json": equity_chart(
             dates,
@@ -276,20 +351,35 @@ def prepare_strategy(s_cfg: dict) -> dict:
             s_cfg["color"],
             asset_index=asset_index,
             asset=s_cfg["asset"],
+            asset_dates=(price_overlay["dates"] if price_overlay is not None else None),
         ),
-        "asset_price_json": asset_price_chart(
-            dates, asset_returns, s_cfg["asset"], s_cfg["color"]
+        "asset_price_json": (
+            asset_price_chart(
+                price_overlay["dates"] if price_overlay is not None else dates,
+                asset_returns,
+                s_cfg["asset"],
+                s_cfg["color"],
+            )
+            if asset_returns is not None
+            else "{}"
         ),
         "position_json": position_chart(dates, positions, s_cfg["name"], s_cfg["color"]),
         "latest_date": str(dates[-1].date()),
         "latest_position": latest_position,
         **_strategy_copy(s_cfg, metrics=metrics, latest_position=latest_position),
     }
-    return _build_tracking_payload(base, backtest_df, paper_df, s_cfg)
+    return _build_tracking_payload(
+        base,
+        backtest_df,
+        paper_df,
+        s_cfg,
+        settings=settings,
+        bars_loader=bars_loader,
+    )
 
 
-def tracked_ticker_item(s_cfg: dict) -> dict:
-    strategy = prepare_strategy(s_cfg)
+def tracked_ticker_item(s_cfg: dict, settings: dict | None = None, bars_loader=None) -> dict:
+    strategy = prepare_strategy(s_cfg, settings=settings, bars_loader=bars_loader)
     return {
         "id": strategy["id"],
         "asset": strategy["asset"],

@@ -180,7 +180,14 @@
 
                 {% if s.has_tracking_data %}
                 <div class="grid">
-                    <div class="chart-container"><div id="tracking-asset-{{ s.id }}"></div></div>
+                    <div class="chart-container">
+                        {% if s.has_tracking_asset_chart %}
+                        <div id="tracking-asset-{{ s.id }}"></div>
+                        {% else %}
+                        <div class="label">Ticker Price Since Tracking Began</div>
+                        <div class="empty">Legacy live rows do not include asset price returns, so this chart is hidden.</div>
+                        {% endif %}
+                    </div>
                     <div class="chart-container"><div id="tracking-position-{{ s.id }}"></div></div>
                     <div class="chart-container full">
                         <div class="label">Live Rows</div>
@@ -226,7 +233,9 @@
         Plotly.newPlot('position-{{ s.id }}', {{ s.position_json | safe }}.data, {{ s.position_json | safe }}.layout, {responsive: true});
         {% endif %}
         {% if s.has_tracking_data %}
+        {% if s.has_tracking_asset_chart %}
         Plotly.newPlot('tracking-asset-{{ s.id }}', {{ s.tracking_asset_price_json | safe }}.data, {{ s.tracking_asset_price_json | safe }}.layout, {responsive: true});
+        {% endif %}
         Plotly.newPlot('tracking-position-{{ s.id }}', {{ s.tracking_position_json | safe }}.data, {{ s.tracking_position_json | safe }}.layout, {responsive: true});
         {% elif s.has_tracking_preview %}
         Plotly.newPlot('tracking-preview-{{ s.id }}', {{ s.tracking_preview_json | safe }}.data, {{ s.tracking_preview_json | safe }}.layout, {responsive: true});
