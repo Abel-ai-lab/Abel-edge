@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+DEFAULT_AUTH_BASE_URL = "https://api.abel.ai/echo"
 DEFAULT_CAP_BASE_URL = "https://cap.abel.ai/api"
 
 
@@ -32,6 +33,13 @@ def _read_env_file(path: str | Path) -> dict[str, str]:
 def normalize_api_key(value: str | None) -> str:
     token = (value or "").strip()
     return token.removeprefix("Bearer ").strip()
+
+
+def _format_env_value(value: str) -> str:
+    if not value or any(char.isspace() for char in value) or "#" in value:
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
 
 
 def resolve_api_key(*, env_path: str | Path = ".env") -> str | None:
@@ -62,3 +70,32 @@ def resolve_cap_base_url(*, env_path: str | Path = ".env") -> str:
         os.getenv("ABEL_CAP_BASE_URL") or env_values.get("ABEL_CAP_BASE_URL") or ""
     ).strip()
     return (configured or DEFAULT_CAP_BASE_URL).rstrip("/")
+
+
+def resolve_auth_base_url(*, env_path: str | Path = ".env") -> str:
+    env_values = _read_env_file(env_path)
+    configured = (
+        os.getenv("ABEL_AUTH_BASE_URL") or env_values.get("ABEL_AUTH_BASE_URL") or ""
+    ).strip()
+    return (configured or DEFAULT_AUTH_BASE_URL).rstrip("/")
+
+
+def persist_env_value(*, env_path: str | Path = ".env", key: str, value: str) -> None:
+    path = Path(env_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if path.exists():
+        lines = path.read_text(encoding="utf-8").splitlines()
+
+    assignment = f"{key}={_format_env_value(value)}"
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith(f"{key}="):
+            lines[index] = assignment
+            break
+    else:
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.append(assignment)
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")

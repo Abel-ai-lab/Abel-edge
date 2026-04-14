@@ -117,7 +117,7 @@ causal-edge discover ETHUSD
 
 Provide an Abel API key before using live discovery:
 ```bash
-export ABEL_API_KEY=...
+causal-edge login
 causal-edge discover ETHUSD
 # → outputs discovered nodes using the configured CAP endpoint
 ```
@@ -186,6 +186,7 @@ pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
 - "Python API: from causal_edge.validation.gate import validate_strategy"
 - "Fix mapping: T13→trend filter, T15-Lo→persistence penalty, T15-Omega→unclip PnL"
 - "Causal discovery: causal-edge discover <TICKER> (needs ABEL_API_KEY or causal-abel OAuth)"
+- "Causal discovery: run `causal-edge login` once, then `causal-edge discover <TICKER>`; agent-driven setups can also use causal-abel OAuth"
 
 **Any agent with file access** — save to project CLAUDE.md:
 ```markdown

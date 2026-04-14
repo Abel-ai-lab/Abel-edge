@@ -139,6 +139,51 @@ class TestValidationDataSource:
         assert result["metrics"]
         assert result["metrics"]["total_return"] > 0
 
+    def test_validate_strategy_uses_execution_cost_in_consistency_check(self, tmp_path):
+        dates = pd.date_range("2024-01-01", periods=35, freq="D", tz="UTC")
+        position = np.ones(35) * 0.5
+        asset_return = np.ones(35) * 0.02
+        execution_cost = np.concatenate([[0.0], np.ones(34) * 0.001])
+        pnl = position * asset_return - execution_cost
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "pnl": pnl,
+                "position": position,
+                "asset_return": asset_return,
+                "execution_cost": execution_cost,
+                "source": ["backfill"] * 35,
+            }
+        )
+        path = tmp_path / "costed.csv"
+        df.to_csv(path, index=False)
+
+        result = validate_strategy(path)
+
+        assert result["warnings"] == []
+
+    def test_validate_strategy_warns_without_execution_cost_column(self, tmp_path):
+        dates = pd.date_range("2024-01-01", periods=35, freq="D", tz="UTC")
+        position = np.ones(35) * 0.5
+        asset_return = np.ones(35) * 0.02
+        pnl = position * asset_return - 0.02
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "pnl": pnl,
+                "position": position,
+                "asset_return": asset_return,
+                "source": ["backfill"] * 35,
+            }
+        )
+        path = tmp_path / "legacy_warning.csv"
+        df.to_csv(path, index=False)
+
+        result = validate_strategy(path)
+
+        assert len(result["warnings"]) == 1
+        assert "position * asset_return" in result["warnings"][0]
+
 
 class TestCalendarYearCoverage:
     def test_tz_aware_dates_supported(self):

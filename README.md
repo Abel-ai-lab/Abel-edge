@@ -39,6 +39,12 @@ If the `git+https` install path is unstable in your network environment, use the
 pip install https://github.com/Abel-ai-causality/Abel-edge/archive/refs/heads/main.zip
 ```
 
+For live discovery, authenticate once before `causal-edge discover <TICKER>`:
+
+```bash
+causal-edge login
+```
+
 Or validate any existing backtest:
 
 ```bash
@@ -105,6 +111,7 @@ Verified across 38 controlled experiments.
 
 ```bash
 causal-edge init <name>              # scaffold project with 3 demo strategies
+causal-edge login                    # run explicit Abel OAuth and persist ABEL_API_KEY
 causal-edge run [--strategy ID]      # run strategies, write backtest trade logs
 causal-edge paper [--strategy ID]    # append latest live paper-trading rows
 causal-edge dashboard                # generate dark-theme dashboard HTML
@@ -126,6 +133,12 @@ have an API key, install `causal-abel` and complete its OAuth flow first:
 ```bash
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
 ```
+
+You can also use `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
+`ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
+
+For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON
+handoff event first, then a final JSON result after authorization completes.
 
 When a strategy declares `paper_log`, backtests stay in `trade_log` and live paper rows
 append to `paper_log`. If `paper_log` is omitted, causal-edge falls back to the legacy

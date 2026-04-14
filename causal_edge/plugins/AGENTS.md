@@ -7,8 +7,11 @@ Optional integrations. Removing this entire directory must not break anything.
 
 ### Use Abel causal discovery
 1. Run: `causal-edge discover <TICKER>`
-2. If you do not already have a key, install `causal-abel` with `npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y`
-3. Complete the `causal-abel` OAuth flow, or set `ABEL_API_KEY` / `CAP_API_KEY` in your environment or `.env`
+1. Run: `causal-edge login`
+   Agent-friendly form: `causal-edge login --json --no-browser`
+   This emits a JSON handoff event before polling for completion.
+2. Run: `causal-edge discover <TICKER>`
+3. If your workflow relies on external skills, you can also install `causal-abel` with `npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y`
 4. Use `--mode parents` or `--mode mb` depending on the discovery need
 5. Copy the output YAML into your `strategies.yaml`
 6. No API key? Fill `parents:` manually — framework works identically
@@ -17,8 +20,10 @@ Optional integrations. Removing this entire directory must not break anything.
 - Default real-price source is Abel market data
 - See `docs/abel-price-api.md` for the request/response contract
 - Abel currently uses the prod stack for both graph discovery and market data
+- Login endpoint base: `https://api.abel.ai/echo`
 - CAP endpoint: `POST https://cap.abel.ai/api/cap`
 - Market endpoint: `POST https://cap.abel.ai/api/market/day_bar`
+- Override the auth base with `ABEL_AUTH_BASE_URL`
 - Override the CAP base with `ABEL_CAP_BASE_URL`
 
 ## Abel-Pro Mapping
