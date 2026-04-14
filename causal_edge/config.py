@@ -14,6 +14,10 @@ DEFAULTS: dict[str, Any] = {
     "port": 8088,
     "refresh_seconds": 300,
     "theme": "dark",
+    "execution": {
+        "cost_bps": 0,
+        "max_abs_position": None,
+    },
     "price_data": {
         "default_source": "abel",
         "default_timeframe": "1d",
@@ -80,6 +84,32 @@ def _validate_price_data(price_data: Any, *, scope: str) -> None:
         raise ValueError(f"{scope} price_data.path is required when source='csv'.")
 
 
+def _validate_execution(execution: Any, *, scope: str) -> None:
+    if not isinstance(execution, dict):
+        raise ValueError(f"{scope} execution must be a mapping.")
+
+    cost_bps = execution.get("cost_bps", 0)
+    if cost_bps is not None and float(cost_bps) < 0:
+        raise ValueError(f"{scope} execution.cost_bps must be >= 0.")
+
+    max_abs_position = execution.get("max_abs_position")
+    if max_abs_position is not None and float(max_abs_position) <= 0:
+        raise ValueError(f"{scope} execution.max_abs_position must be > 0 when provided.")
+
+
+def _merge_settings(user_settings: dict[str, Any]) -> dict[str, Any]:
+    settings = {**DEFAULTS, **user_settings}
+    settings["price_data"] = {
+        **DEFAULTS.get("price_data", {}),
+        **(user_settings.get("price_data") or {}),
+    }
+    settings["execution"] = {
+        **DEFAULTS.get("execution", {}),
+        **(user_settings.get("execution") or {}),
+    }
+    return settings
+
+
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
     """Load strategies.yaml configuration.
 
@@ -111,12 +141,14 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         )
 
     user_settings = raw.get("settings") or {}
-    settings = {**DEFAULTS, **user_settings}
+    settings = _merge_settings(user_settings)
     settings = _expand_env_recursive(settings)
     strategies = _expand_env_recursive(raw.get("strategies") or [])
 
     if "price_data" in settings:
         _validate_price_data(settings["price_data"], scope="settings")
+    if "execution" in settings:
+        _validate_execution(settings["execution"], scope="settings")
 
     for i, strat in enumerate(strategies):
         _validate_strategy(strat, i)
