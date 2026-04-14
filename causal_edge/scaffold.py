@@ -116,6 +116,9 @@ _ENV_EXAMPLE = """\
 # Get one at https://abel.ai
 # ABEL_API_KEY=your_key_here
 
+# Optional: override the public auth base URL for `causal-edge login`
+# ABEL_AUTH_BASE_URL=https://api.abel.ai/echo
+
 # Optional: override the public CAP base URL
 # ABEL_CAP_BASE_URL=https://cap.abel.ai/api
 
