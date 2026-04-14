@@ -45,28 +45,33 @@ def check_runtime(
 ) -> list[str]:
     """Run runtime leak checks against aligned pnl/position/return arrays."""
     warnings: list[str] = []
+    active = np.abs(positions) > 0.01
 
     if returns is not None and len(returns) == len(positions):
-        active = np.abs(positions) > 0.01
         if active.sum() > 30:
             pos_mag = np.abs(positions[active])
             ret_mag = np.abs(returns[active])
-            corr = np.corrcoef(pos_mag, ret_mag)[0, 1]
-            if not np.isnan(corr) and abs(corr) > threshold:
-                warnings.append(
-                    f"R1: |position| correlates with |same-day return| "
-                    f"(corr={corr:.3f}, threshold={threshold}). "
-                    f"Positions may be using future information."
-                )
+            if np.std(pos_mag) > 1e-12 and np.std(ret_mag) > 1e-12:
+                corr = np.corrcoef(pos_mag, ret_mag)[0, 1]
+                if not np.isnan(corr) and abs(corr) > threshold:
+                    warnings.append(
+                        f"R1: |position| correlates with |same-day return| "
+                        f"(corr={corr:.3f}, threshold={threshold}). "
+                        f"Positions may be using future information."
+                    )
 
-    active_pnl = pnl[np.abs(positions) > 0.01]
+    active_pnl = pnl[active]
     if len(active_pnl) > 30:
-        hit_rate = float(np.mean(active_pnl > 0))
-        if hit_rate > hit_rate_max:
-            warnings.append(
-                f"R2: Hit rate {hit_rate:.0%} on {len(active_pnl)} active days "
-                f"exceeds {hit_rate_max:.0%}. Verify no look-ahead in features."
-            )
+        reference = active_pnl
+        if returns is not None and len(returns) == len(positions):
+            reference = returns[active]
+        if np.std(reference) > 1e-12:
+            hit_rate = float(np.mean(active_pnl > 0))
+            if hit_rate > hit_rate_max:
+                warnings.append(
+                    f"R2: Hit rate {hit_rate:.0%} on {len(active_pnl)} active days "
+                    f"exceeds {hit_rate_max:.0%}. Verify no look-ahead in features."
+                )
 
     return warnings
 

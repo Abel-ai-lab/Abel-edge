@@ -1,58 +1,50 @@
 # Validation Subsystem — Abel Proof Gate
 
 Three leverage-invariant dimensions:
-- **Ratio** (Lo-adjusted Sharpe) — optimized
-- **Rank** (Position-Return IC) — guardrail on whether larger positions align with better underlying returns
-- **Shape** (Omega) — guardrail, catches clipping
+- **Ratio**: Lo-adjusted Sharpe
+- **Rank**: Position-Return IC
+- **Shape**: Omega
 
 ## I want to...
 ### Validate a strategy
     causal-edge validate --strategy <ID> --verbose
 
-### Contract notes
-- The audited live validation contract uses applicable-gate denominators rather than legacy `20/21` score narratives.
-- Typical denominators start at `5`, add `+1` for `Omega`, `LossYrs`, `position_ic_applicable`, and `position_ic_stability_applicable` when each is applicable.
-- DSR accepts optional externally declared exploration counts via `dsr_trials`; otherwise it falls back to the profile default `validation.dsr_K`.
-- Deferred gates/profile keys: `causal_edge/validation/deferred_registry.yaml`.
-- Timing/audit contract: `docs/validation-audit-matrix.md`.
+### Understand the live contract
+- Denominators are applicability-based, not legacy `20/21` style scores.
+- Typical base denominator is `5`, then add slots only when `Omega`, `LossYrs`, `position_ic`, or `position_ic_stability` are applicable.
+- DSR accepts optional declared exploration counts through `dsr_trials`.
+- Deferred gates and removed profile keys live in `deferred_registry.yaml`.
+- Audit timing and comparability notes live in `docs/validation-audit-matrix.md`.
+
+### Check for look-ahead
+- Static source checks: `T2-T5`
+- Runtime leak diagnostics: `R1-R2`
+- Semantic repair checklist: `look_ahead_rules.md`
 
 ### Understand why it failed
-| Code | Fix | How |
-|------|-----|-----|
-| T6 DSR | Reduce trials | Fewer param combos in grid search. Declare realistic `dsr_trials`; K<50 ideal |
-| T14 LossYrs | Reduce full-year losses | Split regimes, de-risk bad periods, or narrow the strategy to the years it truly supports |
-| T15-Lo | Fix serial corr | Persistence penalty: `pos[t] *= max(0.3, 1-0.1*hold_days)` |
-| T15-Omega | Stop clipping | Use raw returns for PnL: `pnl = pos * returns` not `clip()` |
-| T15-MaxDD | Reduce sizing | Cap position: `pos = min(pos, 0.5)` |
+| Code | Fix |
+|------|-----|
+| T6 DSR | Reduce search breadth, declare realistic `dsr_trials` |
+| T14 LossYrs | Split regimes or reduce exposure in unstable years |
+| T15-Lo | Add persistence penalty to repeated holds |
+| T15-Omega | Stop clipping PnL; clip features only |
+| T15-MaxDD | Reduce sizing or cap position |
 
-### Common fix patterns
-**Trend filter (fixes T13):**
+### Common snippets
 ```python
+# Trend filter
 sma = prices.rolling(50).mean().shift(1)
 positions[prices.shift(1) < sma] = 0.0
-```
 
-**Persistence penalty (fixes T15-Lo):**
-```python
+# Persistence penalty
 hold = (positions > 0).astype(int)
 hold_days = hold.groupby((hold != hold.shift()).cumsum()).cumcount()
 positions *= np.maximum(0.3, 1.0 - 0.1 * hold_days)
 ```
 
-**Unclipped PnL (fixes T15-Omega):**
-```python
-# WRONG: pnl = pos * np.clip(returns, -0.02, 0.02)
-# RIGHT: pnl = pos * returns  (clip features only, never PnL)
-```
-
-### Understand the metric triangle
-Read docstring at top of `metrics.py`. No known transformation improves all three simultaneously except genuine signal improvement.
-
-### Diagnostic-only metrics
-- `drawdown_time_frac` and `max_drawdown_duration_bars` stay in the payload for audit/diagnostics, but they are no longer live PASS/FAIL gates.
-
 ## Key Files
-- `metrics.py` — `compute_all_metrics()`, `validate()`, `decide_keep_discard()`
-- `gate.py` — `validate_strategy()` (CSV in → PASS/FAIL out)
-- `profiles/` — YAML threshold configs (crypto_daily, equity_daily, hft)
-- `deferred_registry.yaml` — removed/deferred gates, metrics, and profile keys
+- `gate.py` — CSV/path in, PASS/FAIL payload out
+- `metrics.py` — metric computation + KEEP/DISCARD logic
+- `look_ahead.py` — static/runtime leakage checks
+- `look_ahead_rules.md` — semantic review checklist
+- `profiles/` — profile thresholds

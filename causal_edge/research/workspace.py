@@ -8,6 +8,7 @@ from pathlib import Path
 
 from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
 from causal_edge.plugins.abel.credentials import resolve_api_key
+from causal_edge.research.constants import RESULTS_HEADER
 
 STRATEGY_TEMPLATE = '''"""Strategy for {ticker} - experiment baseline.
 
@@ -42,9 +43,6 @@ MEMORY_TEMPLATE = """# {ticker} Research Memory
 
 ## Ideas Not Yet Tried
 """
-
-RESULTS_HEADER = "commit\tlo_adj\tic\tomega\tsharpe\tpnl\tK\tscore\tstatus\tmode\tdescription\n"
-
 
 def init_workspace(ticker: str, workdir: Path | str | None = None) -> Path:
     ticker = ticker.upper()

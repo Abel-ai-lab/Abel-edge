@@ -99,8 +99,8 @@ def build_live_overview(
             "live_perf": [],
             "ledger": [],
             "signals_active": [],
-            "n_active": 0,
             "n_flat": 0,
+            "live_since": None,
         }
 
     today_pnl = 0.0
@@ -210,14 +210,6 @@ def build_live_overview(
                 }
             )
 
-    mtd_pnl = 0.0
-    for item in tracked:
-        live_df = item["df"]
-        mask = (live_df["date"].dt.year == current_year) & (
-            live_df["date"].dt.month == current_month
-        )
-        mtd_pnl += float(live_df.loc[mask, "pnl"].sum())
-
     most_recent = max(latest_dates)
     stale_hours = max((now - most_recent).total_seconds() / 3600, 0.0)
     live_since = since_label or min(earliest_dates).date().isoformat()
@@ -238,11 +230,6 @@ def build_live_overview(
         "live_perf": live_perf,
         "ledger": ledger,
         "signals_active": signals_active,
-        "n_active": len(signals_active),
         "n_flat": n_flat,
-        "mtd_pnl": mtd_pnl,
-        "today_pnl": today_pnl,
-        "total_pnl": total_pnl,
         "live_since": live_since,
-        "stale_hours": stale_hours,
     }

@@ -109,14 +109,13 @@
                 <div class="chart-container">
                     <div class="label">Recent Live Days</div>
                     <div class="row-list">
-                        <div class="row-head"><span>Date</span><span>Active</span><span>PnL</span><span>Spark</span><span>Updated</span></div>
+                        <div class="row-head"><span>Date</span><span>Active</span><span>PnL</span><span>Spark</span></div>
                         {% for day in live_overview.recent_days %}
                         <div class="row-item">
                             <span>{{ day.date }}</span>
                             <span>{{ day.n_active }}</span>
                             <span class="{{ 'pnl-pos' if day.pnl > 0 else 'pnl-neg' if day.pnl < 0 else 'muted' }}">{{ fmt_pnl_pct(day.pnl) }}</span>
                             <span>{{ day.spark }}</span>
-                            <span>{{ generated_at[:10] }}</span>
                         </div>
                         {% endfor %}
                     </div>

@@ -49,3 +49,10 @@ def test_runtime_r2_flags_suspicious_hit_rate() -> None:
     positions = np.ones(200) * 0.5
     messages = check_runtime(pnl, positions)
     assert any(message.startswith("R2") for message in messages)
+
+
+def test_runtime_r2_skips_constant_return_series() -> None:
+    positions = np.ones(64) * 0.5
+    returns = np.ones(64) * 0.02
+    pnl = positions * returns
+    assert not any(message.startswith("R2") for message in check_runtime(pnl, positions, returns))

@@ -12,9 +12,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from causal_edge.research.constants import RESULTS_HEADER
 from causal_edge.validation.gate import validate_strategy
 
-RESULTS_HEADER = "commit\tlo_adj\tic\tomega\tsharpe\tpnl\tK\tscore\tstatus\tmode\tdescription\n"
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD"}
 TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(USD)?$|^[A-Z]{2,5}-[A-Z]{1,2}$")
 
