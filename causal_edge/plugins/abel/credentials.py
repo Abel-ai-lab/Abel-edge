@@ -50,12 +50,15 @@ def require_api_key(*, env_path: str | Path = ".env") -> str:
     if token:
         return token
     raise MissingAbelApiKeyError(
-        "Abel API key not found. Set ABEL_API_KEY or CAP_API_KEY in your environment or .env "
-        "before using Abel-backed features."
+        "Abel API key not found. Install the `causal-abel` skill and complete its OAuth flow, "
+        "or set ABEL_API_KEY or CAP_API_KEY in your environment or .env before using Abel-backed "
+        "features."
     )
 
 
 def resolve_cap_base_url(*, env_path: str | Path = ".env") -> str:
     env_values = _read_env_file(env_path)
-    configured = (os.getenv("ABEL_CAP_BASE_URL") or env_values.get("ABEL_CAP_BASE_URL") or "").strip()
+    configured = (
+        os.getenv("ABEL_CAP_BASE_URL") or env_values.get("ABEL_CAP_BASE_URL") or ""
+    ).strip()
     return (configured or DEFAULT_CAP_BASE_URL).rstrip("/")

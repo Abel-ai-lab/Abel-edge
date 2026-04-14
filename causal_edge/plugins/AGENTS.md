@@ -7,10 +7,11 @@ Optional integrations. Removing this entire directory must not break anything.
 
 ### Use Abel causal discovery
 1. Run: `causal-edge discover <TICKER>`
-2. Set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
-3. Use `--mode parents` or `--mode mb` depending on the discovery need
-4. Copy the output YAML into your `strategies.yaml`
-5. No API key? Fill `parents:` manually — framework works identically
+2. If you do not already have a key, install `causal-abel` with `npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y`
+3. Complete the `causal-abel` OAuth flow, or set `ABEL_API_KEY` / `CAP_API_KEY` in your environment or `.env`
+4. Use `--mode parents` or `--mode mb` depending on the discovery need
+5. Copy the output YAML into your `strategies.yaml`
+6. No API key? Fill `parents:` manually — framework works identically
 
 ### Align Abel price APIs
 - Default real-price source is Abel market data
