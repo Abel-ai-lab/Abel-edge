@@ -106,6 +106,52 @@ def test_run_empty():
         assert "No strategies" in result.output
 
 
+def test_login_json_output(monkeypatch):
+    from causal_edge.plugins.abel import auth as auth_module
+
+    monkeypatch.setattr(
+        auth_module,
+        "login_with_oauth",
+        lambda **kwargs: {
+            "status": "authorized",
+            "api_key": "abel_login",
+            "env_path": ".env",
+            "auth_url": "https://example.com/auth",
+            "opened_browser": False,
+            "stored": True,
+        },
+    )
+
+    result = CliRunner().invoke(main, ["login", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert '"status": "authorized"' in result.output
+    assert "abel_login" not in result.output
+
+
+def test_login_print_token_for_existing_key(monkeypatch):
+    from causal_edge.plugins.abel import auth as auth_module
+
+    monkeypatch.setattr(
+        auth_module,
+        "login_with_oauth",
+        lambda **kwargs: {
+            "status": "already_configured",
+            "api_key": "abel_existing",
+            "env_path": ".env",
+            "auth_url": None,
+            "opened_browser": False,
+            "stored": False,
+        },
+    )
+
+    result = CliRunner().invoke(main, ["login", "--print-token"])
+
+    assert result.exit_code == 0, result.output
+    assert "Abel API key already configured." in result.output
+    assert "abel_existing" in result.output
+
+
 def test_dashboard_empty():
     """Dashboard with no strategies should generate HTML without error."""
     runner = CliRunner()

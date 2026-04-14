@@ -4,11 +4,14 @@ import os
 
 import pandas as pd
 
+from causal_edge.plugins.abel.auth import login_with_oauth
 from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
 from causal_edge.plugins.abel.credentials import (
     MissingAbelApiKeyError,
+    persist_env_value,
     require_api_key,
     resolve_api_key,
+    resolve_auth_base_url,
     resolve_cap_base_url,
 )
 from examples.causal_demo.engine import CausalDemoEngine, resolve_price_column
@@ -78,6 +81,25 @@ def test_resolve_cap_base_url_reads_dotenv(monkeypatch, tmp_path):
     assert base_url == "https://cap.file.abel.ai/api"
 
 
+def test_resolve_auth_base_url_uses_public_default(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_AUTH_BASE_URL", raising=False)
+
+    base_url = resolve_auth_base_url(env_path=tmp_path / ".env")
+
+    assert base_url == "https://api.abel.ai/echo"
+
+
+def test_resolve_auth_base_url_reads_dotenv(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_AUTH_BASE_URL", raising=False)
+    (tmp_path / ".env").write_text(
+        "ABEL_AUTH_BASE_URL=https://api.custom.abel.ai/echo/\n", encoding="utf-8"
+    )
+
+    base_url = resolve_auth_base_url(env_path=tmp_path / ".env")
+
+    assert base_url == "https://api.custom.abel.ai/echo"
+
+
 def test_resolve_api_key_does_not_mutate_process_env(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
@@ -87,6 +109,114 @@ def test_resolve_api_key_does_not_mutate_process_env(monkeypatch, tmp_path):
 
     assert api_key == "abel_file"
     assert os.getenv("ABEL_API_KEY") is None
+
+
+def test_persist_env_value_adds_and_updates_key(tmp_path):
+    env_path = tmp_path / ".env"
+
+    persist_env_value(env_path=env_path, key="ABEL_API_KEY", value="first")
+    persist_env_value(env_path=env_path, key="ABEL_API_KEY", value="second")
+
+    assert env_path.read_text(encoding="utf-8") == "ABEL_API_KEY=second\n"
+
+
+def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
+    class StubSession:
+        def __init__(self):
+            self.calls = []
+            self.poll_count = 0
+
+        def get(self, url, timeout=20):
+            self.calls.append(url)
+            if url.endswith("/authorize/agent"):
+                return StubResponse(
+                    {
+                        "data": {
+                            "authUrl": "https://example.com/auth",
+                            "pollToken": "poll-123",
+                        }
+                    }
+                )
+            self.poll_count += 1
+            if self.poll_count == 1:
+                return StubResponse({"data": {"status": "pending"}})
+            return StubResponse({"data": {"status": "authorized", "apiKey": "abel_key"}})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    opened_urls = []
+    notices = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened_urls.append(url) or True)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    result = login_with_oauth(
+        env_path=str(tmp_path / ".env"),
+        session=StubSession(),
+        notify=notices.append,
+        timeout_seconds=5,
+    )
+
+    assert result["status"] == "authorized"
+    assert result["api_key"] == "abel_key"
+    assert result["opened_browser"] is True
+    assert opened_urls == ["https://example.com/auth"]
+    assert "https://example.com/auth" in notices[0]
+    assert "ABEL_API_KEY=abel_key" in (tmp_path / ".env").read_text(encoding="utf-8")
+
+
+def test_login_with_oauth_skips_browser_when_disabled(tmp_path, monkeypatch):
+    class StubSession:
+        def get(self, url, timeout=20):
+            if url.endswith("/authorize/agent"):
+                return StubResponse(
+                    {
+                        "data": {
+                            "authUrl": "https://example.com/auth",
+                            "pollToken": "poll-123",
+                        }
+                    }
+                )
+            return StubResponse({"data": {"status": "authorized", "apiKey": "abel_key"}})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    opened_urls = []
+    monkeypatch.setattr("webbrowser.open", lambda url: opened_urls.append(url) or True)
+
+    result = login_with_oauth(
+        env_path=str(tmp_path / ".env"),
+        session=StubSession(),
+        open_browser=False,
+        timeout_seconds=5,
+    )
+
+    assert result["opened_browser"] is False
+    assert opened_urls == []
+
+
+def test_login_with_oauth_returns_existing_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("ABEL_API_KEY", "abel_existing")
+
+    result = login_with_oauth(env_path=str(tmp_path / ".env"))
+
+    assert result["status"] == "already_configured"
+    assert result["api_key"] == "abel_existing"
 
 
 def test_resolve_price_column_prefers_close():

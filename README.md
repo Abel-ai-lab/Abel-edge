@@ -29,6 +29,7 @@ Neither edge exists alone. Causal without agents = a paper you read once. Agents
 pip install git+https://github.com/Abel-ai-causality/causal-edge.git
 causal-edge init my-portfolio
 cd my-portfolio
+causal-edge login
 causal-edge run && causal-edge validate
 ```
 
@@ -98,6 +99,7 @@ Verified across 38 controlled experiments.
 
 ```bash
 causal-edge init <name>              # scaffold project with 3 demo strategies
+causal-edge login                    # run explicit Abel OAuth and persist ABEL_API_KEY
 causal-edge run [--strategy ID]      # run strategies, write backtest trade logs
 causal-edge paper [--strategy ID]    # append latest live paper-trading rows
 causal-edge dashboard                # generate dark-theme dashboard HTML
@@ -113,7 +115,11 @@ causal-edge discover <TICKER>        # find causal parents (Abel API key)
 
 Real-price strategies default to Abel price APIs. Override per strategy with
 `price_data.source: csv` to load local bar data instead. Configure Abel access
-with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`.
+with `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
+`ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
+
+For agent-driven setups, `causal-edge login --json --no-browser` prints a
+machine-readable handoff while keeping the browser step explicit.
 
 When a strategy declares `paper_log`, backtests stay in `trade_log` and live paper rows
 append to `paper_log`. If `paper_log` is omitted, causal-edge falls back to the legacy

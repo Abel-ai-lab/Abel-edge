@@ -10,13 +10,17 @@ database tables or SQL details in user config.
 ## Endpoint
 
 - Current default environment: Abel prod
+- Login endpoint: `GET https://api.abel.ai/echo/web/credentials/oauth/google/authorize/agent`
 - CAP graph endpoint: `POST https://cap.abel.ai/api/cap`
 - Market bars endpoint: `POST https://cap.abel.ai/api/market/day_bar`
 - Auth header: `Authorization: Bearer <ABEL_API_KEY>`
+- Override auth base with `ABEL_AUTH_BASE_URL=<custom_base>`
 - Override base URL with `ABEL_CAP_BASE_URL=<custom_base>`
 
 Notes:
 - `causal-edge` currently uses Abel prod for both graph discovery and market data
+- `causal-edge login --json --no-browser` is the preferred non-interactive handoff
+  for agent-driven environments
 
 ## Abel-Pro Mapping
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from importlib import metadata
 from pathlib import Path
 
@@ -57,6 +58,59 @@ def init(name):
     click.echo(f"  causal-edge run")
     click.echo(f"  causal-edge dashboard")
     click.echo(f"  causal-edge validate")
+
+
+@main.command()
+@click.option("--env-path", default=".env", show_default=True, help="File path for storing ABEL_API_KEY")
+@click.option("--no-browser", is_flag=True, help="Print the authorization URL without opening a browser")
+@click.option("--json", "json_output", is_flag=True, help="Emit a machine-readable result object")
+@click.option("--print-token", is_flag=True, help="Include the resolved API key in command output")
+@click.option("--force", is_flag=True, help="Ignore any existing ABEL_API_KEY and run OAuth again")
+@click.option(
+    "--timeout",
+    default=300,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Authorization timeout in seconds",
+)
+def login(env_path, no_browser, json_output, print_token, force, timeout):
+    """Run explicit Abel OAuth and optionally persist the API key to .env."""
+    try:
+        from causal_edge.plugins.abel.auth import login_with_oauth
+    except ImportError:
+        raise click.ClickException("Abel plugin not installed. See: causal_edge/plugins/AGENTS.md")
+
+    def _notify(message: str) -> None:
+        click.echo(message, err=json_output)
+
+    try:
+        result = login_with_oauth(
+            env_path=env_path,
+            open_browser=not no_browser,
+            timeout_seconds=timeout,
+            force=force,
+            notify=_notify,
+        )
+    except Exception as e:
+        raise click.ClickException(str(e))
+
+    output = dict(result)
+    if not print_token:
+        output.pop("api_key", None)
+
+    if json_output:
+        click.echo(json.dumps(output, sort_keys=True))
+        return
+
+    if result["status"] == "already_configured":
+        click.echo("Abel API key already configured.")
+        if print_token:
+            click.echo(output["api_key"])
+        return
+
+    click.echo(f"Abel API key saved to {env_path}.")
+    if print_token:
+        click.echo(output["api_key"])
 
 
 @main.command()
