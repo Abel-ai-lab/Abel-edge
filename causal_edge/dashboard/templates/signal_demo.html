@@ -110,7 +110,7 @@
             {% if selected_strategy.has_data %}
             <section class="section two-col">
                 <div class="chart-shell">
-                    <h3>Strategy vs Hold</h3>
+                    <h3>{{ 'Strategy vs Hold' if selected_strategy.has_backtest_asset_chart else 'Strategy Equity' }}</h3>
                     <div id="equity-{{ selected_strategy.id }}"></div>
                 </div>
                 <div class="mini-card graph-card">
