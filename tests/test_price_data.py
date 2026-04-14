@@ -65,3 +65,47 @@ strategies:
     )
     with pytest.raises(ValueError, match="price_data.path"):
         config_module.load_config(config_path)
+
+
+def test_load_config_applies_execution_defaults(tmp_path):
+    config_path = tmp_path / "strategies.yaml"
+    config_path.write_text(
+        """
+settings: {}
+strategies:
+  - id: test
+    name: Test
+    asset: ETHUSD
+    color: '#123456'
+    engine: strategies.ethusd_causal.engine
+    trade_log: data/test.csv
+""",
+        encoding="utf-8",
+    )
+
+    cfg = config_module.load_config(config_path)
+
+    assert cfg["settings"]["execution"]["cost_bps"] == 0
+    assert cfg["settings"]["execution"]["max_abs_position"] is None
+
+
+def test_load_config_validates_execution_settings(tmp_path):
+    config_path = tmp_path / "strategies.yaml"
+    config_path.write_text(
+        """
+settings:
+  execution:
+    cost_bps: -1
+strategies:
+  - id: test
+    name: Test
+    asset: ETHUSD
+    color: '#123456'
+    engine: strategies.ethusd_causal.engine
+    trade_log: data/test.csv
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="execution.cost_bps"):
+        config_module.load_config(config_path)

@@ -72,14 +72,24 @@ def validate_strategy(
         df["asset_return"].values.astype(float) if "asset_return" in df.columns else None
     )
 
-    # PnL consistency check: |pnl - position * asset_return| should be small
+    execution_cost = (
+        df["execution_cost"].values.astype(float) if "execution_cost" in df.columns else None
+    )
+
+    # PnL consistency check: |pnl - position * asset_return - execution_cost| should be small
     warnings: list[str] = []
     if positions is not None and asset_returns is not None:
-        residuals = np.abs(pnl - positions * asset_returns)
+        expected_pnl = positions * asset_returns
+        if execution_cost is not None:
+            expected_pnl = expected_pnl - execution_cost
+        residuals = np.abs(pnl - expected_pnl)
         p95 = float(np.percentile(residuals, 95))
         if p95 >= 0.01:
+            basis = "position * asset_return - execution_cost"
+            if execution_cost is None:
+                basis = "position * asset_return"
             warnings.append(
-                f"PnL consistency: 95th percentile of |pnl - position * asset_return| = {p95:.4f} "
+                f"PnL consistency: 95th percentile of |pnl - {basis}| = {p95:.4f} "
                 f"(threshold 0.01). Check for fees, slippage, or data errors."
             )
 

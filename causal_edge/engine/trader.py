@@ -10,6 +10,7 @@ import click
 import numpy as np
 import pandas as pd
 
+from causal_edge.engine.backtest import BacktestSettings, run_backtest
 from causal_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
 from causal_edge.engine.price_data import resolve_price_config
 
@@ -64,18 +65,27 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None, bars_loader=Non
 
     positions, dates, prices = engine.compute_signals()
 
-    returns = np.zeros_like(prices, dtype=float)
-    if len(prices) > 1:
-        returns[1:] = prices[1:] / prices[:-1] - 1.0
+    execution_cfg = (settings or {}).get("execution") or {}
+    result = run_backtest(
+        positions,
+        prices,
+        settings=BacktestSettings(
+            cost_bps=float(execution_cfg.get("cost_bps", 0.0) or 0.0),
+            max_abs_position=execution_cfg.get("max_abs_position"),
+        ),
+    )
 
-    # PnL: positions[t] * returns[t] is correct because the engine contract
-    # requires positions[t] to be decided using data through t-1 only.
-    # The engine is responsible for applying shift(1) to indicators.
-    pnl = positions * returns
-    # First day has no prior position signal
-    pnl[0] = 0.0
-
-    write_trade_log(dates, returns, pnl, positions, trade_log_path, close_prices=prices)
+    write_trade_log(
+        pd.DatetimeIndex(dates),
+        result["asset_returns"],
+        result["pnl"],
+        result["positions"],
+        trade_log_path,
+        close_prices=prices,
+        gross_pnl=result["gross_pnl"],
+        turnover=result["turnover"],
+        execution_cost=result["execution_cost"],
+    )
 
     return {"id": sid, "n_days": len(dates), "trade_log": trade_log_path}
 

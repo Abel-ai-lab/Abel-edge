@@ -26,13 +26,16 @@ def write_trade_log(
     source: str = "backfill",
     close_prices: np.ndarray | None = None,
     next_positions: np.ndarray | None = None,
+    gross_pnl: np.ndarray | None = None,
+    turnover: np.ndarray | None = None,
+    execution_cost: np.ndarray | None = None,
 ) -> None:
     """Write a trade log CSV from strategy output arrays.
 
     Args:
         dates: Trading dates
         asset_returns: Daily simple returns of the underlying asset
-        pnl: Daily PnL (position * returns)
+        pnl: Daily net PnL after execution costs
         positions: Daily position sizes
         path: Output CSV path
         source: "backfill" or "live"
@@ -53,6 +56,12 @@ def write_trade_log(
         df["close"] = close_prices
     if next_positions is not None:
         df["next_position"] = next_positions
+    if gross_pnl is not None:
+        df["gross_pnl"] = gross_pnl
+    if turnover is not None:
+        df["turnover"] = turnover
+    if execution_cost is not None:
+        df["execution_cost"] = execution_cost
     df["cum_return"] = np.cumprod(1.0 + df["pnl"].to_numpy(dtype=float)) - 1.0
     df.to_csv(path, index=False)
 
