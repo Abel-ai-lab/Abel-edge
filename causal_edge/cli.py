@@ -63,7 +63,12 @@ def init(name):
 @main.command()
 @click.option("--env-path", default=".env", show_default=True, help="File path for storing ABEL_API_KEY")
 @click.option("--no-browser", is_flag=True, help="Print the authorization URL without opening a browser")
-@click.option("--json", "json_output", is_flag=True, help="Emit a machine-readable result object")
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Emit newline-delimited JSON events and the final result",
+)
 @click.option("--print-token", is_flag=True, help="Include the resolved API key in command output")
 @click.option("--force", is_flag=True, help="Ignore any existing ABEL_API_KEY and run OAuth again")
 @click.option(
@@ -81,7 +86,11 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
         raise click.ClickException("Abel plugin not installed. See: causal_edge/plugins/AGENTS.md")
 
     def _notify(message: str) -> None:
-        click.echo(message, err=json_output)
+        click.echo(message, err=True)
+
+    def _emit_handoff(payload: dict[str, object]) -> None:
+        if json_output:
+            click.echo(json.dumps(payload, sort_keys=True))
 
     try:
         result = login_with_oauth(
@@ -89,7 +98,8 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
             open_browser=not no_browser,
             timeout_seconds=timeout,
             force=force,
-            notify=_notify,
+            notify=None if json_output else _notify,
+            on_handoff=_emit_handoff if json_output else None,
         )
     except Exception as e:
         raise click.ClickException(str(e))

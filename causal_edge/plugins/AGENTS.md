@@ -8,6 +8,7 @@ Optional integrations. Removing this entire directory must not break anything.
 ### Use Abel causal discovery
 1. Run: `causal-edge login`
    Agent-friendly form: `causal-edge login --json --no-browser`
+   This emits a JSON handoff event before polling for completion.
 2. Run: `causal-edge discover <TICKER>`
 3. Use `--mode parents` or `--mode mb` depending on the discovery need
 4. Copy the output YAML into your `strategies.yaml`

@@ -109,23 +109,36 @@ def test_run_empty():
 def test_login_json_output(monkeypatch):
     from causal_edge.plugins.abel import auth as auth_module
 
-    monkeypatch.setattr(
-        auth_module,
-        "login_with_oauth",
-        lambda **kwargs: {
+    def _login_with_oauth(**kwargs):
+        kwargs["on_handoff"](
+            {
+                "status": "awaiting_authorization",
+                "auth_url": "https://example.com/auth",
+                "env_path": ".env",
+                "opened_browser": False,
+            }
+        )
+        return {
             "status": "authorized",
             "api_key": "abel_login",
             "env_path": ".env",
             "auth_url": "https://example.com/auth",
             "opened_browser": False,
             "stored": True,
-        },
+        }
+
+    monkeypatch.setattr(
+        auth_module,
+        "login_with_oauth",
+        _login_with_oauth,
     )
 
     result = CliRunner().invoke(main, ["login", "--json"])
 
     assert result.exit_code == 0, result.output
-    assert '"status": "authorized"' in result.output
+    lines = result.output.strip().splitlines()
+    assert '"status": "awaiting_authorization"' in lines[0]
+    assert '"status": "authorized"' in lines[-1]
     assert "abel_login" not in result.output
 
 

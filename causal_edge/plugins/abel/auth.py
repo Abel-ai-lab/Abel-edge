@@ -16,6 +16,7 @@ from causal_edge.plugins.abel.credentials import (
 )
 
 Notifier = Callable[[str], None]
+HandoffCallback = Callable[[dict[str, Any]], None]
 
 
 class AbelLoginTimeoutError(RuntimeError):
@@ -92,6 +93,7 @@ def login_with_oauth(
     poll_interval: float = 2.0,
     force: bool = False,
     notify: Notifier | None = None,
+    on_handoff: HandoffCallback | None = None,
     session: requests.Session | None = None,
 ) -> dict[str, Any]:
     existing_api_key = None if force else resolve_api_key(env_path=env_path)
@@ -117,6 +119,16 @@ def login_with_oauth(
             opened_browser = bool(webbrowser.open(auth_url))
         except Exception:
             opened_browser = False
+
+    if on_handoff is not None:
+        on_handoff(
+            {
+                "status": "awaiting_authorization",
+                "auth_url": auth_url,
+                "env_path": env_path,
+                "opened_browser": opened_browser,
+            }
+        )
 
     result = auth.poll_authorization_result(
         result_url=handoff.get("resultUrl"),

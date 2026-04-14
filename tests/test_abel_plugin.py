@@ -120,6 +120,14 @@ def test_persist_env_value_adds_and_updates_key(tmp_path):
     assert env_path.read_text(encoding="utf-8") == "ABEL_API_KEY=second\n"
 
 
+def test_persist_env_value_creates_parent_directory(tmp_path):
+    env_path = tmp_path / "config" / ".env"
+
+    persist_env_value(env_path=env_path, key="ABEL_API_KEY", value="created")
+
+    assert env_path.read_text(encoding="utf-8") == "ABEL_API_KEY=created\n"
+
+
 def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
     class StubSession:
         def __init__(self):
@@ -154,6 +162,7 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
 
     opened_urls = []
     notices = []
+    handoffs = []
     monkeypatch.setattr("webbrowser.open", lambda url: opened_urls.append(url) or True)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 
@@ -161,6 +170,7 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
         env_path=str(tmp_path / ".env"),
         session=StubSession(),
         notify=notices.append,
+        on_handoff=handoffs.append,
         timeout_seconds=5,
     )
 
@@ -169,6 +179,14 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
     assert result["opened_browser"] is True
     assert opened_urls == ["https://example.com/auth"]
     assert "https://example.com/auth" in notices[0]
+    assert handoffs == [
+        {
+            "status": "awaiting_authorization",
+            "auth_url": "https://example.com/auth",
+            "env_path": str(tmp_path / ".env"),
+            "opened_browser": True,
+        }
+    ]
     assert "ABEL_API_KEY=abel_key" in (tmp_path / ".env").read_text(encoding="utf-8")
 
 

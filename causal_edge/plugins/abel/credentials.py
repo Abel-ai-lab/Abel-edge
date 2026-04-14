@@ -79,6 +79,7 @@ def resolve_auth_base_url(*, env_path: str | Path = ".env") -> str:
 
 def persist_env_value(*, env_path: str | Path = ".env", key: str, value: str) -> None:
     path = Path(env_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     lines: list[str] = []
     if path.exists():
         lines = path.read_text(encoding="utf-8").splitlines()

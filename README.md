@@ -118,8 +118,8 @@ Real-price strategies default to Abel price APIs. Override per strategy with
 with `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
 `ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
 
-For agent-driven setups, `causal-edge login --json --no-browser` prints a
-machine-readable handoff while keeping the browser step explicit.
+For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON
+handoff event first, then a final JSON result after authorization completes.
 
 When a strategy declares `paper_log`, backtests stay in `trade_log` and live paper rows
 append to `paper_log`. If `paper_log` is omitted, causal-edge falls back to the legacy

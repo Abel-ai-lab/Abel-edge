@@ -19,8 +19,9 @@ database tables or SQL details in user config.
 
 Notes:
 - `causal-edge` currently uses Abel prod for both graph discovery and market data
-- `causal-edge login --json --no-browser` is the preferred non-interactive handoff
-  for agent-driven environments
+- `causal-edge login --json --no-browser` emits a JSON handoff event first, then
+  the final authorization result, which is the preferred flow for agent-driven
+  environments
 
 ## Abel-Pro Mapping
 
