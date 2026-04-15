@@ -21,6 +21,11 @@
 ### Comparability
 - Historical validation scores are **not directly comparable** across this migration when they relied on the old denominator narrative (`15`, `20`, `21`) or on sentinel metric values (`omega=999`, `calmar=999`). Compare runs only within the same audited contract version.
 
+## [0.2.0] - 2026-04-14
+
+### Added
+- Backported causal-edge look-ahead validation, research workflows, local config overlays, and live overview dashboard summaries into Abel-edge.
+
 ## [0.1.0] - 2026-04-02
 
 ### Added

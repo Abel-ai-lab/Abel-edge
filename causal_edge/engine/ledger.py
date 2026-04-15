@@ -62,6 +62,18 @@ def write_trade_log(
         df["turnover"] = turnover
     if execution_cost is not None:
         df["execution_cost"] = execution_cost
+    if path.exists():
+        existing = read_trade_log(path)
+        if "source" in existing.columns:
+            existing["source"] = existing["source"].fillna("backfill").astype(str)
+            existing["date"] = pd.to_datetime(existing["date"], utc=True)
+            live_rows = existing[existing["source"].str.lower() == "live"].copy()
+            if not live_rows.empty:
+                live_rows = _dedupe_trade_rows(live_rows)
+                df["date"] = pd.to_datetime(df["date"], utc=True)
+                df = pd.concat([df, live_rows], ignore_index=True, sort=False)
+
+    df = _dedupe_trade_rows(df)
     df["cum_return"] = np.cumprod(1.0 + df["pnl"].to_numpy(dtype=float)) - 1.0
     df.to_csv(path, index=False)
 
@@ -83,14 +95,21 @@ def append_trade_log_rows(path: str | Path, rows: list[dict]) -> pd.DataFrame:
         existing = pd.DataFrame(columns=incoming.columns)
 
     combined = pd.concat([existing, incoming], ignore_index=True, sort=False)
-    if "date" in combined.columns:
-        combined["date"] = pd.to_datetime(combined["date"], utc=True)
-    if "source" not in combined.columns:
-        combined["source"] = "backfill"
-
-    combined = combined.sort_values(["date", "source"], kind="mergesort")
-    combined = combined.drop_duplicates(subset=["date", "source"], keep="last")
+    combined = _dedupe_trade_rows(combined)
     combined["pnl"] = combined["pnl"].astype(float)
     combined["cum_return"] = np.cumprod(1.0 + combined["pnl"].to_numpy(dtype=float)) - 1.0
     combined.to_csv(path, index=False)
     return combined.reset_index(drop=True)
+
+
+def _dedupe_trade_rows(df: pd.DataFrame) -> pd.DataFrame:
+    combined = df.copy()
+    if "date" in combined.columns:
+        combined["date"] = pd.to_datetime(combined["date"], utc=True)
+    if "source" not in combined.columns:
+        combined["source"] = "backfill"
+    combined["source"] = combined["source"].fillna("backfill").astype(str)
+    combined["_src_rank"] = combined["source"].str.lower().map({"live": 1, "backfill": 0}).fillna(0)
+    combined = combined.sort_values(["date", "_src_rank"], kind="mergesort")
+    combined = combined.drop_duplicates(subset=["date"], keep="last")
+    return combined.drop(columns="_src_rank").reset_index(drop=True)

@@ -43,6 +43,8 @@ When omitted, DSR falls back to the profile's default exploration-count prior.
 
 For real-price strategies, `causal-edge run` now defaults to Abel price APIs.
 Set `price_data.source: csv` on a strategy to use a local bars CSV instead.
+If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands prefer
+`strategies.local.yaml` automatically unless `--config` is passed.
 
 ## 3. Diagnose + Fix
 
@@ -122,12 +124,24 @@ causal-edge discover ETHUSD
 # → outputs discovered nodes using the configured CAP endpoint
 ```
 
+## 6.5. Run a Research Loop
+
+```bash
+causal-edge research init ETHUSD
+cd research/ethusd
+causal-edge research run -d "baseline"
+causal-edge research status
+```
+
+The research loop writes `results.tsv`, reuses the audited validation contract,
+derives `K` from discovered tickers and lags, and refuses to record runs with
+static look-ahead violations.
+
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow first:
 
 ```bash
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
 ```
-
 ## Abel-Pro Mapping
 
 - Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
@@ -151,6 +165,7 @@ class MyEngine(StrategyEngine):
 Register in `strategies.yaml` → `causal-edge run` → `causal-edge validate`.
 
 Timing and audit contract reference: `docs/validation-audit-matrix.md`.
+Semantic look-ahead reference: `causal_edge/validation/look_ahead_rules.md`.
 
 ## 8. Scaffold a Full Project
 

@@ -99,6 +99,29 @@ def validate_strategy(
     else:
         profile_name = profile
     prof = load_profile(profile_name)
+    validation_cfg = prof.get("validation", {})
+
+    # Runtime look-ahead check. Prefer explicit asset returns when available and
+    # fall back to pnl / position on active days so the check remains live.
+    from causal_edge.validation.look_ahead import check_runtime
+
+    pos_for_check = positions if positions is not None else np.zeros(len(pnl), dtype=float)
+    if asset_returns is not None and len(asset_returns) == len(pnl):
+        returns_for_check = asset_returns
+    else:
+        returns_for_check = np.divide(
+            pnl,
+            pos_for_check,
+            out=np.zeros_like(pnl, dtype=float),
+            where=np.abs(pos_for_check) > 0.01,
+        )
+    la_messages = check_runtime(
+        pnl,
+        pos_for_check,
+        returns_for_check,
+        threshold=float(validation_cfg.get("look_ahead_mag_corr_max", 0.3)),
+        hit_rate_max=float(validation_cfg.get("look_ahead_hit_rate_max", 0.70)),
+    )
 
     # Compute all metrics
     if positions is not None:
@@ -121,6 +144,7 @@ def validate_strategy(
 
     # Run validation gate
     passed, failures = validate(metrics, prof)
+    score_failures = list(failures)
 
     # Extract triangle
     mt = prof.get("metric_triangle", {})
@@ -133,12 +157,19 @@ def validate_strategy(
         "shape": metrics.get("omega", 0),
     }
 
+    runtime_failures = [message for message in la_messages if message.startswith("R1")]
+    runtime_warnings = [message for message in la_messages if not message.startswith("R1")]
+    if runtime_failures:
+        failures.extend(runtime_failures)
+        passed = False
+    warnings.extend(runtime_warnings)
+
     # Count applicable tests
     total_tests = _count_total(metrics, prof)
 
     return {
         "verdict": "PASS" if passed else "FAIL",
-        "score": f"{total_tests - len(failures)}/{total_tests}",
+        "score": f"{total_tests - len(score_failures)}/{total_tests}",
         "failures": failures,
         "warnings": warnings,
         "metrics": metrics,

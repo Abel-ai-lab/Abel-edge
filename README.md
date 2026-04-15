@@ -119,6 +119,9 @@ causal-edge signal-demo --strategy ethusd_causal --output signal-demo-ethusd.htm
                                 # generate a single-strategy Signal Demo page
 causal-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
                                 # generate a separate tracking page for live rows
+causal-edge research init ETHUSD     # scaffold a research workspace
+causal-edge research run             # evaluate strategy.py and append results.tsv
+causal-edge research status          # show best run in the workspace
 causal-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
 causal-edge validate --csv file.csv  # validate any backtest CSV directly
 causal-edge validate --export r.txt  # export report for sharing
@@ -144,6 +147,12 @@ When a strategy declares `paper_log`, backtests stay in `trade_log` and live pap
 append to `paper_log`. If `paper_log` is omitted, causal-edge falls back to the legacy
 single-log format and reads `source=live` rows as paper-trading data.
 
+If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands now prefer
+`strategies.local.yaml` automatically. Use `--config` to point at any explicit file.
+
+`causal-edge research` uses the same audited validation contract as the main CLI and
+blocks runs that fail static look-ahead checks before they can be recorded.
+
 ## Architecture
 
 ```
@@ -167,6 +176,7 @@ tests/
 - [`CAPABILITY.md`](CAPABILITY.md) — agent capability acquisition (start here)
 - [`docs/validation-audit-matrix.md`](docs/validation-audit-matrix.md) — long-lived validation timing/score contract and migration notes
 - [Adding a Strategy](docs/add-strategy.md) — three paths: CSV / engine / causal
+- [Look-Ahead Rules](causal_edge/validation/look_ahead_rules.md) — semantic review checklist for leaked features
 - [Why Causal?](docs/why-causal.md) — Pearl, DGP, intervention invariance
 - [Agent Developer Guide](docs/harness-guide.md) — how agents operate this framework
 - [Contributing](CONTRIBUTING.md) — how to contribute
