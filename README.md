@@ -51,11 +51,7 @@ Or validate any existing backtest:
 causal-edge validate --csv my_backtest.csv
 ```
 
-## Abel-Pro Mapping
-
-- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
-- Abel-edge branch for that worktree: `abel-pro-demo`
-- Abel discovery and market data default to the public CAP base: `https://cap.abel.ai/api`
+Abel discovery and market data default to the public CAP base: `https://cap.abel.ai/api`
 
 ## Why Causal?
 

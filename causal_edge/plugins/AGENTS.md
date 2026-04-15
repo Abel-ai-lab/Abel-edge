@@ -26,11 +26,6 @@ Optional integrations. Removing this entire directory must not break anything.
 - Override the auth base with `ABEL_AUTH_BASE_URL`
 - Override the CAP base with `ABEL_CAP_BASE_URL`
 
-## Abel-Pro Mapping
-
-- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
-- Abel-edge branch for that worktree: `abel-pro-demo`
-
 ### Understand plugin isolation
 - Framework uses `try/except ImportError` to detect plugins, not registry
 - No plugin code is imported at framework startup

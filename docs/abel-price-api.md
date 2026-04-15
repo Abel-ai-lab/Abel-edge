@@ -23,11 +23,6 @@ Notes:
   the final authorization result, which is the preferred flow for agent-driven
   environments
 
-## Abel-Pro Mapping
-
-- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
-- Abel-edge branch for that worktree: `abel-pro-demo`
-
 ## Request Shape
 
 ```json
