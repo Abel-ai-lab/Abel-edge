@@ -40,6 +40,7 @@
         .info-card .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
         .info-card .subtext { margin-top: 6px; color: #94a3b8; font-size: 13px; }
         .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+        .overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
         .full { grid-column: 1 / -1; }
         .row-list { margin-top: 12px; }
         .row-head, .row-item { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; gap: 12px; padding: 10px 0; }
@@ -50,7 +51,7 @@
         .no-data { text-align: center; padding: 60px; color: #666; }
         code { color: #bfdbfe; }
         @media (max-width: 960px) {
-            .cards, .grid { grid-template-columns: 1fr; }
+            .cards, .grid, .overview-grid { grid-template-columns: 1fr; }
             .strategy-header { flex-direction: column; }
             .row-head, .row-item { grid-template-columns: repeat(2, 1fr); }
         }
@@ -74,6 +75,103 @@
     <div class="content">
         <div id="panel-overview" class="panel active">
             {% if strategies %}
+            {% if live_overview.has_live_data %}
+            <section class="cards">
+                {% for card in live_overview.live_cards %}
+                <div class="info-card">
+                    <div class="label">{{ card.label }}</div>
+                    <div class="value">{{ card.value }}</div>
+                    <div class="subtext">{{ card.subtext }}</div>
+                </div>
+                {% endfor %}
+            </section>
+
+            <div class="overview-grid">
+                <div class="chart-container">
+                    <div class="label">Live Signals</div>
+                    <div class="row-list">
+                        <div class="row-head"><span>Strategy</span><span>Position</span><span>Latest PnL</span><span>Status</span><span>Since</span></div>
+                        {% for sig in live_overview.signals_active %}
+                        <div class="row-item">
+                            <span><span style="color: {{ sig.color }}">&#9679;</span> {{ sig.name }}</span>
+                            <span>{{ "%.2f"|format(sig.position) }}</span>
+                            <span class="{{ 'pnl-pos' if sig.today_pnl > 0 else 'pnl-neg' if sig.today_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</span>
+                            <span>{{ 'Changed' if sig.changed else 'Holding' }}</span>
+                            <span>{{ live_overview.live_since }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% if live_overview.n_flat %}
+                    <div class="subtext" style="margin-top: 12px;">{{ live_overview.n_flat }} signals are currently flat.</div>
+                    {% endif %}
+                </div>
+
+                <div class="chart-container">
+                    <div class="label">Recent Live Days</div>
+                    <div class="row-list">
+                        <div class="row-head"><span>Date</span><span>Active</span><span>PnL</span><span>Spark</span></div>
+                        {% for day in live_overview.recent_days %}
+                        <div class="row-item">
+                            <span>{{ day.date }}</span>
+                            <span>{{ day.n_active }}</span>
+                            <span class="{{ 'pnl-pos' if day.pnl > 0 else 'pnl-neg' if day.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(day.pnl * 100) }}%</span>
+                            <span>{{ day.spark }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div class="label">Live Performance</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Strategy</th>
+                            <th>Days</th>
+                            <th>Active</th>
+                            <th>Sharpe</th>
+                            <th>PnL</th>
+                            <th>MaxDD</th>
+                            <th>Win</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in live_overview.live_perf %}
+                        <tr>
+                            <td><span style="color: {{ s.color }}">&#9679;</span> {{ s.name }}</td>
+                            <td>{{ s.days }}</td>
+                            <td>{{ s.active_days }}</td>
+                            <td>{{ "%.2f"|format(s.sharpe) }}</td>
+                            <td class="{{ 'pnl-pos' if s.pnl > 0 else 'pnl-neg' if s.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(s.pnl * 100) }}%</td>
+                            <td>{{ "%+.2f"|format(-1 * s.max_dd * 100) }}%</td>
+                            <td>{{ "%.0f"|format(s.win_rate * 100) }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="chart-container">
+                <div class="label">Live Ledger</div>
+                {% for day in live_overview.ledger %}
+                <div class="row-list">
+                    <div class="label" style="margin-top: 16px;">{{ day.date }}{% if day.total_pnl != 0 %} · {{ "%+.2f"|format(day.total_pnl * 100) }}%{% endif %}</div>
+                    <div class="row-head"><span>Strategy</span><span>Action</span><span>Signal</span><span>PnL</span><span>Cum</span></div>
+                    {% for entry in day.entries %}
+                    <div class="row-item">
+                        <span><span style="color: {{ entry.color }}">&#9679;</span> {{ entry.name }}</span>
+                        <span class="{{ entry.action_class }}">{{ entry.action }}</span>
+                        <span>{{ "%.2f"|format(entry.position) }}</span>
+                        <span class="{{ 'pnl-pos' if entry.pnl > 0 else 'pnl-neg' if entry.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.pnl * 100) }}%</span>
+                        <span class="{{ 'pnl-pos' if entry.cum_pnl > 0 else 'pnl-neg' if entry.cum_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.cum_pnl * 100) }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <table>
                 <thead>
                     <tr>

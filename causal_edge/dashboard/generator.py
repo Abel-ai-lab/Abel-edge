@@ -16,6 +16,7 @@ from causal_edge.dashboard.components import (
     equity_chart,
     position_chart,
 )
+from causal_edge.dashboard.live_overview import build_live_overview
 from causal_edge.dashboard.strategy_data import prepare_strategy, tracked_ticker_item
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -40,17 +41,19 @@ def _build_env(*, autoescape: bool) -> Environment:
     return env
 
 
-def generate(config_path: str, output_path: str, *, bars_loader=None) -> None:
+def generate(config_path: str | None, output_path: str, *, bars_loader=None) -> None:
     """Generate dashboard.html from config and strategy payloads."""
     cfg = load_config(config_path)
     strategies = [
         prepare_strategy(s, settings=cfg["settings"], bars_loader=bars_loader)
         for s in cfg["strategies"]
     ]
+    live_overview = build_live_overview(strategies, cfg["strategies"], cfg["settings"])
     env = _build_env(autoescape=True)
     template = env.get_template("base.html")
     html = template.render(
         strategies=strategies,
+        live_overview=live_overview,
         settings=cfg["settings"],
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
@@ -58,7 +61,7 @@ def generate(config_path: str, output_path: str, *, bars_loader=None) -> None:
 
 
 def generate_signal_demo(
-    config_path: str, output_path: str, strategy_id: str, *, bars_loader=None
+    config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
 ) -> None:
     """Generate a single-strategy Signal Demo page."""
     cfg = load_config(config_path)
@@ -88,7 +91,7 @@ def generate_signal_demo(
 
 
 def generate_tracking_page(
-    config_path: str, output_path: str, strategy_id: str, *, bars_loader=None
+    config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
 ) -> None:
     cfg = load_config(config_path)
     strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]

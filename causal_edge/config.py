@@ -27,6 +27,8 @@ DEFAULTS: dict[str, Any] = {
 REQUIRED_STRATEGY_FIELDS = ("id", "name", "asset", "color", "engine", "trade_log")
 
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
+DEFAULT_CONFIG_PATH = Path("strategies.yaml")
+LOCAL_CONFIG_PATH = Path("strategies.local.yaml")
 
 
 def _expand_env(value: str) -> str:
@@ -110,18 +112,27 @@ def _merge_settings(user_settings: dict[str, Any]) -> dict[str, Any]:
     return settings
 
 
+def resolve_config_path(path: str | Path | None = None) -> Path:
+    """Resolve the strategies config path with local override support."""
+    if path is None:
+        if LOCAL_CONFIG_PATH.exists():
+            return LOCAL_CONFIG_PATH
+        return DEFAULT_CONFIG_PATH
+    return Path(path)
+
+
 def load_config(path: str | Path | None = None) -> dict[str, Any]:
-    """Load strategies.yaml configuration.
+    """Load strategies configuration.
 
     Args:
-        path: Path to YAML file. Defaults to strategies.yaml in current directory.
+        path: Explicit path to YAML file. When omitted, prefers
+            strategies.local.yaml in the current directory and falls back to
+            strategies.yaml.
 
     Returns:
         Dict with keys 'settings' and 'strategies'.
     """
-    if path is None:
-        path = Path("strategies.yaml")
-    path = Path(path)
+    path = resolve_config_path(path)
 
     if not path.exists():
         raise FileNotFoundError(

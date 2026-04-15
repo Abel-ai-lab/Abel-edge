@@ -16,7 +16,7 @@ def test_help():
 def test_version():
     result = CliRunner().invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert "0.2.1" in result.output
 
 
 def test_status_empty():
@@ -27,6 +27,32 @@ def test_status_empty():
         result = runner.invoke(main, ["status"])
         assert result.exit_code == 0
         assert "Strategies: 0" in result.output
+
+
+def test_status_prefers_local_overlay_config():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("strategies.yaml").write_text("settings: {}\nstrategies: []\n", encoding="utf-8")
+        Path("strategies.local.yaml").write_text(
+            "\n".join(
+                [
+                    "settings: {}",
+                    "strategies:",
+                    "  - id: local_demo",
+                    '    name: "Local Demo"',
+                    "    asset: ETHUSD",
+                    '    color: "#2563EB"',
+                    "    engine: strategies.local_demo.engine",
+                    "    trade_log: data/local_demo.csv",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        result = runner.invoke(main, ["status"])
+        assert result.exit_code == 0
+        assert "Strategies: 1" in result.output
+        assert "Local Demo" in result.output
 
 
 def test_init_creates_project(tmp_path):

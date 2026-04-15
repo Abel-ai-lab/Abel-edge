@@ -8,7 +8,12 @@ from pathlib import Path
 
 import click
 
-from causal_edge.engine.price_data import load_bars_from_csv, resolve_price_config
+from causal_edge.cli_support import build_bars_loader
+from causal_edge.research.cli import research
+
+CONFIG_OPTION_HELP = (
+    "Config file path (defaults to strategies.local.yaml if present, else strategies.yaml)"
+)
 
 
 def _get_version() -> str:
@@ -26,6 +31,9 @@ from causal_edge import __version__
 @click.version_option(version=_get_version(), prog_name="causal-edge")
 def main():
     """causal-edge: Agent-native quant framework."""
+
+
+main.add_command(research)
 
 
 @main.command("version")
@@ -125,7 +133,7 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
 
 @main.command()
 @click.option("--strategy", default=None, help="Run a specific strategy by ID")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 def run(strategy, config):
     """Run strategies and write trade logs."""
     from causal_edge.config import load_config
@@ -136,7 +144,7 @@ def run(strategy, config):
         click.echo("No strategies configured. Add strategies to strategies.yaml.")
         return
 
-    bars_loader = _build_bars_loader(cfg)
+    bars_loader = build_bars_loader(cfg)
 
     click.echo(f"Running {len(cfg['strategies'])} strategies...")
     results = run_all(cfg, strategy_id=strategy, bars_loader=bars_loader)
@@ -145,7 +153,7 @@ def run(strategy, config):
 
 @main.command("paper")
 @click.option("--strategy", default=None, help="Paper-trade a specific strategy by ID")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--as-of", default=None, help="Only process bars up to this timestamp")
 def paper(strategy, config, as_of):
     """Append live paper-trading rows using the latest closed bars."""
@@ -157,7 +165,7 @@ def paper(strategy, config, as_of):
         click.echo("No strategies configured. Add strategies to strategies.yaml.")
         return
 
-    bars_loader = _build_bars_loader(cfg)
+    bars_loader = build_bars_loader(cfg)
 
     click.echo(f"Paper trading {len(cfg['strategies'])} strategies...")
     results = paper_run_all(cfg, strategy_id=strategy, bars_loader=bars_loader, as_of=as_of)
@@ -165,7 +173,7 @@ def paper(strategy, config, as_of):
 
 
 @main.command()
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--output", default="dashboard.html", help="Output HTML path")
 def dashboard(config, output):
     """Generate dashboard HTML."""
@@ -173,13 +181,13 @@ def dashboard(config, output):
     from causal_edge.config import load_config
 
     cfg = load_config(config)
-    bars_loader = _build_bars_loader(cfg)
+    bars_loader = build_bars_loader(cfg)
     generate(config, output, bars_loader=bars_loader)
     click.echo(f"Dashboard generated: {output}")
 
 
 @main.command("signal-demo")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--strategy", required=True, help="Render a specific strategy signal demo page")
 @click.option("--output", default="signal-demo.html", help="Output HTML path")
 def signal_demo(config, strategy, output):
@@ -188,7 +196,7 @@ def signal_demo(config, strategy, output):
     from causal_edge.config import load_config
 
     cfg = load_config(config)
-    bars_loader = _build_bars_loader(cfg)
+    bars_loader = build_bars_loader(cfg)
 
     try:
         generate_signal_demo(config, output, strategy_id=strategy, bars_loader=bars_loader)
@@ -198,7 +206,7 @@ def signal_demo(config, strategy, output):
 
 
 @main.command("tracking")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 @click.option("--strategy", required=True, help="Render a specific strategy tracking page")
 @click.option("--output", default="tracking.html", help="Output HTML path")
 def tracking(config, strategy, output):
@@ -207,7 +215,7 @@ def tracking(config, strategy, output):
     from causal_edge.config import load_config
 
     cfg = load_config(config)
-    bars_loader = _build_bars_loader(cfg)
+    bars_loader = build_bars_loader(cfg)
 
     try:
         generate_tracking_page(config, output, strategy_id=strategy, bars_loader=bars_loader)
@@ -229,7 +237,7 @@ def tracking(config, strategy, output):
     help="Declared strategy exploration count used by DSR (overrides profile default)",
 )
 @click.option("--export", "export_path", default=None, help="Export report to file")
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
     """Run Abel Proof validation on strategies."""
     import io
@@ -347,7 +355,7 @@ def discover(ticker, mode, limit):
 
 
 @main.command()
-@click.option("--config", default="strategies.yaml", help="Config file path")
+@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
 def status(config):
     """Show strategy status summary."""
     from causal_edge.config import load_config
@@ -356,52 +364,6 @@ def status(config):
     click.echo(f"Strategies: {len(cfg['strategies'])}")
     for s in cfg["strategies"]:
         click.echo(f"  {s['name']:20s}  {s['asset']:6s}  {s.get('badge', '?')}")
-
-
-def _build_bars_loader(cfg: dict):
-    strategies = cfg.get("strategies") or []
-    if not strategies:
-        return None
-
-    default_source = (
-        (cfg.get("settings") or {}).get("price_data", {}).get("default_source", "abel")
-    )
-    if any(
-        (resolve_price_config(cfg.get("settings") or {}, s).get("source") == "csv")
-        for s in strategies
-    ):
-        return _dispatch_bars_loader(cfg)
-    if default_source == "abel":
-        return _dispatch_bars_loader(cfg)
-    return None
-
-
-def _dispatch_bars_loader(cfg: dict):
-    def _loader(**kwargs):
-        config = kwargs.get("config") or {}
-        source = config.get("source") or (cfg.get("settings") or {}).get("price_data", {}).get(
-            "default_source", "abel"
-        )
-        if source == "csv":
-            path = config.get("path")
-            if not path:
-                raise click.ClickException("price_data.path is required when source='csv'.")
-            return load_bars_from_csv(path, **kwargs)
-        if source == "abel":
-            try:
-                from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError
-                from causal_edge.plugins.abel.prices import fetch_bars
-            except ImportError as e:
-                raise click.ClickException(
-                    "Abel price source is unavailable. See: causal_edge/plugins/AGENTS.md"
-                ) from e
-            try:
-                return fetch_bars(**kwargs)
-            except MissingAbelApiKeyError as e:
-                raise click.ClickException(str(e)) from e
-        raise click.ClickException(f"Unsupported price_data.source '{source}'.")
-
-    return _loader
 
 
 if __name__ == "__main__":

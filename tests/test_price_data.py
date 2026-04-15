@@ -109,3 +109,69 @@ strategies:
 
     with pytest.raises(ValueError, match="execution.cost_bps"):
         config_module.load_config(config_path)
+
+
+def test_load_config_prefers_local_overlay(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("strategies.yaml").write_text(
+        """
+settings:
+  theme: dark
+strategies: []
+""",
+        encoding="utf-8",
+    )
+    Path("strategies.local.yaml").write_text(
+        """
+settings:
+  theme: light
+strategies:
+  - id: local
+    name: Local Strategy
+    asset: ETHUSD
+    color: '#123456'
+    engine: strategies.local.engine
+    trade_log: data/local.csv
+""",
+        encoding="utf-8",
+    )
+
+    cfg = config_module.load_config()
+
+    assert cfg["settings"]["theme"] == "light"
+    assert [strategy["id"] for strategy in cfg["strategies"]] == ["local"]
+
+
+def test_load_config_explicit_path_overrides_local_overlay(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    explicit_path = Path("custom.yaml")
+    Path("strategies.local.yaml").write_text(
+        """
+settings: {}
+strategies:
+  - id: local
+    name: Local Strategy
+    asset: ETHUSD
+    color: '#123456'
+    engine: strategies.local.engine
+    trade_log: data/local.csv
+""",
+        encoding="utf-8",
+    )
+    explicit_path.write_text(
+        """
+settings: {}
+strategies:
+  - id: explicit
+    name: Explicit Strategy
+    asset: BTCUSD
+    color: '#654321'
+    engine: strategies.explicit.engine
+    trade_log: data/explicit.csv
+""",
+        encoding="utf-8",
+    )
+
+    cfg = config_module.load_config(explicit_path)
+
+    assert [strategy["id"] for strategy in cfg["strategies"]] == ["explicit"]

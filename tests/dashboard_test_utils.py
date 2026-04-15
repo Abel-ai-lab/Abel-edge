@@ -11,9 +11,12 @@ DEMO_ENGINE = (
 )
 
 
-def write_demo_project(*, paper_log=False, cta=False, backtest_csv=None, paper_csv=None):
-    config = [
-        "settings: {}",
+def write_demo_project(
+    *, paper_log=False, cta=False, backtest_csv=None, paper_csv=None, settings_lines=None
+):
+    config = list(settings_lines or ["settings: {}"])
+    config.extend(
+        [
         "strategies:",
         "  - id: demo_signal",
         '    name: "Demo Signal"',
@@ -21,7 +24,8 @@ def write_demo_project(*, paper_log=False, cta=False, backtest_csv=None, paper_c
         '    color: "#2563EB"',
         "    engine: strategies.demo_signal.engine",
         "    trade_log: data/trade_log_demo_signal.csv",
-    ]
+        ]
+    )
     if paper_log:
         config.append("    paper_log: data/paper_log_demo_signal.csv")
     config.append('    thesis: "Signal thesis"')

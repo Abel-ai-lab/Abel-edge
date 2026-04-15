@@ -40,6 +40,37 @@ def test_dashboard_renders_paper_trading_section(tmp_path):
         assert "showSectionTab('demo_signal', 'paper'" in html
 
 
+def test_dashboard_renders_live_overview_sections(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        write_demo_project(
+            paper_log=True,
+            settings_lines=[
+                "settings:",
+                "  paper_trading_start: 2024-01-03",
+                "  ledger_days: 5",
+            ],
+            backtest_csv=(
+                "date,asset_return,pnl,position,cum_return,source\n"
+                "2024-01-01,0.00,0.00,0.00,0.00,backfill\n"
+                "2024-01-02,0.02,0.01,0.50,0.01,backfill\n"
+            ),
+            paper_csv=(
+                "date,asset_return,pnl,position,source,close,next_position\n"
+                "2024-01-03,0.03,0.01,0.50,live,101.0,1.00\n"
+                "2024-01-04,-0.02,-0.01,1.00,live,99.0,0.00\n"
+            ),
+        )
+        result = runner.invoke(main, ["dashboard", "--output", "dashboard.html"])
+        assert result.exit_code == 0, result.output
+        html = Path("dashboard.html").read_text(encoding="utf-8")
+        assert "Live Performance" in html
+        assert "Live Ledger" in html
+        assert "Recent Live Days" in html
+        assert "Since 2024-01-03" in html
+        assert "2024-01-04" in html
+
+
 def test_dashboard_keeps_backtest_summary_when_paper_data_exists(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
