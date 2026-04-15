@@ -18,6 +18,9 @@ from causal_edge.engine.price_data import resolve_price_config
 def _load_engine(engine_path: str):
     """Import engine module and find the StrategyEngine subclass."""
     if engine_path.startswith("strategies.") and (Path.cwd() / "strategies").exists():
+        cwd_str = str(Path.cwd())
+        if cwd_str not in sys.path:
+            sys.path.insert(0, cwd_str)
         stale = [
             name for name in sys.modules if name == "strategies" or name.startswith("strategies.")
         ]

@@ -3,7 +3,7 @@
 ## Quick Start
 
 ```bash
-git clone https://github.com/Abel-ai-causality/causal-edge.git
+git clone https://github.com/Abel-ai-causality/Abel-edge.git
 cd causal-edge
 pip install -e ".[dev]"
 make test    # all tests must pass

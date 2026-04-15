@@ -53,6 +53,12 @@ def scaffold_project(name: str) -> Path:
             encoding="utf-8",
         )
 
+    if not (root / "strategies" / "causal_demo" / "causal_graph.json").exists():
+        (root / "strategies" / "causal_demo" / "causal_graph.json").write_text(
+            _CAUSAL_GRAPH_JSON,
+            encoding="utf-8",
+        )
+
     (root / "strategies" / "__init__.py").write_text("", encoding="utf-8")
     (root / "strategies" / "sma_crossover" / "__init__.py").write_text("", encoding="utf-8")
     (root / "strategies" / "momentum_ml" / "__init__.py").write_text("", encoding="utf-8")
@@ -193,4 +199,25 @@ class SMAEngine(StrategyEngine):
     def get_latest_signal(self):
         positions, dates, prices = self.compute_signals()
         return {"position": float(positions[-1]), "date": str(dates[-1].date())}
+"""
+
+_CAUSAL_GRAPH_JSON = """\
+{
+  "target": "TONUSD",
+  "source": "Abel Causal Graph (cap.abel.ai)",
+  "description": "Causal neighborhood of TONUSD - 5 equity parents and 3 children discovered via Abel's causal graph API. Demo defaults use lag=1 and window=5 unless manually overridden.",
+  "parents": [
+    {"ticker": "GBLI", "field": "price", "type": "parent"},
+    {"ticker": "HSON", "field": "price", "type": "parent"},
+    {"ticker": "SITC", "field": "price", "type": "parent"},
+    {"ticker": "EVC", "field": "price", "type": "parent"},
+    {"ticker": "EAI", "field": "price", "type": "parent"}
+  ],
+  "children": [
+    {"ticker": "ESBA", "field": "price", "type": "child", "lag": 2},
+    {"ticker": "SIRI", "field": "price", "type": "child", "lag": 3},
+    {"ticker": "TVC", "field": "price", "type": "child", "lag": 2, "window": 8}
+  ],
+  "note": "To discover causal parents for other assets, use Abel API: causal-edge discover <TICKER>"
+}
 """

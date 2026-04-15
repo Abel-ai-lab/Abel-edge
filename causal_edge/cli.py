@@ -178,8 +178,11 @@ def paper(strategy, config, as_of):
 def dashboard(config, output):
     """Generate dashboard HTML."""
     from causal_edge.dashboard.generator import generate
+    from causal_edge.config import load_config
 
-    generate(config, output)
+    cfg = load_config(config)
+    bars_loader = build_bars_loader(cfg)
+    generate(config, output, bars_loader=bars_loader)
     click.echo(f"Dashboard generated: {output}")
 
 
@@ -190,9 +193,13 @@ def dashboard(config, output):
 def signal_demo(config, strategy, output):
     """Generate a single-strategy Signal Demo page."""
     from causal_edge.dashboard.generator import generate_signal_demo
+    from causal_edge.config import load_config
+
+    cfg = load_config(config)
+    bars_loader = build_bars_loader(cfg)
 
     try:
-        generate_signal_demo(config, output, strategy_id=strategy)
+        generate_signal_demo(config, output, strategy_id=strategy, bars_loader=bars_loader)
     except ValueError as e:
         raise click.ClickException(str(e))
     click.echo(f"Signal demo generated: {output}")
@@ -205,9 +212,13 @@ def signal_demo(config, strategy, output):
 def tracking(config, strategy, output):
     """Generate tracking HTML for a specific strategy."""
     from causal_edge.dashboard.generator import generate_tracking_page
+    from causal_edge.config import load_config
+
+    cfg = load_config(config)
+    bars_loader = build_bars_loader(cfg)
 
     try:
-        generate_tracking_page(config, output, strategy_id=strategy)
+        generate_tracking_page(config, output, strategy_id=strategy, bars_loader=bars_loader)
     except ValueError as e:
         raise click.ClickException(str(e))
     click.echo(f"Tracking page generated: {output}")

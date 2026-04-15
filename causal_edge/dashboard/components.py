@@ -67,7 +67,13 @@ def compute_metrics(pnl: np.ndarray, periods_per_year: int = 252) -> dict:
 
 
 def equity_chart(
-    dates, cum_return, name: str, color: str, asset_index=None, asset: str | None = None
+    dates,
+    cum_return,
+    name: str,
+    color: str,
+    asset_index=None,
+    asset: str | None = None,
+    asset_dates=None,
 ) -> str:
     """Equity curve chart, optionally overlaid with underlying asset trend."""
     if go is None:
@@ -88,15 +94,20 @@ def equity_chart(
     if asset_index is not None and asset is not None:
         fig.add_trace(
             go.Scatter(
-                x=list(dates),
+                x=list(asset_dates if asset_dates is not None else dates),
                 y=list(np.asarray(asset_index, dtype=float) - 1.0),
                 mode="lines",
                 name=f"{asset} Price",
                 line=dict(color="#94A3B8", width=2, dash="dash"),
             )
         )
+    if asset_index is not None and asset is not None:
+        title = f"{name} — Backtest vs {asset}"
+    else:
+        title = f"{name} — Backtest"
+
     fig.update_layout(
-        title=f"{name} — Backtest vs {asset or 'Asset'}",
+        title=title,
         xaxis_title="Date",
         yaxis_title="Normalized Return",
         yaxis_tickformat=".1%",

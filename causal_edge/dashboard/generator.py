@@ -41,10 +41,13 @@ def _build_env(*, autoescape: bool) -> Environment:
     return env
 
 
-def generate(config_path: str | None, output_path: str) -> None:
+def generate(config_path: str | None, output_path: str, *, bars_loader=None) -> None:
     """Generate dashboard.html from config and strategy payloads."""
     cfg = load_config(config_path)
-    strategies = [prepare_strategy(s) for s in cfg["strategies"]]
+    strategies = [
+        prepare_strategy(s, settings=cfg["settings"], bars_loader=bars_loader)
+        for s in cfg["strategies"]
+    ]
     live_overview = build_live_overview(strategies, cfg["strategies"], cfg["settings"])
     env = _build_env(autoescape=True)
     template = env.get_template("base.html")
@@ -57,7 +60,9 @@ def generate(config_path: str | None, output_path: str) -> None:
     Path(output_path).write_text(html, encoding="utf-8")
 
 
-def generate_signal_demo(config_path: str | None, output_path: str, strategy_id: str) -> None:
+def generate_signal_demo(
+    config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
+) -> None:
     """Generate a single-strategy Signal Demo page."""
     cfg = load_config(config_path)
     strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
@@ -67,8 +72,13 @@ def generate_signal_demo(config_path: str | None, output_path: str, strategy_id:
             f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
         )
 
-    selected_strategy = prepare_strategy(strategies_cfg[0])
-    tracked_tickers = [tracked_ticker_item(s) for s in cfg["strategies"]]
+    selected_strategy = prepare_strategy(
+        strategies_cfg[0], settings=cfg["settings"], bars_loader=bars_loader
+    )
+    tracked_tickers = [
+        tracked_ticker_item(s, settings=cfg["settings"], bars_loader=bars_loader)
+        for s in cfg["strategies"]
+    ]
     env = _build_env(autoescape=True)
     template = env.get_template("signal_demo.html")
     html = template.render(
@@ -80,7 +90,9 @@ def generate_signal_demo(config_path: str | None, output_path: str, strategy_id:
     Path(output_path).write_text(html, encoding="utf-8")
 
 
-def generate_tracking_page(config_path: str | None, output_path: str, strategy_id: str) -> None:
+def generate_tracking_page(
+    config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
+) -> None:
     cfg = load_config(config_path)
     strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
     if not strategies_cfg:
@@ -89,7 +101,9 @@ def generate_tracking_page(config_path: str | None, output_path: str, strategy_i
             f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
         )
 
-    strategy = prepare_strategy(strategies_cfg[0])
+    strategy = prepare_strategy(
+        strategies_cfg[0], settings=cfg["settings"], bars_loader=bars_loader
+    )
     env = _build_env(autoescape=False)
     template = env.get_template("tracking.html")
     html = template.render(

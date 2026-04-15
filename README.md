@@ -26,11 +26,23 @@ Neither edge exists alone. Causal without agents = a paper you read once. Agents
 ## 5 Minutes: See Both Edges
 
 ```bash
-pip install git+https://github.com/Abel-ai-causality/causal-edge.git
+pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
 causal-edge init my-portfolio
 cd my-portfolio
+causal-edge run
+causal-edge validate
+```
+
+If the `git+https` install path is unstable in your network environment, use the same public repo via zip:
+
+```bash
+pip install https://github.com/Abel-ai-causality/Abel-edge/archive/refs/heads/main.zip
+```
+
+For live discovery, authenticate once before `causal-edge discover <TICKER>`:
+
+```bash
 causal-edge login
-causal-edge run && causal-edge validate
 ```
 
 Or validate any existing backtest:
@@ -118,7 +130,14 @@ causal-edge discover <TICKER>        # find causal parents (Abel API key)
 
 Real-price strategies default to Abel price APIs. Override per strategy with
 `price_data.source: csv` to load local bar data instead. Configure Abel access
-with `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
+with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`. If you do not already
+have an API key, install `causal-abel` and complete its OAuth flow first:
+
+```bash
+npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
+```
+
+You can also use `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
 `ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
 
 For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON

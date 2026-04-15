@@ -95,7 +95,7 @@
                         <div class="row-item">
                             <span><span style="color: {{ sig.color }}">&#9679;</span> {{ sig.name }}</span>
                             <span>{{ "%.2f"|format(sig.position) }}</span>
-                            <span class="{{ 'pnl-pos' if sig.today_pnl > 0 else 'pnl-neg' if sig.today_pnl < 0 else 'muted' }}">{{ fmt_pnl_pct(sig.today_pnl) }}</span>
+                            <span class="{{ 'pnl-pos' if sig.today_pnl > 0 else 'pnl-neg' if sig.today_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</span>
                             <span>{{ 'Changed' if sig.changed else 'Holding' }}</span>
                             <span>{{ live_overview.live_since }}</span>
                         </div>
@@ -114,7 +114,7 @@
                         <div class="row-item">
                             <span>{{ day.date }}</span>
                             <span>{{ day.n_active }}</span>
-                            <span class="{{ 'pnl-pos' if day.pnl > 0 else 'pnl-neg' if day.pnl < 0 else 'muted' }}">{{ fmt_pnl_pct(day.pnl) }}</span>
+                            <span class="{{ 'pnl-pos' if day.pnl > 0 else 'pnl-neg' if day.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(day.pnl * 100) }}%</span>
                             <span>{{ day.spark }}</span>
                         </div>
                         {% endfor %}
@@ -143,8 +143,8 @@
                             <td>{{ s.days }}</td>
                             <td>{{ s.active_days }}</td>
                             <td>{{ "%.2f"|format(s.sharpe) }}</td>
-                            <td class="{{ 'pnl-pos' if s.pnl > 0 else 'pnl-neg' if s.pnl < 0 else 'muted' }}">{{ fmt_pnl_pct(s.pnl) }}</td>
-                            <td>{{ fmt_pnl_pct(-1 * s.max_dd) }}</td>
+                            <td class="{{ 'pnl-pos' if s.pnl > 0 else 'pnl-neg' if s.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(s.pnl * 100) }}%</td>
+                            <td>{{ "%+.2f"|format(-1 * s.max_dd * 100) }}%</td>
                             <td>{{ "%.0f"|format(s.win_rate * 100) }}%</td>
                         </tr>
                         {% endfor %}
@@ -156,15 +156,15 @@
                 <div class="label">Live Ledger</div>
                 {% for day in live_overview.ledger %}
                 <div class="row-list">
-                    <div class="label" style="margin-top: 16px;">{{ day.date }}{% if day.total_pnl != 0 %} · {{ fmt_pnl_pct(day.total_pnl) }}{% endif %}</div>
+                    <div class="label" style="margin-top: 16px;">{{ day.date }}{% if day.total_pnl != 0 %} · {{ "%+.2f"|format(day.total_pnl * 100) }}%{% endif %}</div>
                     <div class="row-head"><span>Strategy</span><span>Action</span><span>Signal</span><span>PnL</span><span>Cum</span></div>
                     {% for entry in day.entries %}
                     <div class="row-item">
                         <span><span style="color: {{ entry.color }}">&#9679;</span> {{ entry.name }}</span>
                         <span class="{{ entry.action_class }}">{{ entry.action }}</span>
                         <span>{{ "%.2f"|format(entry.position) }}</span>
-                        <span class="{{ 'pnl-pos' if entry.pnl > 0 else 'pnl-neg' if entry.pnl < 0 else 'muted' }}">{{ fmt_pnl_pct(entry.pnl) }}</span>
-                        <span class="{{ 'pnl-pos' if entry.cum_pnl > 0 else 'pnl-neg' if entry.cum_pnl < 0 else 'muted' }}">{{ fmt_pnl_pct(entry.cum_pnl) }}</span>
+                        <span class="{{ 'pnl-pos' if entry.pnl > 0 else 'pnl-neg' if entry.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.pnl * 100) }}%</span>
+                        <span class="{{ 'pnl-pos' if entry.cum_pnl > 0 else 'pnl-neg' if entry.cum_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.cum_pnl * 100) }}%</span>
                     </div>
                     {% endfor %}
                 </div>
@@ -278,7 +278,14 @@
 
                 {% if s.has_tracking_data %}
                 <div class="grid">
-                    <div class="chart-container"><div id="tracking-asset-{{ s.id }}"></div></div>
+                    <div class="chart-container">
+                        {% if s.has_tracking_asset_chart %}
+                        <div id="tracking-asset-{{ s.id }}"></div>
+                        {% else %}
+                        <div class="label">Ticker Price Since Tracking Began</div>
+                        <div class="empty">Legacy live rows do not include asset price returns, so this chart is hidden.</div>
+                        {% endif %}
+                    </div>
                     <div class="chart-container"><div id="tracking-position-{{ s.id }}"></div></div>
                     <div class="chart-container full">
                         <div class="label">Live Rows</div>
@@ -324,7 +331,9 @@
         Plotly.newPlot('position-{{ s.id }}', {{ s.position_json | safe }}.data, {{ s.position_json | safe }}.layout, {responsive: true});
         {% endif %}
         {% if s.has_tracking_data %}
+        {% if s.has_tracking_asset_chart %}
         Plotly.newPlot('tracking-asset-{{ s.id }}', {{ s.tracking_asset_price_json | safe }}.data, {{ s.tracking_asset_price_json | safe }}.layout, {responsive: true});
+        {% endif %}
         Plotly.newPlot('tracking-position-{{ s.id }}', {{ s.tracking_position_json | safe }}.data, {{ s.tracking_position_json | safe }}.layout, {responsive: true});
         {% elif s.has_tracking_preview %}
         Plotly.newPlot('tracking-preview-{{ s.id }}', {{ s.tracking_preview_json | safe }}.data, {{ s.tracking_preview_json | safe }}.layout, {responsive: true});
