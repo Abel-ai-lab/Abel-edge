@@ -6,6 +6,10 @@ Two modes: **use** this as a tool, or **develop** on this repo.
 
 Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loop.
 
+    python -m venv .venv
+    # PowerShell: .venv\Scripts\Activate.ps1
+    # bash/zsh: source .venv/bin/activate
+    python -m pip install --upgrade pip
     pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
     causal-edge validate --csv your_backtest.csv
 
@@ -32,10 +36,10 @@ Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loo
 
 #### Use Abel causal discovery (optional)
 1. Read `causal_edge/plugins/AGENTS.md`
-2. Run `causal-edge discover <TICKER>`
-3. If you do not already have a key, run `causal-edge login`
-4. For agent-driven setups, install `causal-abel` and complete OAuth there if needed
-5. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
+2. If you do not already have a key, run `causal-edge login`
+3. For agent-driven setups, install `causal-abel` and complete OAuth there if needed
+4. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
+5. Run `causal-edge discover <TICKER>`
 
 ### Architecture
 - `ARCHITECTURE.md` — dependency direction diagram

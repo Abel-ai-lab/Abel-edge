@@ -26,9 +26,17 @@ Neither edge exists alone. Causal without agents = a paper you read once. Agents
 ## 5 Minutes: See Both Edges
 
 ```bash
+python -m venv .venv
+# PowerShell: .venv\Scripts\Activate.ps1
+# bash/zsh: source .venv/bin/activate
+python -m pip install --upgrade pip
 pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
 causal-edge init my-portfolio
 cd my-portfolio
+
+# If you want live Abel discovery, authenticate before discover.
+causal-edge login
+
 causal-edge run
 causal-edge validate
 ```
@@ -128,7 +136,9 @@ causal-edge discover <TICKER>        # find causal parents (Abel API key)
 Real-price strategies default to Abel price APIs. Override per strategy with
 `price_data.source: csv` to load local bar data instead. Configure Abel access
 with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`. If you do not already
-have an API key, install `causal-abel` and complete its OAuth flow first:
+have an API key, install `causal-abel` and complete its OAuth flow before
+running `causal-edge discover <TICKER>` or any workflow that triggers live Abel
+discovery:
 
 ```bash
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y

@@ -1,5 +1,7 @@
 # Abel Proof profile: Equity Daily
 # For equity/ETF strategies on daily timeframes.
+# Strategy-generation guidance: when synthesizing daily backtests, default the
+# date index start to 2020-01-01 unless the asset genuinely has no usable data that early.
 # Annualized daily return vol 5-60% typically triggers auto-detection to this profile.
 # Also the fallback default when auto-detection is ambiguous.
 # Three leverage-invariant dimensions: ratio (Sharpe) × rank (IC) × shape (Omega).
@@ -10,6 +12,8 @@ description: >
   correlation than crypto, so raw Sharpe is the optimization target (Lo correction
   is less impactful). IC and Omega guardrails catch prediction degradation and clipping.
   MaxDD is an absolute gate threshold (not in triangle — scales with leverage).
+  For generated daily strategy examples and synthetic backtests, default the
+  date index start to 2020-01-01 unless the asset's usable history begins later.
 
 metric_triangle:
   optimize: sharpe
