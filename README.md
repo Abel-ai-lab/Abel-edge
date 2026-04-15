@@ -51,11 +51,7 @@ Or validate any existing backtest:
 causal-edge validate --csv my_backtest.csv
 ```
 
-## Abel-Pro Mapping
-
-- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
-- Abel-edge branch for that worktree: `abel-pro-demo`
-- Abel discovery and market data default to the public CAP base: `https://cap.abel.ai/api`
+Abel discovery and market data default to the public CAP base: `https://cap.abel.ai/api`
 
 ## Why Causal?
 
@@ -119,9 +115,10 @@ causal-edge signal-demo --strategy ethusd_causal --output signal-demo-ethusd.htm
                                 # generate a single-strategy Signal Demo page
 causal-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
                                 # generate a separate tracking page for live rows
-causal-edge research init ETHUSD     # scaffold a research workspace
-causal-edge research run             # evaluate strategy.py and append results.tsv
-causal-edge research status          # show best run in the workspace
+causal-edge evaluate --workdir strategies/my_strategy
+                                # emit raw validation facts for one strategy workspace
+causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
+                                # persist raw JSON + markdown facts for an upstream orchestration layer
 causal-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
 causal-edge validate --csv file.csv  # validate any backtest CSV directly
 causal-edge validate --export r.txt  # export report for sharing
@@ -140,6 +137,19 @@ npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/
 You can also use `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
 `ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
 
+After `causal-abel` OAuth succeeds, `causal-edge` checks the current project `.env`,
+`ABEL_AUTH_ENV_FILE`, and the local `.agents/skills/causal-abel/.env.skill` fallback before
+failing for a missing key. That lets agent-driven installs reuse the `causal-abel` auth file
+without copying the key into each workspace.
+
+If discovery still reports a missing key after `causal-abel` is installed, run:
+
+```bash
+python .agents/skills/causal-abel/scripts/cap_probe.py auth-status --compact
+```
+
+If your auth file lives outside the project, point `causal-edge` at it with `ABEL_AUTH_ENV_FILE`.
+
 For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON
 handoff event first, then a final JSON result after authorization completes.
 
@@ -150,8 +160,10 @@ single-log format and reads `source=live` rows as paper-trading data.
 If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands now prefer
 `strategies.local.yaml` automatically. Use `--config` to point at any explicit file.
 
-`causal-edge research` uses the same audited validation contract as the main CLI and
-blocks runs that fail static look-ahead checks before they can be recorded.
+`causal-edge evaluate` uses the same audited validation contract as the main CLI and emits
+only raw execution facts: verdict, score, metrics, triangle, failures, and K. It does not own
+exploration-session structure, branch organization, or narrative summaries. Those belong to
+the upstream orchestration layer such as `Abel-alpha`.
 
 ## Architecture
 

@@ -1,4 +1,4 @@
-"""Immutable evaluation harness for research experiments."""
+"""Raw evaluation helpers for experimental strategies."""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from causal_edge.research.constants import RESULTS_HEADER
 from causal_edge.validation.gate import validate_strategy
 
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD"}
@@ -69,7 +68,7 @@ def run_evaluation(workdir: Path | str | None = None) -> dict:
     workspace = Path(workdir or ".")
     strategy_path = workspace / "strategy.py"
     if not strategy_path.exists():
-        return _error("strategy.py not found. Run 'causal-edge research init' first.")
+        return _error("strategy.py not found")
 
     violations = check_look_ahead(strategy_path)
     if violations:
@@ -112,52 +111,53 @@ def run_evaluation(workdir: Path | str | None = None) -> dict:
     return result
 
 
-def append_results_tsv(
-    workdir: Path,
-    result: dict,
-    status: str,
-    mode: str,
-    description: str,
-    *,
-    commit: str = "none",
-) -> None:
-    if status == "keep" and result.get("verdict") != "PASS":
-        raise ValueError(
-            f"Cannot KEEP with verdict={result.get('verdict')}. "
-            "KEEP requires verdict=PASS. Use status='discard'."
-        )
-
+def render_validation_markdown(result: dict) -> str:
     metrics = result.get("metrics", {})
-    row = {
-        "commit": commit,
-        "lo_adj": round(metrics.get("lo_adjusted", 0), 3),
-        "ic": round(metrics.get("position_ic", 0), 4),
-        "omega": round(metrics.get("omega", 0), 3),
-        "sharpe": round(metrics.get("sharpe", 0), 3),
-        "pnl": round(metrics.get("total_return", 0) * 100, 1),
-        "K": result.get("K", "?"),
-        "score": result.get("score", "?/?"),
-        "status": status,
-        "mode": mode,
-        "description": description,
-    }
+    triangle = result.get("triangle", {})
+    return f"""# Evaluation Summary
 
-    tsv_path = Path(workdir) / "results.tsv"
-    if not tsv_path.exists():
-        tsv_path.write_text(RESULTS_HEADER, encoding="utf-8")
+## Verdict
 
-    line = "\t".join(
-        str(row[key])
-        for key in ("commit", "lo_adj", "ic", "omega", "sharpe", "pnl", "K", "score", "status", "mode", "description")
-    )
-    with tsv_path.open("a", encoding="utf-8") as handle:
-        handle.write(line + "\n")
+- verdict: `{result.get("verdict", "ERROR")}`
+- score: `{result.get("score", "?/?")}`
+- K: `{result.get("K", "?")}`
+
+## Triangle
+
+- lo_ratio: `{triangle.get("ratio", 0):.3f}`
+- rank_ic: `{triangle.get("rank", 0):.4f}`
+- omega_shape: `{triangle.get("shape", 0):.3f}`
+
+## Metrics
+
+- lo_adjusted: `{metrics.get("lo_adjusted", 0):.3f}`
+- position_ic: `{metrics.get("position_ic", 0):.4f}`
+- omega: `{metrics.get("omega", 0):.3f}`
+- sharpe: `{metrics.get("sharpe", 0):.3f}`
+- total_return: `{metrics.get("total_return", 0) * 100:.1f}%`
+- max_dd: `{metrics.get("max_dd", 0) * 100:.1f}%`
+
+## Failures
+
+{_format_failures(result.get("failures", []))}
+"""
+
+
+def write_evaluation_outputs(
+    result: dict, *, json_path: Path | None = None, markdown_path: Path | None = None
+) -> None:
+    if json_path is not None:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
+    if markdown_path is not None:
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(render_validation_markdown(result), encoding="utf-8")
 
 
 def _load_strategy_module(strategy_path: Path):
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("research_strategy", str(strategy_path))
+    spec = importlib.util.spec_from_file_location("raw_eval_strategy", str(strategy_path))
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
@@ -175,14 +175,31 @@ def _error(message: str) -> dict:
     }
 
 
+def _format_failures(failures: list[str]) -> str:
+    if not failures:
+        return "- none"
+    return "\n".join(f"- {failure}" for failure in failures)
+
+
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Evaluate research strategy")
-    parser.add_argument("--workdir", default=".", help="Research workspace dir")
+    parser = argparse.ArgumentParser(
+        description="Evaluate a strategy and emit raw validation facts"
+    )
+    parser.add_argument("--workdir", default=".", help="Directory containing strategy.py")
+    parser.add_argument("--output-json", default=None, help="Optional path for raw JSON result")
+    parser.add_argument(
+        "--output-md", default=None, help="Optional path for raw validation markdown"
+    )
     args = parser.parse_args()
 
     result = run_evaluation(args.workdir)
+    write_evaluation_outputs(
+        result,
+        json_path=Path(args.output_json) if args.output_json else None,
+        markdown_path=Path(args.output_md) if args.output_md else None,
+    )
     print(json.dumps(result, indent=2, default=str))
     sys.exit(0 if result.get("verdict") == "PASS" else 1)
 

@@ -37,11 +37,6 @@ Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loo
 4. For agent-driven setups, install `causal-abel` and complete OAuth there if needed
 5. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
 
-## Abel-Pro Mapping
-
-- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
-- Abel-edge branch for that worktree: `abel-pro-demo`
-
 ### Architecture
 - `ARCHITECTURE.md` — dependency direction diagram
 - `causal_edge/engine/AGENTS.md` — strategy execution

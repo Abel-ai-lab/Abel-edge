@@ -124,28 +124,28 @@ causal-edge discover ETHUSD
 # → outputs discovered nodes using the configured CAP endpoint
 ```
 
-## 6.5. Run a Research Loop
+## 6.5. Evaluate Raw Facts
 
 ```bash
-causal-edge research init ETHUSD
-cd research/ethusd
-causal-edge research run -d "baseline"
-causal-edge research status
+causal-edge evaluate --workdir strategies/my_strategy
+causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
 ```
 
-The research loop writes `results.tsv`, reuses the audited validation contract,
-derives `K` from discovered tickers and lags, and refuses to record runs with
-static look-ahead violations.
+`causal-edge evaluate` reuses the audited validation contract, derives `K` from discovered
+tickers and lags, and can optionally persist raw JSON plus a markdown report. It does not
+organize experiments into sessions or branches; upstream tools such as `Abel-alpha` should
+own orchestration, process logs, and narrative summaries.
 
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow first:
 
 ```bash
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
 ```
-## Abel-Pro Mapping
-
-- Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
-- Abel-edge branch for that worktree: `abel-pro-demo`
+After OAuth, `causal-edge` reuses the local `causal-abel` auth file from
+`.agents/skills/causal-abel/.env.skill` when present. Use `ABEL_AUTH_ENV_FILE`
+if that auth file lives outside the project, or run
+`python .agents/skills/causal-abel/scripts/cap_probe.py auth-status --compact`
+to check whether the skill actually has a key.
 
 ## 7. Build a Strategy
 

@@ -1,28 +1,39 @@
-"""Tests for the research workflow."""
+"""Tests for raw evaluation helpers."""
 
 from pathlib import Path
 
-import pytest
 from click.testing import CliRunner
 
 from causal_edge.cli import main
-from causal_edge.research.evaluate import append_results_tsv, check_look_ahead, compute_k, run_evaluation
-from causal_edge.research.workspace import init_workspace
+from causal_edge.research.evaluate import (
+    check_look_ahead,
+    compute_k,
+    render_validation_markdown,
+    run_evaluation,
+)
 
 
-class TestInitWorkspace:
-    def test_creates_files(self, tmp_path):
-        workspace = init_workspace("SOLUSD", tmp_path / "sol")
-        assert (workspace / "strategy.py").exists()
-        assert (workspace / "results.tsv").exists()
-        assert (workspace / "memory.md").exists()
-        assert (workspace / "discovery.json").exists()
+def _write_strategy(path: Path, *, bias: float = 0.02, flat: bool = False) -> None:
+    if flat:
+        body = (
+            '    dates = pd.date_range("2024-01-01", periods=60, freq="D")\n'
+            "    pnl = np.full(60, 0.01)\n"
+            "    positions = np.ones(60)\n"
+        )
+    else:
+        body = (
+            '    dates = pd.date_range("2024-01-01", periods=120, freq="D")\n'
+            "    phase = np.linspace(0, 8 * np.pi, 120)\n"
+            f"    pnl = {bias} + 0.012 * np.sin(phase)\n"
+            "    positions = np.ones(120)\n"
+        )
 
-    def test_idempotent_strategy_file(self, tmp_path):
-        workspace = init_workspace("SOL", tmp_path / "sol")
-        (workspace / "strategy.py").write_text("# modified", encoding="utf-8")
-        init_workspace("SOL", tmp_path / "sol")
-        assert (workspace / "strategy.py").read_text(encoding="utf-8") == "# modified"
+    path.write_text(
+        "import numpy as np\n"
+        "import pandas as pd\n\n"
+        "def run_strategy():\n" + body + "    return pnl, dates, positions\n",
+        encoding="utf-8",
+    )
 
 
 class TestComputeK:
@@ -43,9 +54,7 @@ class TestComputeK:
     def test_filters_market_factors(self, tmp_path):
         strategy = tmp_path / "strategy.py"
         strategy.write_text(
-            'tickers = ["BTCUSD", "SPY"]\n'
-            "def run_strategy():\n"
-            "    feature.shift(5)\n",
+            'tickers = ["BTCUSD", "SPY"]\ndef run_strategy():\n    feature.shift(5)\n',
             encoding="utf-8",
         )
         _, tickers, _ = compute_k(strategy)
@@ -59,39 +68,70 @@ class TestLookAhead:
         assert check_look_ahead(strategy)
 
 
-class TestAppendResults:
-    def test_keep_requires_pass(self, tmp_path):
-        workspace = init_workspace("TEST", tmp_path / "test")
-        with pytest.raises(ValueError, match="Cannot KEEP"):
-            append_results_tsv(
-                workspace,
-                {"verdict": "FAIL", "score": "4/5", "metrics": {}},
-                "keep",
-                "exploit",
-                "test",
-            )
-
-
 class TestRunEvaluation:
     def test_missing_strategy_file(self, tmp_path):
         result = run_evaluation(tmp_path)
         assert result["verdict"] == "ERROR"
 
     def test_unimplemented_strategy_returns_error(self, tmp_path):
-        workspace = init_workspace("TEST", tmp_path / "workspace")
-        result = run_evaluation(workspace)
+        strategy = tmp_path / "strategy.py"
+        strategy.write_text(
+            'def run_strategy():\n    raise NotImplementedError("todo")\n',
+            encoding="utf-8",
+        )
+        result = run_evaluation(tmp_path)
         assert result["verdict"] == "ERROR"
         assert any("failed" in failure.lower() for failure in result["failures"])
 
+    def test_viable_strategy_passes(self, tmp_path):
+        _write_strategy(tmp_path / "strategy.py")
+        result = run_evaluation(tmp_path)
+        assert result["verdict"] == "PASS"
+        assert result["K"] >= 1
 
-class TestResearchCli:
-    def test_research_init_and_status(self, tmp_path):
+
+class TestValidationMarkdown:
+    def test_renders_validation_summary(self, tmp_path):
+        _write_strategy(tmp_path / "strategy.py")
+        result = run_evaluation(tmp_path)
+        report = render_validation_markdown(result)
+        assert "# Evaluation Summary" in report
+        assert "## Verdict" in report
+        assert result["verdict"] in report
+
+
+class TestEvaluateCli:
+    def test_evaluate_cli_writes_raw_outputs(self, tmp_path):
         runner = CliRunner()
         with runner.isolated_filesystem(temp_dir=tmp_path):
-            result = runner.invoke(main, ["research", "init", "ETHUSD"])
-            assert result.exit_code == 0, result.output
-            assert Path("research/ethusd/strategy.py").exists()
+            workdir = Path("workspace")
+            workdir.mkdir()
+            _write_strategy(workdir / "strategy.py")
 
-            status = runner.invoke(main, ["research", "status", "--workdir", "research/ethusd"])
-            assert status.exit_code == 0, status.output
-            assert "Experiments: 0" in status.output
+            result = runner.invoke(
+                main,
+                [
+                    "evaluate",
+                    "--workdir",
+                    str(workdir),
+                    "--output-json",
+                    str(workdir / "edge-result.json"),
+                    "--output-md",
+                    str(workdir / "edge-validation.md"),
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            assert (workdir / "edge-result.json").exists()
+            assert (workdir / "edge-validation.md").exists()
+            assert "Verdict: PASS" in result.output
+
+    def test_evaluate_cli_fails_for_bad_strategy(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            workdir = Path("workspace")
+            workdir.mkdir()
+            _write_strategy(workdir / "strategy.py", flat=True)
+
+            result = runner.invoke(main, ["evaluate", "--workdir", str(workdir)])
+            assert result.exit_code != 0
+            assert "Verdict: FAIL" in result.output

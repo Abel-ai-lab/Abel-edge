@@ -1,7 +1,7 @@
 # Look-Ahead Review Rules
 
 Use these rules when a strategy trips the static or runtime look-ahead checks in
-`causal-edge validate` or `causal-edge research run`.
+`causal-edge validate` or `causal-edge evaluate`.
 
 ## Rules
 
