@@ -127,15 +127,19 @@ causal-edge discover ETHUSD
 ## 6.5. Run a Research Loop
 
 ```bash
-causal-edge research init ETHUSD
-cd research/ethusd
-causal-edge research run -d "baseline"
-causal-edge research status
+causal-edge research init ETHUSD --branch-id graph-v1
+causal-edge research run --workdir research/ethusd/<exp_id>/branches/graph-v1 -d "baseline"
+causal-edge research status --workdir research/ethusd/<exp_id>
+causal-edge research check --workdir research/ethusd/<exp_id>
 ```
 
-The research loop writes `results.tsv`, reuses the audited validation contract,
-derives `K` from discovered tickers and lags, and refuses to record runs with
-static look-ahead violations.
+The research loop writes a session under `research/<ticker>/<exp_id>/`, reuses the
+audited validation contract, derives `K` from discovered tickers and lags, writes both
+`results.tsv` and `rounds/round-xxx.md` under `branches/<branch-id>/`, maintains an
+append-only `events.tsv` for the session, compares PASS runs against the latest KEEP
+baseline before deciding KEEP vs DISCARD, and refuses to record runs with static
+look-ahead violations. `research check` defaults to traceability checks; add `--strict`
+to also fail on placeholder narrative content.
 
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow first:
 

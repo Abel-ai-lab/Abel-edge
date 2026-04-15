@@ -115,9 +115,16 @@ causal-edge signal-demo --strategy ethusd_causal --output signal-demo-ethusd.htm
                                 # generate a single-strategy Signal Demo page
 causal-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
                                 # generate a separate tracking page for live rows
-causal-edge research init ETHUSD     # scaffold a research workspace
-causal-edge research run             # evaluate strategy.py and append results.tsv
-causal-edge research status          # show best run in the workspace
+causal-edge research init ETHUSD --branch-id graph-v1
+                                # scaffold research/ethusd/<exp_id>/branches/graph-v1
+causal-edge research run --workdir research/ethusd/<exp_id>/branches/graph-v1
+                                # validate, compare vs baseline, append results.tsv, write round note
+causal-edge research status --workdir research/ethusd/<exp_id>
+                                # show session-wide branch and round summary
+causal-edge research check --workdir research/ethusd/<exp_id>
+                                # enforce traceability across session + branch + round
+causal-edge research check --strict --workdir research/ethusd/<exp_id>
+                                # also fail on placeholder narrative content
 causal-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
 causal-edge validate --csv file.csv  # validate any backtest CSV directly
 causal-edge validate --export r.txt  # export report for sharing
@@ -159,8 +166,13 @@ single-log format and reads `source=live` rows as paper-trading data.
 If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands now prefer
 `strategies.local.yaml` automatically. Use `--config` to point at any explicit file.
 
-`causal-edge research` uses the same audited validation contract as the main CLI and
-blocks runs that fail static look-ahead checks before they can be recorded.
+`causal-edge research` uses the same audited validation contract as the main CLI,
+blocks runs that fail static look-ahead checks before they can be recorded, and now
+tracks exploration sessions separately from candidate branches. Each session lives at
+`research/<ticker>/<exp_id>/`, each candidate branch gets its own
+`branches/<branch-id>/`, each round writes both `results.tsv` and `rounds/round-xxx.md`,
+the session keeps an append-only `events.tsv`, and `research check` verifies the traceability
+record by default while `--strict` also checks unresolved placeholders.
 
 ## Architecture
 

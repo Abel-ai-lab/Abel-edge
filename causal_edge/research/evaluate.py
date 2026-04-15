@@ -12,8 +12,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from causal_edge.research.constants import RESULTS_HEADER
+from causal_edge.research.constants import RESULTS_COLUMNS, RESULTS_HEADER
+from causal_edge.research.workspace import read_results_rows
 from causal_edge.validation.gate import validate_strategy
+from causal_edge.validation.gate_logic import decide_keep_discard
+from causal_edge.validation.metrics import load_profile
 
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD"}
 TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(USD)?$|^[A-Z]{2,5}-[A-Z]{1,2}$")
@@ -119,6 +122,12 @@ def append_results_tsv(
     mode: str,
     description: str,
     *,
+    exp_id: str,
+    ticker: str,
+    branch_id: str,
+    round_id: str,
+    decision: str,
+    validation_path: str,
     commit: str = "none",
 ) -> None:
     if status == "keep" and result.get("verdict") != "PASS":
@@ -129,29 +138,59 @@ def append_results_tsv(
 
     metrics = result.get("metrics", {})
     row = {
+        "exp_id": exp_id,
+        "ticker": ticker,
+        "branch_id": branch_id,
+        "round_id": round_id,
+        "decision": decision,
         "commit": commit,
         "lo_adj": round(metrics.get("lo_adjusted", 0), 3),
         "ic": round(metrics.get("position_ic", 0), 4),
         "omega": round(metrics.get("omega", 0), 3),
         "sharpe": round(metrics.get("sharpe", 0), 3),
+        "max_dd": round(metrics.get("max_dd", 0), 4),
         "pnl": round(metrics.get("total_return", 0) * 100, 1),
         "K": result.get("K", "?"),
         "score": result.get("score", "?/?"),
+        "verdict": result.get("verdict", "ERROR"),
         "status": status,
         "mode": mode,
         "description": description,
+        "validation_path": validation_path,
     }
 
     tsv_path = Path(workdir) / "results.tsv"
     if not tsv_path.exists():
         tsv_path.write_text(RESULTS_HEADER, encoding="utf-8")
 
-    line = "\t".join(
-        str(row[key])
-        for key in ("commit", "lo_adj", "ic", "omega", "sharpe", "pnl", "K", "score", "status", "mode", "description")
-    )
+    line = "\t".join(str(row[key]) for key in RESULTS_COLUMNS)
     with tsv_path.open("a", encoding="utf-8") as handle:
         handle.write(line + "\n")
+
+
+def decide_research_outcome(workdir: Path, result: dict) -> tuple[str, str]:
+    if result.get("verdict") != "PASS":
+        return "discard", "discard"
+
+    rows = read_results_rows(workdir)
+    keep_rows = [row for row in rows if row.get("status") == "keep"]
+    if not keep_rows:
+        return "keep", "keep"
+
+    baseline = keep_rows[-1]
+    baseline_metrics = {
+        "lo_adjusted": float(baseline.get("lo_adj") or 0),
+        "position_ic": float(baseline.get("ic") or 0),
+        "omega": float(baseline.get("omega") or 0),
+        "sharpe": float(baseline.get("sharpe") or 0),
+        "max_dd": float(baseline.get("max_dd") or 0),
+        "total_return": float(baseline.get("pnl") or 0) / 100.0,
+    }
+    current_metrics = result.get("metrics", {})
+    profile = load_profile("crypto_daily")
+    decision = decide_keep_discard(current_metrics, baseline_metrics, profile).lower()
+    status = "keep" if decision == "keep" else "discard"
+    return status, decision
 
 
 def _load_strategy_module(strategy_path: Path):
