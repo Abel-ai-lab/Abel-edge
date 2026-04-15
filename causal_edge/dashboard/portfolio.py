@@ -153,8 +153,12 @@ def build_ledger(strategies: list[dict], strat_cfgs: list[dict],
             else:
                 action, action_class = "= hold", "ledger-action-long"
 
-            # Skip flat + no-pnl rows to reduce noise
-            if abs(pos) < 0.01 and abs(pnl_val) < 1e-8:
+            # Skip rows that are truly idle: flat today AND flat yesterday AND
+            # no pnl. This keeps HOLD, OPEN, EXIT, and ADJUST rows visible —
+            # an exit (pos 0.07 → 0) would otherwise be hidden and look like
+            # "never had a position", which is worse than showing a zero row.
+            changed = abs(pos - prev_pos) > 0.01
+            if abs(pos) < 0.01 and abs(pnl_val) < 1e-8 and not changed:
                 continue
 
             entries.append({
