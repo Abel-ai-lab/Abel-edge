@@ -1,6 +1,17 @@
-"""Research helpers for autonomous experiment loops."""
+"""Raw evaluation helpers for strategy experiments."""
 
-from causal_edge.research.evaluate import append_results_tsv, run_evaluation
-from causal_edge.research.workspace import init_workspace
+from causal_edge.research.evaluate import (
+    check_look_ahead,
+    compute_k,
+    render_validation_markdown,
+    run_evaluation,
+    write_evaluation_outputs,
+)
 
-__all__ = ["append_results_tsv", "init_workspace", "run_evaluation"]
+__all__ = [
+    "check_look_ahead",
+    "compute_k",
+    "render_validation_markdown",
+    "run_evaluation",
+    "write_evaluation_outputs",
+]

@@ -124,22 +124,17 @@ causal-edge discover ETHUSD
 # → outputs discovered nodes using the configured CAP endpoint
 ```
 
-## 6.5. Run a Research Loop
+## 6.5. Evaluate Raw Facts
 
 ```bash
-causal-edge research init ETHUSD --branch-id graph-v1
-causal-edge research run --workdir research/ethusd/<exp_id>/branches/graph-v1 -d "baseline"
-causal-edge research status --workdir research/ethusd/<exp_id>
-causal-edge research check --workdir research/ethusd/<exp_id>
+causal-edge evaluate --workdir strategies/my_strategy
+causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
 ```
 
-The research loop writes a session under `research/<ticker>/<exp_id>/`, reuses the
-audited validation contract, derives `K` from discovered tickers and lags, writes both
-`results.tsv` and `rounds/round-xxx.md` under `branches/<branch-id>/`, maintains an
-append-only `events.tsv` for the session, compares PASS runs against the latest KEEP
-baseline before deciding KEEP vs DISCARD, and refuses to record runs with static
-look-ahead violations. `research check` defaults to traceability checks; add `--strict`
-to also fail on placeholder narrative content.
+`causal-edge evaluate` reuses the audited validation contract, derives `K` from discovered
+tickers and lags, and can optionally persist raw JSON plus a markdown report. It does not
+organize experiments into sessions or branches; upstream tools such as `Abel-alpha` should
+own orchestration, process logs, and narrative summaries.
 
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow first:
 
