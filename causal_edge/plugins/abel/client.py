@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from typing import Any
+import uuid
 
 import requests
 
 from causal_edge.plugins.abel.credentials import resolve_cap_base_url
+
+CAP_VERSION = "0.2.2"
+DEFAULT_GRAPH_ID = "abel-main"
+DEFAULT_GRAPH_VERSION = "CausalNodeV3"
 
 CRYPTO_ALIASES = {"BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX"}
 SUPPORTED_FIELDS = {"price", "volume"}
@@ -121,7 +126,18 @@ class AbelClient:
         }
         response = self.session.post(
             f"{self.cap_base_url}/cap",
-            json={"verb": verb, "params": params},
+            json={
+                "cap_version": CAP_VERSION,
+                "request_id": str(uuid.uuid4()),
+                "verb": verb,
+                "params": params,
+                "context": {
+                    "graph_ref": {
+                        "graph_id": DEFAULT_GRAPH_ID,
+                        "graph_version": DEFAULT_GRAPH_VERSION,
+                    }
+                },
+            },
             headers=headers,
             timeout=20,
         )
@@ -129,12 +145,11 @@ class AbelClient:
         return response.json()
 
     def _post_market(self, *, endpoint: str, body: dict[str, Any], api_key: str) -> dict[str, Any]:
+        token = api_key.removeprefix("Bearer ").strip()
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "Authorization": api_key
-            if api_key.lower().startswith("bearer ")
-            else f"Bearer {api_key}",
+            "api-key": token,
         }
         response = self.session.post(
             f"{self.cap_base_url}/market/{endpoint}",

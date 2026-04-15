@@ -169,6 +169,10 @@ class MyEngine(StrategyEngine):
 
 Register in `strategies.yaml` → `causal-edge run` → `causal-edge validate`.
 
+For `crypto_daily` and `equity_daily` strategy generation, default synthetic or
+illustrative backtest date ranges to start at `2020-01-01` unless the asset does
+not have usable history that early.
+
 Timing and audit contract reference: `docs/validation-audit-matrix.md`.
 Semantic look-ahead reference: `causal_edge/validation/look_ahead_rules.md`.
 

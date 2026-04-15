@@ -1,5 +1,7 @@
 # Abel Proof profile: Crypto Daily
 # For cryptocurrency strategies on daily timeframes.
+# Strategy-generation guidance: when synthesizing daily backtests, default the
+# date index start to 2020-01-01 unless the asset genuinely has no usable data that early.
 # Annualized daily return vol > 60% typically triggers auto-detection to this profile.
 # Three leverage-invariant dimensions: ratio (Lo-adj) × rank (IC) × shape (Omega).
 # No known transformation improves all three simultaneously except genuine signal improvement.
@@ -10,6 +12,8 @@ description: >
   as the optimization target. IC guardrail catches prediction degradation.
   Omega guardrail catches clipping and distribution manipulation.
   MaxDD is an absolute gate threshold (not in triangle — scales with leverage).
+  For generated daily strategy examples and synthetic backtests, default the
+  date index start to 2020-01-01 unless the asset's usable history begins later.
 
 metric_triangle:
   optimize: lo_adjusted_sharpe
