@@ -29,9 +29,12 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 def _load_trade_log(path: str) -> pd.DataFrame | None:
     try:
-        return pd.read_csv(path, parse_dates=["date"])
+        df = pd.read_csv(path, parse_dates=["date"])
     except (FileNotFoundError, pd.errors.EmptyDataError):
         return None
+    if pd.api.types.is_datetime64tz_dtype(df["date"]):
+        df["date"] = df["date"].dt.tz_localize(None)
+    return df
 
 
 def _prepare_strategy(s_cfg: dict) -> dict:
