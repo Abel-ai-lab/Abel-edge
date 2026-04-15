@@ -121,6 +121,32 @@ def test_discover_missing_api_key_fails(monkeypatch, tmp_path):
     assert "ABEL_CAP_BASE_URL" in result.output
 
 
+def test_discover_uses_causal_abel_skill_auth_file(monkeypatch, tmp_path):
+    class StubClient:
+        def discover_parents(self, *, node_id, limit, api_key):
+            assert node_id == "ETHUSD"
+            assert api_key == "abel_skill"
+            return [{"node_id": "BTCUSD.price"}]
+
+    from causal_edge.plugins.abel import discover as discover_module
+
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        monkeypatch.delenv("ABEL_API_KEY", raising=False)
+        monkeypatch.delenv("CAP_API_KEY", raising=False)
+        monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+        Path(".agents/skills/causal-abel").mkdir(parents=True)
+        Path(".agents/skills/causal-abel/.env.skill").write_text(
+            "ABEL_API_KEY=abel_skill\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(discover_module, "AbelClient", StubClient)
+        result = runner.invoke(main, ["discover", "ETHUSD"])
+
+        assert result.exit_code == 0, result.output
+        assert "ticker: BTCUSD" in result.output
+
+
 def test_run_with_abel_source_missing_api_key_fails(monkeypatch, tmp_path):
     from causal_edge.engine import trader as trader_module
     from causal_edge.engine.base import StrategyEngine

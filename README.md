@@ -137,6 +137,19 @@ npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/
 You can also use `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
 `ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
 
+After `causal-abel` OAuth succeeds, `causal-edge` checks the current project `.env`,
+`ABEL_AUTH_ENV_FILE`, and the local `.agents/skills/causal-abel/.env.skill` fallback before
+failing for a missing key. That lets agent-driven installs reuse the `causal-abel` auth file
+without copying the key into each workspace.
+
+If discovery still reports a missing key after `causal-abel` is installed, run:
+
+```bash
+python .agents/skills/causal-abel/scripts/cap_probe.py auth-status --compact
+```
+
+If your auth file lives outside the project, point `causal-edge` at it with `ABEL_AUTH_ENV_FILE`.
+
 For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON
 handoff event first, then a final JSON result after authorization completes.
 

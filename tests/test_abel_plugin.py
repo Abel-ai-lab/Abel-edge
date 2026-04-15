@@ -42,14 +42,81 @@ def test_resolve_api_key_reads_dotenv(monkeypatch, tmp_path):
     assert api_key == "cap_file"
 
 
+def test_resolve_api_key_reads_explicit_auth_env_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    auth_env = tmp_path / "shared" / ".env.skill"
+    auth_env.parent.mkdir(parents=True)
+    auth_env.write_text("ABEL_API_KEY=abel_shared\n", encoding="utf-8")
+    monkeypatch.setenv("ABEL_AUTH_ENV_FILE", str(auth_env))
+
+    api_key = resolve_api_key(env_path=tmp_path / ".env")
+
+    assert api_key == "abel_shared"
+
+
+def test_resolve_api_key_auto_discovers_causal_abel_skill_env(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    project_dir = tmp_path / "project" / "workspace"
+    project_dir.mkdir(parents=True)
+    skill_env = tmp_path / "project" / ".agents" / "skills" / "causal-abel" / ".env.skill"
+    skill_env.parent.mkdir(parents=True)
+    skill_env.write_text("ABEL_API_KEY=abel_skill\n", encoding="utf-8")
+
+    monkeypatch.chdir(project_dir)
+    api_key = resolve_api_key(env_path=project_dir / ".env")
+
+    assert api_key == "abel_skill"
+
+
+def test_resolve_api_key_prefers_project_dotenv_over_skill_env(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    (project_dir / ".env").write_text("ABEL_API_KEY=abel_project\n", encoding="utf-8")
+    skill_env = project_dir / ".agents" / "skills" / "causal-abel" / ".env.skill"
+    skill_env.parent.mkdir(parents=True)
+    skill_env.write_text("ABEL_API_KEY=abel_skill\n", encoding="utf-8")
+
+    monkeypatch.chdir(project_dir)
+    api_key = resolve_api_key(env_path=project_dir / ".env")
+
+    assert api_key == "abel_project"
+
+
 def test_require_api_key_raises_when_missing(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
 
     try:
         require_api_key(env_path=tmp_path / ".env")
     except MissingAbelApiKeyError as e:
         assert "ABEL_API_KEY" in str(e)
+        assert "ABEL_AUTH_ENV_FILE" in str(e)
+    else:
+        raise AssertionError("Expected MissingAbelApiKeyError")
+
+
+def test_require_api_key_mentions_auth_status_when_skill_installed(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    skill_dir = project_dir / ".agents" / "skills" / "causal-abel"
+    skill_dir.mkdir(parents=True)
+
+    monkeypatch.chdir(project_dir)
+    try:
+        require_api_key(env_path=project_dir / ".env")
+    except MissingAbelApiKeyError as e:
+        assert "auth-status --compact" in str(e)
+        assert "causal-abel" in str(e)
     else:
         raise AssertionError("Expected MissingAbelApiKeyError")
 
@@ -103,6 +170,7 @@ def test_resolve_auth_base_url_reads_dotenv(monkeypatch, tmp_path):
 def test_resolve_api_key_does_not_mutate_process_env(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
     (tmp_path / ".env").write_text("ABEL_API_KEY=abel_file\n", encoding="utf-8")
 
     api_key = resolve_api_key(env_path=tmp_path / ".env")

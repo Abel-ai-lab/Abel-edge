@@ -128,6 +128,12 @@ If you do not already have an Abel API key, install `causal-abel` and complete i
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
 ```
 
+After OAuth, `causal-edge` reuses the local `causal-abel` auth file from
+`.agents/skills/causal-abel/.env.skill` when present. Use `ABEL_AUTH_ENV_FILE`
+if that auth file lives outside the project, or run
+`python .agents/skills/causal-abel/scripts/cap_probe.py auth-status --compact`
+to check whether the skill actually has a key.
+
 ## Abel-Pro Mapping
 
 - Abel-edge worktree for the Abel-Pro integration: `D:\codes\open_source\causal-edge\.tree\abel-pro-demo`
