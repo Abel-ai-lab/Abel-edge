@@ -37,7 +37,25 @@ def test_load_bars_from_csv_requires_symbol_for_multi_symbol(tmp_path):
         price_data_module.load_bars_from_csv(path, symbols=["ETHUSD", "BTCUSD"])
 
 
-def test_normalize_bars_rejects_naive_daily_timestamps():
+def test_load_bars_from_csv_assumes_utc_for_naive_daily_timestamps(tmp_path):
+    path = tmp_path / "prices.csv"
+    pd.DataFrame(
+        {
+            "timestamp": ["2025-01-01", "2025-01-02"],
+            "close": [1.0, 2.0],
+        }
+    ).to_csv(path, index=False)
+
+    bars = price_data_module.load_bars_from_csv(path, symbols=["ETHUSD"])
+
+    assert str(bars["timestamp"].dt.tz) == "UTC"
+    assert list(bars["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")) == [
+        "2025-01-01T00:00:00Z",
+        "2025-01-02T00:00:00Z",
+    ]
+
+
+def test_normalize_bars_rejects_naive_daily_timestamps_in_runtime_contract():
     df = pd.DataFrame(
         {
             "timestamp": ["2025-01-01", "2025-01-02"],

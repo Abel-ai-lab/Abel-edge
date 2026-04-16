@@ -327,7 +327,44 @@ def test_run_supports_declared_series_feed_via_framework_path(tmp_path):
         _reset_strategy_modules()
 
 
-def test_run_fails_early_on_naive_primary_feed_timestamps(tmp_path):
+def test_run_supports_declared_series_feed_with_naive_csv_timestamps(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        (root / "data").mkdir(exist_ok=True)
+        (root / "data" / "risk_scale.csv").write_text(
+            "timestamp,value\n"
+            "2026-01-01,0.2\n"
+            "2026-01-02,0.4\n"
+            "2026-01-03,0.6\n",
+            encoding="utf-8",
+        )
+        extra_yaml = """
+    feeds:
+      risk_scale:
+        kind: series
+        source: csv
+        path: data/risk_scale.csv
+        field: value
+"""
+        _write_engine_project(
+            root,
+            engine_name="feed_demo",
+            engine_code=FEED_ENGINE_CODE,
+            extra_yaml=extra_yaml,
+        )
+        sys.path.insert(0, str(root))
+
+        result = runner.invoke(main, ["run", "--strategy", "feed_demo"])
+
+        assert result.exit_code == 0, result.output
+        trade_df = read_trade_log("data/trade_log_feed_demo.csv")
+        assert list(trade_df["position"].round(2)) == [0.2, 0.4, 0.6]
+        sys.path.pop(0)
+        _reset_strategy_modules()
+
+
+def test_run_supports_naive_primary_feed_timestamps_from_csv_loader(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
@@ -346,9 +383,13 @@ def test_run_fails_early_on_naive_primary_feed_timestamps(tmp_path):
 
         result = runner.invoke(main, ["run", "--strategy", "primary_only"])
 
-        assert result.exit_code != 0
-        assert "PrimaryOnlyEngine" in result.output
-        assert "UTC-aware" in result.output
+        assert result.exit_code == 0, result.output
+        trade_df = read_trade_log("data/trade_log_primary_only.csv")
+        assert list(trade_df["date"].dt.strftime("%Y-%m-%d")) == [
+            "2026-01-01",
+            "2026-01-02",
+            "2026-01-03",
+        ]
         sys.path.pop(0)
         _reset_strategy_modules()
 

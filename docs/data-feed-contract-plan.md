@@ -167,6 +167,10 @@ contract:
 
 Naive datetimes are not allowed in the supported daily runtime contract.
 
+For framework-owned file adapters such as CSV loaders, naive source timestamps
+may be accepted as an input format and interpreted as UTC during normalization.
+The contract above applies after loader normalization, inside engine runtime.
+
 ### Feed Kinds
 
 The framework should initially support two feed kinds.
@@ -905,13 +909,14 @@ Milestone scope:
 
 Implemented in `feat/runtime-data-feed-contract`:
 
-- `normalize_bars(...)` now enforces the daily UTC-aware contract instead of
+- `normalize_bars(...)` now enforces the daily runtime contract instead of
   silently dropping duplicate timestamps
-- primary CSV bars now fail fast on naive daily timestamps
+- framework-owned CSV loaders now interpret naive daily timestamps as UTC and
+  standardize them into the runtime contract
 - duplicate per-symbol bar timestamps now fail fast during normalization
 - signal-output regression tests now cover unsorted dates and length mismatch
-- `docs/add-strategy.md` now explicitly states the required UTC-aware daily CSV
-  timestamp format
+- `docs/add-strategy.md` now explains the distinction between file-backed input
+  format and the runtime UTC-aware contract
 
 Validation run:
 
@@ -931,21 +936,23 @@ Validation run:
 
 Evidence captured:
 
-- `normalize_bars(...)` rejects naive daily timestamps with a `UTC-aware`
-  contract error
-- `normalize_bars(...)` rejects duplicate per-symbol timestamps instead of
+- `load_bars_from_csv(...)` accepts naive daily timestamps and normalizes them
+  into UTC-aware runtime timestamps
+- file-backed `series` feeds loaded through the framework accept naive daily
+  timestamps and normalize them into UTC-aware runtime timestamps
+- `normalize_bars(...)` still rejects duplicate per-symbol timestamps instead of
   deduplicating them implicitly
-- `run` fails early when the primary feed CSV uses naive timestamps
+- runtime alignment still rejects naive in-memory auxiliary series
 - `validate_signal_output(...)` rejects unsorted dates
 - `validate_signal_output(...)` rejects mismatched `(positions, dates, prices)`
   lengths
 
 Milestone conclusion:
 
-- runtime gate coverage now includes malformed primary bars, malformed
-  auxiliary alignment inputs, undeclared feed access, and malformed signal
-  tuples in the tested daily-contract slice
-- the supported execution path is materially closer to the desired strong
-  runtime contract, because invalid inputs are no longer "fixed up" silently
+- runtime gate coverage now distinguishes clearly between file-backed input
+  normalization and in-memory runtime contract enforcement
+- malformed primary bars, malformed auxiliary alignment inputs, undeclared feed
+  access, and malformed signal tuples are all covered in the tested
+  daily-contract slice
 - the next milestone can move from synthetic gate coverage toward more realistic
   bundled example migration or wrapper/composite strategy validation

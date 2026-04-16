@@ -79,6 +79,7 @@ def _load_series_from_csv(feed_cfg: dict, **kwargs) -> pd.DataFrame:
         field="value",
         name=f"feed '{feed_cfg['name']}'",
         profile=feed_cfg.get("profile", "daily"),
+        assume_utc_for_naive=True,
     )
     start = kwargs.get("start")
     end = kwargs.get("end")

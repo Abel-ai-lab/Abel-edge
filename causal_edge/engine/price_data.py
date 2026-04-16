@@ -24,16 +24,12 @@ def resolve_price_config(settings: dict, strategy_cfg: dict) -> dict:
     return merged
 
 
-def normalize_bars(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_bars(df: pd.DataFrame, *, assume_utc_for_naive: bool = False) -> pd.DataFrame:
     renamed = df.rename(columns=CSV_ALIASES).copy()
     missing = [col for col in REQUIRED_BAR_COLUMNS if col not in renamed.columns]
     if missing:
         raise FeedNormalizationError(f"Price data missing required columns: {missing}")
 
-    try:
-        renamed["timestamp"] = pd.to_datetime(renamed["timestamp"], utc=False)
-    except (TypeError, ValueError) as exc:
-        raise FeedNormalizationError("Price data contains invalid timestamp values.") from exc
     renamed["symbol"] = renamed["symbol"].astype(str)
     numeric_cols = [col for col in ["close", "open", "high", "low", "volume"] if col in renamed.columns]
     for col in numeric_cols:
@@ -42,13 +38,17 @@ def normalize_bars(df: pd.DataFrame) -> pd.DataFrame:
             raise FeedNormalizationError(f"Price data column '{col}' contains non-numeric values.")
 
     renamed = renamed.sort_values(["symbol", "timestamp"]).reset_index(drop=True)
+    normalized_groups = []
     for symbol, group in renamed.groupby("symbol", sort=False):
-        renamed.loc[group.index, "timestamp"] = validate_datetime_index(
+        normalized_group = group.copy()
+        normalized_group["timestamp"] = validate_datetime_index(
             group["timestamp"],
             profile="daily",
             name=f"price_data[{symbol}].timestamp",
+            assume_utc_for_naive=assume_utc_for_naive,
         )
-    return renamed.reset_index(drop=True)
+        normalized_groups.append(normalized_group)
+    return pd.concat(normalized_groups, ignore_index=True)
 
 
 def load_bars_from_csv(
@@ -67,7 +67,7 @@ def load_bars_from_csv(
         df = df.copy()
         df["symbol"] = symbols[0]
 
-    bars = normalize_bars(df)
+    bars = normalize_bars(df, assume_utc_for_naive=True)
     filtered = bars[bars["symbol"].isin(symbols)]
     if start is not None:
         filtered = filtered[filtered["timestamp"] >= pd.to_datetime(start, utc=True)]

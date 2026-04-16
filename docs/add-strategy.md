@@ -115,9 +115,11 @@ strategies:
         field: value
 ```
 
-CSV feed timestamps on the supported daily path should use UTC-aware midnight
-values such as `2026-01-01T00:00:00Z`. Naive dates like `2026-01-01` are
-outside the runtime contract and will fail at load time.
+File-backed CSV feeds on the supported daily path may use either
+`2026-01-01T00:00:00Z` or a naive date like `2026-01-01`. When the framework
+loads a file-backed feed, naive timestamps are interpreted as UTC and
+standardized into the runtime contract. Inside strategy runtime, timestamps are
+always expected to be UTC-aware after loading.
 
 Use the helpers inside `compute_signals()`:
 
@@ -164,8 +166,9 @@ Recommended helper boundaries:
   can be declared as a framework feed
 - do not directly `reindex(...)` raw auxiliary series against strategy dates;
   use `feed_series(..., align_to=...)` or `align_series(...)`
-- `self.load_bars()` and declared feeds normalize timestamps into the framework
-  daily UTC contract; naive datetimes are outside the supported runtime path
+- `self.load_bars()` and declared feeds normalize file-backed timestamps into
+  the framework daily UTC contract; once inside strategy runtime, naive
+  datetimes are outside the supported path
 
 ## Timing Contract
 

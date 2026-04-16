@@ -35,13 +35,20 @@ def validate_datetime_index(
     *,
     profile: str = "daily",
     name: str = "dates",
+    assume_utc_for_naive: bool = False,
 ) -> pd.DatetimeIndex:
     resolved_profile = validate_data_profile(profile)
-    idx = pd.DatetimeIndex(dates)
+    try:
+        idx = pd.DatetimeIndex(pd.to_datetime(dates, utc=False))
+    except (TypeError, ValueError) as exc:
+        raise FeedNormalizationError(f"{name} contains invalid timestamp values.") from exc
     if idx.tz is None:
-        raise FeedNormalizationError(
-            f"{name} must be UTC-aware for the supported {resolved_profile!r} contract."
-        )
+        if assume_utc_for_naive:
+            idx = idx.tz_localize("UTC")
+        else:
+            raise FeedNormalizationError(
+                f"{name} must be UTC-aware for the supported {resolved_profile!r} contract."
+            )
     idx = idx.tz_convert("UTC")
     if idx.hasnans:
         raise FeedNormalizationError(f"{name} contains NaT values.")
@@ -62,6 +69,7 @@ def normalize_series_frame(
     field: str,
     name: str,
     profile: str = "daily",
+    assume_utc_for_naive: bool = False,
 ) -> pd.DataFrame:
     if "timestamp" not in df.columns:
         raise FeedNormalizationError(f"{name} is missing required column 'timestamp'.")
@@ -73,6 +81,7 @@ def normalize_series_frame(
         frame["timestamp"],
         profile=profile,
         name=f"{name}.timestamp",
+        assume_utc_for_naive=assume_utc_for_naive,
     )
     if "symbol" in frame.columns:
         frame["symbol"] = frame["symbol"].astype(str)
