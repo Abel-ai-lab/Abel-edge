@@ -835,3 +835,61 @@ Milestone conclusion:
   supported runtime path covered by this milestone
 - next milestone should expand adapter/path coverage and tighten undeclared-feed
   usage boundaries
+
+## Milestone 2 Execution Record
+
+Milestone scope:
+
+- expand the supported framework path from auxiliary `series` feeds to
+  auxiliary `bars` feeds
+- make undeclared-feed violations fail deterministically on `run` and `paper`
+- update strategy-author guidance so the framework path is the shortest
+  supported path
+
+Implemented in `feat/runtime-data-feed-contract`:
+
+- `run` / `paper` now wrap feed-contract violations raised during
+  `engine.compute_signals()` as CLI-visible framework failures
+- declared auxiliary `bars` feeds are covered by runtime regression tests
+- undeclared feed access is covered by runtime regression tests on both `run`
+  and `paper`
+- `docs/add-strategy.md` now documents declared feeds, `load_feed(...)`,
+  `feed_series(...)`, `align_series(...)`, and `finalize_signals(...)` as the
+  canonical strategy path
+
+Validation run:
+
+- date: 2026-04-16
+- command:
+
+```bash
+.venv/bin/python -m pytest \
+  tests/test_data_contract_runtime.py \
+  tests/test_execution_run.py \
+  tests/test_paper.py \
+  tests/test_engine_loader.py \
+  tests/test_price_data.py
+```
+
+- result: `24 passed in 0.81s`
+
+Evidence captured:
+
+- a declared auxiliary `bars` feed can be loaded through the framework and
+  consumed via `feed_series(..., field='close', align_to=dates)`, producing the
+  expected positions `[0.2, 0.4, 0.6]`
+- an undeclared feed dependency fails early on the `run` path with a
+  deterministic strategy-scoped error
+- an undeclared feed dependency fails early on the `paper` path with the same
+  deterministic strategy-scoped error
+- feed/alignment contract errors are now surfaced through the execution entry
+  points rather than leaking as raw internal exceptions
+
+Milestone conclusion:
+
+- the framework path now covers both auxiliary `series` and auxiliary `bars`
+  inputs in the tested daily-contract slice
+- undeclared non-primary feed usage is no longer a soft convention; it is a
+  runtime-enforced boundary on the supported execution path
+- the next milestone can focus on broader migration examples or stricter
+  coverage of remaining unsupported ad hoc patterns

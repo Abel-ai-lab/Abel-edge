@@ -39,6 +39,52 @@ class FeedDemoEngine(StrategyEngine):
 """.strip()
 
 
+BAR_FEED_ENGINE_CODE = """
+from __future__ import annotations
+
+import pandas as pd
+
+from causal_edge.engine.base import StrategyEngine
+
+
+class BarsFeedDemoEngine(StrategyEngine):
+    def compute_signals(self):
+        bars = self.load_bars(limit=3)
+        target = bars[bars['symbol'] == self.context.get('asset', 'ETHUSD')].copy().sort_values('timestamp')
+        dates = pd.DatetimeIndex(target['timestamp'])
+        prices = target['close'].astype(float).to_numpy()
+        ref_close = self.feed_series('btc_ref', field='close', align_to=dates, method='ffill', allow_gaps=False)
+        positions = (ref_close.astype(float) / 100.0).to_numpy()
+        return self.finalize_signals(positions, dates, prices)
+
+    def get_latest_signal(self):
+        return {'position': 0.0}
+""".strip()
+
+
+UNDECLARED_FEED_ENGINE_CODE = """
+from __future__ import annotations
+
+import pandas as pd
+
+from causal_edge.engine.base import StrategyEngine
+
+
+class UndeclaredFeedEngine(StrategyEngine):
+    def compute_signals(self):
+        bars = self.load_bars(limit=3)
+        target = bars[bars['symbol'] == self.context.get('asset', 'ETHUSD')].copy().sort_values('timestamp')
+        dates = pd.DatetimeIndex(target['timestamp'])
+        prices = target['close'].astype(float).to_numpy()
+        scale = self.feed_series('missing_feed', align_to=dates, method='ffill', allow_gaps=False)
+        positions = scale.astype(float).to_numpy()
+        return self.finalize_signals(positions, dates, prices)
+
+    def get_latest_signal(self):
+        return {'position': 0.0}
+""".strip()
+
+
 NAIVE_ENGINE_CODE = """
 from __future__ import annotations
 
@@ -225,5 +271,82 @@ def test_run_supports_declared_series_feed_via_framework_path(tmp_path):
         assert result.exit_code == 0, result.output
         trade_df = read_trade_log("data/trade_log_feed_demo.csv")
         assert list(trade_df["position"].round(2)) == [0.2, 0.4, 0.6]
+        sys.path.pop(0)
+        _reset_strategy_modules()
+
+
+def test_run_supports_declared_bars_feed_via_framework_path(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        (root / "data").mkdir(exist_ok=True)
+        (root / "data" / "btcusd.csv").write_text(
+            "timestamp,close\n"
+            "2026-01-01T00:00:00Z,20\n"
+            "2026-01-02T00:00:00Z,40\n"
+            "2026-01-03T00:00:00Z,60\n",
+            encoding="utf-8",
+        )
+        extra_yaml = """
+    feeds:
+      btc_ref:
+        kind: bars
+        source: csv
+        path: data/btcusd.csv
+        symbol: BTCUSD
+"""
+        _write_engine_project(
+            root,
+            engine_name="bars_feed_demo",
+            engine_code=BAR_FEED_ENGINE_CODE,
+            extra_yaml=extra_yaml,
+        )
+        sys.path.insert(0, str(root))
+
+        result = runner.invoke(main, ["run", "--strategy", "bars_feed_demo"])
+
+        assert result.exit_code == 0, result.output
+        trade_df = read_trade_log("data/trade_log_bars_feed_demo.csv")
+        assert list(trade_df["position"].round(2)) == [0.2, 0.4, 0.6]
+        sys.path.pop(0)
+        _reset_strategy_modules()
+
+
+def test_run_fails_early_on_undeclared_feed_access(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        _write_engine_project(
+            root,
+            engine_name="undeclared_feed",
+            engine_code=UNDECLARED_FEED_ENGINE_CODE,
+        )
+        sys.path.insert(0, str(root))
+
+        result = runner.invoke(main, ["run", "--strategy", "undeclared_feed"])
+
+        assert result.exit_code != 0
+        assert "UndeclaredFeedEngine" in result.output
+        assert "not declared" in result.output
+        sys.path.pop(0)
+        _reset_strategy_modules()
+
+
+def test_paper_fails_early_on_undeclared_feed_access(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        _write_engine_project(
+            root,
+            engine_name="undeclared_feed",
+            engine_code=UNDECLARED_FEED_ENGINE_CODE,
+        )
+        sys.path.insert(0, str(root))
+
+        result = runner.invoke(main, ["paper", "--strategy", "undeclared_feed"])
+
+        assert result.exit_code != 0
+        assert "UndeclaredFeedEngine" in result.output
+        assert "not declared" in result.output
         sys.path.pop(0)
         _reset_strategy_modules()

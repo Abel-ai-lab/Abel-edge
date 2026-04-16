@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from causal_edge.engine.backtest import BacktestSettings, run_backtest
+from causal_edge.engine.feed_contract import FeedContractError
 from causal_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
 from causal_edge.engine.price_data import resolve_price_config
 from causal_edge.engine.signal_contract import SignalContractError
@@ -47,6 +48,15 @@ def _load_engine(engine_path: str):
     )
 
 
+def _compute_validated_signals(engine, strategy_cfg: dict):
+    profile = ((strategy_cfg.get("_data_contract") or {}).get("profile", "daily"))
+    try:
+        raw_output = engine.compute_signals()
+        return validate_signal_output(*raw_output, profile=profile)
+    except (FeedContractError, SignalContractError) as exc:
+        raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
+
+
 def run_one(strategy_cfg: dict, *, settings: dict | None = None, bars_loader=None) -> dict:
     """Run a single strategy and write its trade log.
 
@@ -69,13 +79,7 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None, bars_loader=Non
             resolve_price_config(settings or {}, strategy_cfg),
         )
 
-    try:
-        positions, dates, prices = validate_signal_output(
-            *engine.compute_signals(),
-            profile=((strategy_cfg.get("_data_contract") or {}).get("profile", "daily")),
-        )
-    except SignalContractError as exc:
-        raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
+    positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
 
     execution_cfg = (settings or {}).get("execution") or {}
     result = run_backtest(
@@ -170,13 +174,7 @@ def paper_run_one(
             resolve_price_config(settings or {}, strategy_cfg),
         )
 
-    try:
-        positions, dates, prices = validate_signal_output(
-            *engine.compute_signals(),
-            profile=((strategy_cfg.get("_data_contract") or {}).get("profile", "daily")),
-        )
-    except SignalContractError as exc:
-        raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
+    positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
     if as_of is not None:
         cutoff = pd.to_datetime(as_of, utc=True)
         mask = dates <= cutoff
