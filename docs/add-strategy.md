@@ -79,12 +79,18 @@ class MyEngine(StrategyEngine):
         ...
 ```
 
+Define that engine class in the target module itself. Do not rely on `engine.py`
+only re-exporting or importing a `StrategyEngine` subclass from somewhere else.
+
 ## Rules
 
 - All features must use `shift(1)` — zero look-ahead tolerance
 - `rolling().mean()` must be followed by `.shift(1)` before use in decisions
 - Clip returns for training features only, use unclipped for PnL
 - strategies/ must not import causal_edge/ internals (except base.py)
+- `self.load_bars()` normalizes `timestamp` to UTC-aware datetimes; normalize any
+  auxiliary series to the same datetime semantics before `reindex(...)` or date
+  comparisons
 
 ## Timing Contract
 

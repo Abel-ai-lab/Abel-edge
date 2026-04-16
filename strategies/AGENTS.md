@@ -21,3 +21,5 @@ Strategy engine implementations. Each is a directory with an engine.py implement
 - strategies/ must NOT import from `causal_edge/` (except `causal_edge/engine/base.py`)
 - `TestStrategiesStandalone` enforces this mechanically
 - All features must use `shift(1)` — zero look-ahead tolerance
+- `engine.py` must define its own `StrategyEngine` subclass; do not only import or re-export one
+- `self.load_bars()` returns UTC-aware timestamps, so normalize auxiliary series before `reindex(...)`

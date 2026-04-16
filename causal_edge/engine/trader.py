@@ -36,11 +36,12 @@ def _load_engine(engine_path: str):
             isinstance(attr, type)
             and issubclass(attr, StrategyEngine)
             and attr is not StrategyEngine
+            and attr.__module__ == mod.__name__
         ):
             return attr
     raise ImportError(
         f"No StrategyEngine subclass found in '{engine_path}'. "
-        f"Fix: Ensure your engine.py defines a class inheriting StrategyEngine."
+        f"Fix: Ensure your engine.py defines its own StrategyEngine subclass instead of only importing one."
     )
 
 
