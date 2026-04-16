@@ -48,7 +48,8 @@ strategies:
     engine: strategies.my_strategy.engine
     trade_log: "data/trade_log_my_strategy.csv"
     paper_log: "data/paper_log_my_strategy.csv"
-    # Optional: default live price adapter is Abel. Override with CSV if needed.
+    # Optional: default live price adapter is Abel. Override with CSV or a
+    # project-local adapter if needed.
     # price_data:
     #   adapter: csv
     #   path: data/prices.csv
@@ -122,6 +123,38 @@ File-backed CSV feeds on the supported daily path may use either
 loads a file-backed feed, naive timestamps are interpreted as UTC and
 standardized into the runtime contract. Inside strategy runtime, timestamps are
 always expected to be UTC-aware after loading.
+
+## Project-Local Adapters
+
+If your project already owns a data backend, register a local adapter module
+instead of forcing every strategy to pre-convert data into CSV files.
+
+```yaml
+settings:
+  price_data:
+    default_adapter: internal_market_data
+    default_timeframe: 1d
+  data_adapters:
+    imports:
+      - lib.edge_adapters
+
+strategies:
+  - id: my_strategy
+    name: "My Strategy"
+    asset: AAPL
+    color: "#FF2D55"
+    engine: strategies.my_strategy.engine
+    trade_log: data/trade_log_my_strategy.csv
+    price_data:
+      adapter: internal_market_data
+      backend: fmp
+      adjusted: false
+      symbol: AAPL
+```
+
+The same pattern applies to declared auxiliary feeds under `feeds:`. Adapter
+modules only own external-data access. The framework still owns timestamp
+normalization, daily-profile checks, alignment, and signal-output validation.
 
 Use the helpers inside `compute_signals()`:
 

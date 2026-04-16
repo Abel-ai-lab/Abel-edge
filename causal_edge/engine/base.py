@@ -26,12 +26,15 @@ class StrategyEngine(ABC):
 
     def __init__(self, context: dict | None = None) -> None:
         self.context = context
-        self._bars_loader = None
-        self._price_data_config = {}
 
     def bind_price_loader(self, loader, price_data_config: dict | None = None) -> None:
-        self._bars_loader = loader
-        self._price_data_config = price_data_config or {}
+        """Compatibility shim for older call sites.
+
+        Primary bars are now resolved through the synthesized framework-managed
+        `primary` feed, so strategies should use `load_bars()` / `load_feed()`
+        instead of relying on an injected loader.
+        """
+        return None
 
     def load_bars(
         self,

@@ -1,14 +1,15 @@
 # Strategies
 
-Strategy engine implementations. Each is a directory with an engine.py implementing
-`StrategyEngine` from `causal_edge/engine/base.py`.
+Strategy engine implementations. Each is a directory with an engine module such
+as `strategies/ethusd_causal/engine.py` implementing `StrategyEngine` from
+`causal_edge/engine/base.py`.
 
 ## I want to...
 
 ### Add a strategy
 1. Create strategies/my_strategy/ directory
 2. Create strategies/my_strategy/__init__.py (empty)
-3. Create strategies/my_strategy/engine.py implementing `StrategyEngine`
+3. Create the strategy engine module under `strategies/my_strategy/`
 4. Add entry to root `strategies.yaml` with `engine: strategies.my_strategy.engine`
 5. `make test` — `TestEngineModuleImportable` verifies import works
 6. `causal-edge validate` — runs the Abel Proof audited live gate contract
@@ -21,5 +22,6 @@ Strategy engine implementations. Each is a directory with an engine.py implement
 - strategies/ must NOT import from `causal_edge/` (except `causal_edge/engine/base.py`)
 - `TestStrategiesStandalone` enforces this mechanically
 - All features must use `shift(1)` — zero look-ahead tolerance
-- `engine.py` must define its own `StrategyEngine` subclass; do not only import or re-export one
+- the strategy engine module must define its own `StrategyEngine` subclass; do
+  not only import or re-export one
 - `self.load_bars()` returns UTC-aware timestamps, so normalize auxiliary series before `reindex(...)`

@@ -112,8 +112,10 @@ class AbelDataFeedAdapter:
                 f"Feed '{request.feed_name}' uses adapter='abel' but is missing 'symbol'."
             )
         try:
-            from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError
-            from causal_edge.plugins.abel.prices import fetch_bars
+            credentials_module = importlib.import_module("causal_edge.plugins.abel.credentials")
+            prices_module = importlib.import_module("causal_edge.plugins.abel.prices")
+            missing_api_key_error = credentials_module.MissingAbelApiKeyError
+            fetch_bars = prices_module.fetch_bars
         except ImportError as exc:
             raise AdapterRegistryError(
                 "Abel adapter is unavailable. See: causal_edge/plugins/AGENTS.md"
@@ -137,7 +139,7 @@ class AbelDataFeedAdapter:
                 fields=fields,
                 config=request.options,
             )
-        except MissingAbelApiKeyError as exc:
+        except missing_api_key_error as exc:
             raise AdapterRegistryError(str(exc)) from exc
 
         if request.kind == "bars":

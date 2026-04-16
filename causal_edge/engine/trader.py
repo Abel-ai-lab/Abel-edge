@@ -13,7 +13,6 @@ import pandas as pd
 from causal_edge.engine.backtest import BacktestSettings, run_backtest
 from causal_edge.engine.feed_contract import FeedContractError
 from causal_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
-from causal_edge.engine.price_data import resolve_price_config
 from causal_edge.engine.signal_contract import SignalContractError
 from causal_edge.engine.signal_contract import validate_signal_output
 
@@ -57,7 +56,7 @@ def _compute_validated_signals(engine, strategy_cfg: dict):
         raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
 
 
-def run_one(strategy_cfg: dict, *, settings: dict | None = None, bars_loader=None) -> dict:
+def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
     """Run a single strategy and write its trade log.
 
     Args:
@@ -73,11 +72,6 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None, bars_loader=Non
     click.echo(f"  Running {sid}...")
     engine_cls = _load_engine(engine_path)
     engine = engine_cls(context=strategy_cfg)
-    if bars_loader is not None:
-        engine.bind_price_loader(
-            bars_loader,
-            resolve_price_config(settings or {}, strategy_cfg),
-        )
 
     positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
 
@@ -158,7 +152,6 @@ def paper_run_one(
     strategy_cfg: dict,
     *,
     settings: dict | None = None,
-    bars_loader=None,
     as_of=None,
 ) -> dict:
     sid = strategy_cfg["id"]
@@ -168,11 +161,6 @@ def paper_run_one(
     click.echo(f"  Paper trading {sid}...")
     engine_cls = _load_engine(engine_path)
     engine = engine_cls(context=strategy_cfg)
-    if bars_loader is not None:
-        engine.bind_price_loader(
-            bars_loader,
-            resolve_price_config(settings or {}, strategy_cfg),
-        )
 
     positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
     if as_of is not None:
@@ -235,7 +223,7 @@ def paper_run_one(
     }
 
 
-def run_all(config: dict, strategy_id: str | None = None, bars_loader=None) -> list[dict]:
+def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
     """Run all strategies (or one specific strategy) from config.
 
     Args:
@@ -256,16 +244,14 @@ def run_all(config: dict, strategy_id: str | None = None, bars_loader=None) -> l
 
     results = []
     for s_cfg in strategies:
-        result = run_one(s_cfg, settings=config.get("settings"), bars_loader=bars_loader)
+        result = run_one(s_cfg, settings=config.get("settings"))
         results.append(result)
         click.echo(f"    → {result['n_days']} days written to {result['trade_log']}")
 
     return results
 
 
-def paper_run_all(
-    config: dict, strategy_id: str | None = None, bars_loader=None, as_of=None
-) -> list[dict]:
+def paper_run_all(config: dict, strategy_id: str | None = None, as_of=None) -> list[dict]:
     strategies = config["strategies"]
     if strategy_id:
         strategies = [s for s in strategies if s["id"] == strategy_id]
@@ -280,7 +266,6 @@ def paper_run_all(
         result = paper_run_one(
             s_cfg,
             settings=config.get("settings"),
-            bars_loader=bars_loader,
             as_of=as_of,
         )
         results.append(result)

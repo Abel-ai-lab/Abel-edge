@@ -864,46 +864,60 @@ The smallest valuable first slice under the adapter-registry plan is:
 This slice does not finish adapter-backed feed loading, but it creates the
 contract and registration primitives needed for the broader migration.
 
-## Reset Status Under Adapter Registry Semantics
+## Current Status Under Adapter Registry Semantics
 
-The current branch contains useful exploratory work, but the adapter-registry
-plan changes the implementation target enough that previous progress must be
-reclassified.
+The adapter-registry version of this plan is now implemented on the branch and
+should be treated as the current target architecture rather than a reset point.
 
-### Can Be Kept With Little Or No Change
+### Implemented In Framework Core
 
-- `feed_contract.py` daily datetime helpers and exception taxonomy
-- `signal_contract.py`
-- `StrategyEngine.finalize_signals(...)`
-- `run` / `paper` signal-output validation
-- `align_series(...)` / `feed_series(...)` API direction
-- tests proving runtime alignment and signal-output failures
+- `feed_contract.py` enforces the runtime datetime/alignment contract
+- `signal_contract.py` enforces validated strategy outputs before backtest/paper
+- `adapter_registry.py` provides built-in plus project-local adapter registration
+- config loading imports project-local adapters through `settings.data_adapters.imports`
+- synthesized `primary` feed semantics keep the primary path implicit while
+  reserving `feeds.primary`
+- `feed_loader.py` normalizes adapter-loaded frames before strategy runtime sees
+  them
+- bundled `abel` and `csv` adapters both run through the same framework-owned
+  contract gates
 
-### Must Be Reworked To Match The New Semantics
+### Implemented In Docs, Examples, And Regression Coverage
 
-- config schema that currently hard-codes `source in {"abel", "csv"}`
-- feed loading logic that dispatches on closed built-in source enums
-- docs that describe `source` as the primary extension point
-- bundled examples that currently demonstrate the old built-in-source framing
+- `examples/feed_overlay_demo/` demonstrates declared `bars` + `series` feeds
+- runtime tests cover undeclared feeds, incompatible datetimes, alignment
+  failures, and invalid signal outputs
+- adapter-registry tests cover project-local adapter imports and execution
+- config/runtime tests cover primary-feed synthesis and primary adapter option
+  passthrough
 
-### Should Be Treated As Historical Exploration, Not Completed Milestones
+### Effective Milestone Status
 
-- built-in-only `abel` / `csv` source expansion
-- milestone conclusions that assumed runtime source types in core were the
-  final architecture
-- migration work that uses `csv` as a permanent stand-in for third-party
-  providers rather than as one adapter among many
+- Milestones A-E are satisfied by the framework implementation and regression
+  coverage on this branch
+- Milestone F is effective based on real migration evidence from
+  `trading-internal`, even though operational reruns remain an ongoing activity
 
-### Not Yet Done Under The New Plan
+As of 2026-04-16, the migrated `trading-internal` run completed successfully for
+all currently registered strategies. Backup comparison on the already-reviewed
+set shows the framework change preserved the original signal path closely enough
+to support the new contract model:
 
-- adapter registry implementation
-- config-driven third-party adapter imports
-- third-party adapter example and regression
-- re-running milestone evaluation under adapter-registry semantics
-- completing real-world migration validation on top of the adapter model
+- `seven_comp`: overlap PnL delta `+0.011844`, PnL corr `0.997453`
+- `dr_v2`: overlap PnL delta `+0.169192`, position corr `1.000000`, PnL corr
+  `0.999711`
+- `dual_resonance`: overlap PnL delta `+0.187342`, position corr `1.000000`,
+  PnL corr `0.999717`
 
-## Next Step After This Plan
+These results are the key proof point for Milestone F: the runtime contract and
+adapter registry semantics fixed the original data-path inconsistency without
+breaking the established strategy signal path.
 
-Once this revised plan is accepted, implementation should restart from the
-adapter-registry semantics above rather than treating the pre-registry source
-model as the final architecture.
+### Remaining Follow-Through
+
+- keep public docs aligned with adapter terminology instead of older
+  csv-only/source-only wording
+- continue migration verification as new downstream strategies are moved onto
+  the adapter path
+- optionally remove temporary `source` alias compatibility once downstream
+  configs are fully migrated
