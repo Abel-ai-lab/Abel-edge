@@ -55,7 +55,7 @@ def _write_strategy_project(tmp_path: Path, *, execution_block: str = "") -> Non
         f"""
 settings:
   price_data:
-    default_source: csv
+    default_adapter: csv
     default_timeframe: 1d
 {execution_block}strategies:
   - id: execution_demo
@@ -65,7 +65,7 @@ settings:
     engine: strategies.execution_demo.engine
     trade_log: data/trade_log_execution_demo.csv
     price_data:
-      source: csv
+      adapter: csv
       path: data/ethusd.csv
 """.strip()
         + "\n",

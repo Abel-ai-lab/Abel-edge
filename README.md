@@ -136,7 +136,7 @@ causal-edge discover <TICKER>        # find causal parents (Abel API key)
 ```
 
 Real-price strategies default to Abel price APIs. Override per strategy with
-`price_data.source: csv` to load local bar data instead. Configure Abel access
+`price_data.adapter: csv` to load local bar data instead. Configure Abel access
 with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`. If you do not already
 have an API key, install `causal-abel` and complete its OAuth flow before
 running `causal-edge discover <TICKER>` or any workflow that triggers live Abel

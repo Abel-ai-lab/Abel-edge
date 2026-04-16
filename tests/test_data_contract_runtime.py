@@ -167,7 +167,7 @@ def _write_engine_project(
     yaml = f"""
 settings:
   price_data:
-    default_source: csv
+    default_adapter: csv
     default_timeframe: 1d
 strategies:
   - id: {engine_name}
@@ -177,7 +177,7 @@ strategies:
     engine: strategies.{engine_name}.engine
     trade_log: data/trade_log_{engine_name}.csv
     price_data:
-      source: csv
+      adapter: csv
       path: data/ethusd.csv
 {extra_yaml}
 """.strip() + "\n"
@@ -207,6 +207,7 @@ strategies:
     strategy = cfg["strategies"][0]
     assert strategy["_data_contract"]["profile"] == "daily"
     assert strategy["_feeds"]["primary"]["kind"] == "bars"
+    assert strategy["_feeds"]["primary"]["adapter"] == "abel"
     assert strategy["_feeds"]["primary"]["symbol"] == "ETHUSD"
 
 
@@ -225,7 +226,7 @@ strategies:
     feeds:
       primary:
         kind: series
-        source: csv
+        adapter: csv
         path: data/feed.csv
         field: value
 """.strip()

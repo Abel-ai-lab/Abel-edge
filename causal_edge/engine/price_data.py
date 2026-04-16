@@ -18,7 +18,13 @@ def resolve_price_config(settings: dict, strategy_cfg: dict) -> dict:
     default_cfg = settings.get("price_data") or {}
     strategy_price_cfg = strategy_cfg.get("price_data") or {}
     merged = {**default_cfg, **strategy_price_cfg}
-    merged.setdefault("source", default_cfg.get("default_source", "abel"))
+    merged.setdefault(
+        "adapter",
+        strategy_price_cfg.get("adapter")
+        or strategy_price_cfg.get("source")
+        or default_cfg.get("default_adapter")
+        or default_cfg.get("default_source", "abel"),
+    )
     merged.setdefault("timeframe", merged.get("default_timeframe", "1d"))
     merged.setdefault("symbol", strategy_cfg.get("asset"))
     return merged

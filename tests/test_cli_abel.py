@@ -171,7 +171,7 @@ def test_run_with_abel_source_missing_api_key_fails(monkeypatch, tmp_path):
             """
 settings:
   price_data:
-    default_source: abel
+    default_adapter: abel
 strategies:
   - id: demo
     name: Demo
@@ -187,4 +187,4 @@ strategies:
 
         assert result.exit_code != 0
         assert "Abel API key not found." in result.output
-        assert "price_data.source to 'csv'" in result.output
+        assert "price_data.adapter to 'csv'" in result.output

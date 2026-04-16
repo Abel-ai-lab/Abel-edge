@@ -61,7 +61,7 @@ def test_feed_overlay_example_runs_with_declared_feed_path(tmp_path):
             """
 settings:
   price_data:
-    default_source: csv
+    default_adapter: csv
     default_timeframe: 1d
 strategies:
   - id: feed_overlay_demo
@@ -71,17 +71,17 @@ strategies:
     engine: strategies.feed_overlay_demo.engine
     trade_log: data/trade_log_feed_overlay_demo.csv
     price_data:
-      source: csv
+      adapter: csv
       path: data/ethusd.csv
     feeds:
       btc_ref:
         kind: bars
-        source: csv
+        adapter: csv
         path: data/btcusd.csv
         symbol: BTCUSD
       risk_scale:
         kind: series
-        source: csv
+        adapter: csv
         path: data/risk_scale.csv
         field: value
 """.strip()

@@ -48,9 +48,9 @@ strategies:
     engine: strategies.my_strategy.engine
     trade_log: "data/trade_log_my_strategy.csv"
     paper_log: "data/paper_log_my_strategy.csv"
-    # Optional: default live price source is Abel. Override with CSV if needed.
+    # Optional: default live price adapter is Abel. Override with CSV if needed.
     # price_data:
-    #   source: csv
+    #   adapter: csv
     #   path: data/prices.csv
 ```
 
@@ -102,17 +102,17 @@ strategies:
     engine: strategies.my_strategy.engine
     trade_log: data/trade_log_my_strategy.csv
     price_data:
-      source: csv
+      adapter: csv
       path: data/ethusd.csv
     feeds:
       btc_ref:
         kind: bars
-        source: csv
+        adapter: csv
         path: data/btcusd.csv
         symbol: BTCUSD
       risk_scale:
         kind: series
-        source: csv
+        adapter: csv
         path: data/risk_scale.csv
         field: value
 ```

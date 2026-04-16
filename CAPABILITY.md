@@ -46,7 +46,7 @@ causal-edge validate --csv backtest.csv --dsr-trials 47
 When omitted, DSR falls back to the profile's default exploration-count prior.
 
 For real-price strategies, `causal-edge run` now defaults to Abel price APIs.
-Set `price_data.source: csv` on a strategy to use a local bars CSV instead.
+Set `price_data.adapter: csv` on a strategy to use a local bars CSV instead.
 If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands prefer
 `strategies.local.yaml` automatically unless `--config` is passed.
 
