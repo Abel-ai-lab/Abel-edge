@@ -160,6 +160,9 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
     signals_flat = []
     today_pnl = 0.0
     n_active = 0
+    portfolio_id = next(
+        (c["id"] for c in _strat_cfgs if c.get("asset") == "MULTI"), None
+    )
 
     for s in strategies:
         if not s["has_data"]:
@@ -167,7 +170,8 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         pos = s["latest_position"]
         pnl_today = s["latest_pnl"]
         changed = abs(pos - s["prev_position"]) > 0.01
-        today_pnl += pnl_today
+        if s["id"] == portfolio_id:
+            today_pnl = pnl_today
 
         sig = {
             "name": s["name"],
@@ -177,6 +181,8 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
             "changed": changed,
             "id": s["id"],
         }
+        if s["id"] == portfolio_id:
+            continue
         if abs(pos) > 0.01:
             signals_active.append(sig)
             n_active += 1
@@ -185,40 +191,32 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
 
     signals_active.sort(key=lambda x: x["position"], reverse=True)
 
-    # MTD and live-total PnL (sum across strategies, live rows only)
+    # MTD and YTD PnL from the portfolio strategy (EW average of components).
+    # Using the portfolio's own trade log avoids double-counting and gives the
+    # correct capital-weighted return instead of a raw sum across strategies.
     mtd_pnl = 0.0
     total_pnl = 0.0
     current_month = now.month
     current_year = now.year
 
-    for s in strategies:
-        if not s["has_data"]:
-            continue
-        df = _load_trade_log(
-            next(
-                (sc["trade_log"] for sc in _strat_cfgs
-                 if sc["id"] == s["id"]),
-                "",
-            )
-        )
-        if df is not None:
-            df["date"] = pd.to_datetime(df["date"])
-            # Dedup (strategy, date) — same day can have both backfill and live rows
-            # (Step 6b writes both). Prefer live when both exist.
-            df_u = df.copy()
-            df_u["_date_str"] = df_u["date"].dt.strftime("%Y-%m-%d")
-            if "source" in df_u.columns:
-                df_u["_src_rank"] = df_u["source"].map({"live": 1, "backfill": 0}).fillna(0)
-                df_u = df_u.sort_values(["_date_str", "_src_rank"])
-            df_u = df_u.drop_duplicates(subset=["_date_str"], keep="last")
-            # YTD: current year. Treats backfill as live-equivalent because
-            # pure-function engines would have produced identical signals on
-            # each of those dates (paper trading has been running all along).
-            ytd_mask = df_u["date"].dt.year == current_year
-            total_pnl += df_u.loc[ytd_mask, "pnl"].sum()
-            # MTD: current month, deduped
-            mtd_mask = ytd_mask & (df_u["date"].dt.month == current_month)
-            mtd_pnl += df_u.loc[mtd_mask, "pnl"].sum()
+    portfolio_log_path = next(
+        (sc["trade_log"] for sc in _strat_cfgs
+         if sc["id"] == portfolio_id),
+        "",
+    ) if portfolio_id else ""
+    df_port = _load_trade_log(portfolio_log_path) if portfolio_log_path else None
+    if df_port is not None:
+        df_port["date"] = pd.to_datetime(df_port["date"])
+        df_u = df_port.copy()
+        df_u["_date_str"] = df_u["date"].dt.strftime("%Y-%m-%d")
+        if "source" in df_u.columns:
+            df_u["_src_rank"] = df_u["source"].map({"live": 1, "backfill": 0}).fillna(0)
+            df_u = df_u.sort_values(["_date_str", "_src_rank"])
+        df_u = df_u.drop_duplicates(subset=["_date_str"], keep="last")
+        ytd_mask = df_u["date"].dt.year == current_year
+        total_pnl = float(df_u.loc[ytd_mask, "pnl"].sum())
+        mtd_mask = ytd_mask & (df_u["date"].dt.month == current_month)
+        mtd_pnl = float(df_u.loc[mtd_mask, "pnl"].sum())
 
     # Recent days + ledger: both dedup (strategy, date). Extracted to portfolio.py
     # so this file stays under the 400-line structural limit.
