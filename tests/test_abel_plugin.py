@@ -424,6 +424,8 @@ def test_fetch_bars_uses_market_prod_base_url(monkeypatch):
 
     assert session.calls[0]["url"] == "https://cap.abel.ai/api/market/day_bar"
     assert session.calls[0]["json"]["symbols"] == ["ETHUSD"]
+    assert session.calls[0]["headers"]["Authorization"] == "Bearer abel_test"
+    assert "api-key" not in session.calls[0]["headers"]
 
 
 def test_fetch_bars_uses_custom_base_url():
@@ -458,6 +460,41 @@ def test_fetch_bars_uses_custom_base_url():
     )
 
     assert session.calls[0]["url"] == "https://cap.custom.abel.ai/api/market/day_bar"
+
+
+def test_fetch_bars_preserves_bearer_auth_header():
+    class StubSession:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, json=None, headers=None, timeout=20):
+            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+            return StubResponse({"data": []})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    session = StubSession()
+    client = AbelClient(session=session)
+    client.fetch_bars(
+        symbols=["ETHUSD"],
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=10,
+        fields=None,
+        api_key="Bearer abel_test",
+    )
+
+    assert session.calls[0]["headers"]["Authorization"] == "Bearer abel_test"
+    assert "api-key" not in session.calls[0]["headers"]
 
 
 def test_discover_uses_cap_prod_base_url(monkeypatch):
