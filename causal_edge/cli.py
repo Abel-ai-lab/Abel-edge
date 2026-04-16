@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-from importlib import metadata
 from pathlib import Path
 
 import click
 
+from causal_edge import __version__
 from causal_edge.cli_support import build_bars_loader
 
 CONFIG_OPTION_HELP = (
@@ -16,14 +16,8 @@ CONFIG_OPTION_HELP = (
 
 
 def _get_version() -> str:
-    """Return installed package version, or fall back to source version."""
-    try:
-        return metadata.version("causal-edge")
-    except metadata.PackageNotFoundError:
-        return __version__
-
-
-from causal_edge import __version__
+    """Return the framework version from the package source."""
+    return __version__
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
