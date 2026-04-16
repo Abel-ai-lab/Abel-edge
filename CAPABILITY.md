@@ -132,11 +132,13 @@ causal-edge discover ETHUSD
 
 ```bash
 causal-edge evaluate --workdir strategies/my_strategy
+causal-edge evaluate --workdir strategies/my_strategy --start 2020-01-01
 causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
 ```
 
 `causal-edge evaluate` reuses the audited validation contract, derives `K` from discovered
-tickers and lags, and can optionally persist raw JSON plus a markdown report. It does not
+tickers and lags, and can optionally persist raw JSON plus a markdown report. The result also
+records the requested start date and effective start/end window. It does not
 organize experiments into sessions or branches; upstream tools such as `Abel-alpha` should
 own orchestration, process logs, and narrative summaries.
 

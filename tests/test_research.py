@@ -36,6 +36,21 @@ def _write_strategy(path: Path, *, bias: float = 0.02, flat: bool = False) -> No
     )
 
 
+def _write_start_aware_strategy(path: Path) -> None:
+    path.write_text(
+        "import numpy as np\n"
+        "import pandas as pd\n\n"
+        "def run_strategy(*, start=None):\n"
+        "    start = start or '2024-01-01'\n"
+        "    dates = pd.date_range(start, periods=120, freq='D')\n"
+        "    phase = np.linspace(0, 8 * np.pi, 120)\n"
+        "    pnl = 0.02 + 0.012 * np.sin(phase)\n"
+        "    positions = np.ones(120)\n"
+        "    return pnl, dates, positions\n",
+        encoding="utf-8",
+    )
+
+
 class TestComputeK:
     def test_counts_tickers_and_lags(self, tmp_path):
         strategy = tmp_path / "strategy.py"
@@ -89,6 +104,14 @@ class TestRunEvaluation:
         assert result["verdict"] == "PASS"
         assert result["K"] >= 1
 
+    def test_start_aware_strategy_records_requested_and_effective_window(self, tmp_path):
+        _write_start_aware_strategy(tmp_path / "strategy.py")
+        result = run_evaluation(tmp_path, start="2020-01-01")
+        assert result["verdict"] == "PASS"
+        assert result["requested_window"] == {"start": "2020-01-01", "end": None}
+        assert result["effective_window"]["start"] == "2020-01-01"
+        assert result["effective_window"]["end"] == "2020-04-29"
+
 
 class TestValidationMarkdown:
     def test_renders_validation_summary(self, tmp_path):
@@ -124,6 +147,29 @@ class TestEvaluateCli:
             assert (workdir / "edge-result.json").exists()
             assert (workdir / "edge-validation.md").exists()
             assert "Verdict: PASS" in result.output
+
+    def test_evaluate_cli_passes_start_to_strategy(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            workdir = Path("workspace")
+            workdir.mkdir()
+            _write_start_aware_strategy(workdir / "strategy.py")
+
+            result = runner.invoke(
+                main,
+                [
+                    "evaluate",
+                    "--workdir",
+                    str(workdir),
+                    "--start",
+                    "2020-01-01",
+                    "--output-json",
+                    str(workdir / "edge-result.json"),
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            payload = (workdir / "edge-result.json").read_text(encoding="utf-8")
+            assert '"start": "2020-01-01"' in payload
 
     def test_evaluate_cli_fails_for_bad_strategy(self, tmp_path):
         runner = CliRunner()

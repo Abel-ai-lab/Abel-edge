@@ -40,13 +40,14 @@ def version():
 
 @main.command()
 @click.option("--workdir", default=".", show_default=True, help="Directory containing strategy.py")
+@click.option("--start", default=None, help="Optional backtest start date passed to run_strategy")
 @click.option("--output-json", default=None, help="Optional path for raw JSON result")
 @click.option("--output-md", default=None, help="Optional path for raw validation markdown")
-def evaluate(workdir, output_json, output_md):
+def evaluate(workdir, start, output_json, output_md):
     """Evaluate one strategy and emit raw validation facts."""
     from causal_edge.research.evaluate import run_evaluation, write_evaluation_outputs
 
-    result = run_evaluation(workdir)
+    result = run_evaluation(workdir, start=start)
     write_evaluation_outputs(
         result,
         json_path=Path(output_json) if output_json else None,

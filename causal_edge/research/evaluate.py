@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 import re
 import sys
@@ -64,7 +65,7 @@ def check_look_ahead(strategy_path: Path) -> list[str]:
     return check_static_file(strategy_path)
 
 
-def run_evaluation(workdir: Path | str | None = None) -> dict:
+def run_evaluation(workdir: Path | str | None = None, *, start: str | None = None) -> dict:
     workspace = Path(workdir or ".")
     strategy_path = workspace / "strategy.py"
     if not strategy_path.exists():
@@ -80,7 +81,7 @@ def run_evaluation(workdir: Path | str | None = None) -> dict:
         return _error("strategy.py must define run_strategy() -> (pnl, dates, positions)")
 
     try:
-        pnl, dates, positions = strategy_module.run_strategy()
+        pnl, dates, positions = _run_strategy(strategy_module.run_strategy, start=start)
         pnl = np.asarray(pnl, dtype=float)
         positions = np.asarray(positions, dtype=float)
     except Exception as exc:
@@ -102,6 +103,8 @@ def run_evaluation(workdir: Path | str | None = None) -> dict:
 
     csv_path.unlink(missing_ok=True)
     result["K"] = k_value
+    result["requested_window"] = {"start": start, "end": None}
+    result["effective_window"] = _effective_window(frame)
     result["K_detail"] = {
         "tickers": tickers,
         "lags": lags,
@@ -114,6 +117,8 @@ def run_evaluation(workdir: Path | str | None = None) -> dict:
 def render_validation_markdown(result: dict) -> str:
     metrics = result.get("metrics", {})
     triangle = result.get("triangle", {})
+    requested_window = result.get("requested_window", {})
+    effective_window = result.get("effective_window", {})
     return f"""# Evaluation Summary
 
 ## Verdict
@@ -121,6 +126,8 @@ def render_validation_markdown(result: dict) -> str:
 - verdict: `{result.get("verdict", "ERROR")}`
 - score: `{result.get("score", "?/?")}`
 - K: `{result.get("K", "?")}`
+- requested_start: `{requested_window.get("start", "none")}`
+- effective_window: `{effective_window.get("start", "unknown")} -> {effective_window.get("end", "unknown")}`
 
 ## Triangle
 
@@ -164,6 +171,28 @@ def _load_strategy_module(strategy_path: Path):
     return module
 
 
+def _run_strategy(run_strategy, *, start: str | None):
+    signature = inspect.signature(run_strategy)
+    if "start" in signature.parameters or any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    ):
+        return run_strategy(start=start)
+    return run_strategy()
+
+
+def _effective_window(frame: pd.DataFrame) -> dict[str, str | None]:
+    if frame.empty:
+        return {"start": None, "end": None}
+    dates = pd.to_datetime(frame["date"], utc=True, errors="coerce").dropna()
+    if dates.empty:
+        return {"start": None, "end": None}
+    return {
+        "start": dates.min().date().isoformat(),
+        "end": dates.max().date().isoformat(),
+    }
+
+
 def _error(message: str) -> dict:
     return {
         "verdict": "ERROR",
@@ -188,13 +217,16 @@ def main() -> None:
         description="Evaluate a strategy and emit raw validation facts"
     )
     parser.add_argument("--workdir", default=".", help="Directory containing strategy.py")
+    parser.add_argument(
+        "--start", default=None, help="Optional backtest start date passed to run_strategy"
+    )
     parser.add_argument("--output-json", default=None, help="Optional path for raw JSON result")
     parser.add_argument(
         "--output-md", default=None, help="Optional path for raw validation markdown"
     )
     args = parser.parse_args()
 
-    result = run_evaluation(args.workdir)
+    result = run_evaluation(args.workdir, start=args.start)
     write_evaluation_outputs(
         result,
         json_path=Path(args.output_json) if args.output_json else None,
