@@ -125,6 +125,8 @@ causal-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
                                 # generate a separate tracking page for live rows
 causal-edge evaluate --workdir strategies/my_strategy
                                 # emit raw validation facts for one strategy workspace
+causal-edge evaluate --workdir strategies/my_strategy --start 2020-01-01
+                                # pin the requested backtest start for upstream orchestration
 causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
                                 # persist raw JSON + markdown facts for an upstream orchestration layer
 causal-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
@@ -187,7 +189,8 @@ If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands now pr
 `strategies.local.yaml` automatically. Use `--config` to point at any explicit file.
 
 `causal-edge evaluate` uses the same audited validation contract as the main CLI and emits
-only raw execution facts: verdict, score, metrics, triangle, failures, and K. It does not own
+only raw execution facts: verdict, score, metrics, triangle, failures, K, and the requested/effective
+evaluation window. It does not own
 exploration-session structure, branch organization, or narrative summaries. Those belong to
 the upstream orchestration layer such as `Abel-alpha`.
 
