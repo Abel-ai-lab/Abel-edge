@@ -146,11 +146,17 @@ running `causal-edge discover <TICKER>` or any workflow that triggers live Abel 
 ```bash
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
 ```
-After OAuth, `causal-edge` reuses the local `causal-abel` auth file from
-`.agents/skills/causal-abel/.env.skill` when present. Use `ABEL_AUTH_ENV_FILE`
-if that auth file lives outside the project, or run
-`python .agents/skills/causal-abel/scripts/cap_probe.py auth-status --compact`
-to check whether the skill actually has a key.
+For a global install instead of a project-local skill copy, use:
+
+```bash
+npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -g -y
+```
+
+After OAuth, `causal-edge` reuses the `causal-abel` auth file from the current project,
+known global skill roots such as `~/.config/opencode/skills/causal-abel` or
+`~/.codex/skills/causal-abel`, or any explicit `ABEL_AUTH_ENV_FILE` path before falling back to a
+fresh login. Run `python <causal-abel-skill-root>/scripts/cap_probe.py auth-status --compact`
+to check whether the installed skill actually has a key.
 
 ## 7. Build a Strategy
 
