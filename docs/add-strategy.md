@@ -23,6 +23,7 @@ Read `docs/validation-audit-matrix.md` for the long-lived timing and validation 
 | Simple | `examples/sma_crossover/` | 30-line minimal engine |
 | ML | `examples/momentum_ml/` | Walk-forward GBDT with shift(1) |
 | Causal | `examples/causal_demo/` | Abel graph voting + causal_graph.json |
+| Feed Path | `examples/feed_overlay_demo/` | Declared `bars` + `series` feed example |
 
 ### Quick Path
 
@@ -31,6 +32,7 @@ Read `docs/validation-audit-matrix.md` for the long-lived timing and validation 
 ```bash
 cp -r examples/sma_crossover/ strategies/my_strategy/
 # or: cp -r examples/causal_demo/ strategies/my_strategy/
+# or: cp -r examples/feed_overlay_demo/ strategies/my_strategy/
 ```
 
 2. Edit `strategies/my_strategy/engine.py` — implement your signal logic

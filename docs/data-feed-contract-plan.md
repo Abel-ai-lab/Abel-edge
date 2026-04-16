@@ -956,3 +956,59 @@ Milestone conclusion:
   daily-contract slice
 - the next milestone can move from synthetic gate coverage toward more realistic
   bundled example migration or wrapper/composite strategy validation
+
+## Milestone 4 Execution Record
+
+Milestone scope:
+
+- add a realistic bundled example that uses the supported framework feed path
+- prove that a copied example strategy can run end to end with declared
+  auxiliary `bars` and `series` feeds
+- expose a concrete example that agents and internal users can copy directly
+
+Implemented in `feat/runtime-data-feed-contract`:
+
+- added `examples/feed_overlay_demo/engine.py`
+- the new example uses `self.load_bars(...)`, `self.feed_series(...)`, and
+  `self.finalize_signals(...)`
+- the example consumes both a declared auxiliary `bars` feed and a declared
+  auxiliary `series` feed
+- `docs/add-strategy.md` now surfaces the feed-path example alongside the other
+  bundled starting points
+- added a dedicated regression that copies the example into an isolated project,
+  loads naive file-backed CSV inputs through the framework, and executes
+  `causal-edge run`
+
+Validation run:
+
+- date: 2026-04-16
+- command:
+
+```bash
+.venv/bin/python -m pytest \
+  tests/test_feed_overlay_example.py \
+  tests/test_data_contract_runtime.py \
+  tests/test_price_data.py \
+  tests/test_execution_run.py \
+  tests/test_paper.py \
+  tests/test_engine_loader.py
+```
+
+- result: `32 passed in 0.48s`
+
+Evidence captured:
+
+- a bundled example strategy can be copied into `strategies/` and run through
+  the supported execution path without strategy-local CSV parsing
+- the copied example loads a primary CSV, a declared auxiliary `bars` CSV, and
+  a declared auxiliary `series` CSV through framework loaders
+- the example works even when the file-backed CSV timestamps are naive, because
+  the framework normalizes them into the runtime UTC contract before strategy
+  logic executes
+
+Milestone conclusion:
+
+- the supported feed contract is now represented not only in docs and tests but
+  also in a concrete example strategy that users and agents can copy directly
+- this materially reduces the chance that new strategies will bypass the
+  framework path simply because there was no realistic reference implementation
