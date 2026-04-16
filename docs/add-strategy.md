@@ -115,6 +115,10 @@ strategies:
         field: value
 ```
 
+CSV feed timestamps on the supported daily path should use UTC-aware midnight
+values such as `2026-01-01T00:00:00Z`. Naive dates like `2026-01-01` are
+outside the runtime contract and will fail at load time.
+
 Use the helpers inside `compute_signals()`:
 
 ```python

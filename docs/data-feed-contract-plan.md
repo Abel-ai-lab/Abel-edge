@@ -893,3 +893,59 @@ Milestone conclusion:
   runtime-enforced boundary on the supported execution path
 - the next milestone can focus on broader migration examples or stricter
   coverage of remaining unsupported ad hoc patterns
+
+## Milestone 3 Execution Record
+
+Milestone scope:
+
+- tighten runtime gate coverage so malformed primary/auxiliary feed timestamps
+  are rejected instead of silently normalized away
+- extend signal-contract regression coverage beyond the naive-date case
+- record explicit evidence that bad input now fails at loader/gate boundaries
+
+Implemented in `feat/runtime-data-feed-contract`:
+
+- `normalize_bars(...)` now enforces the daily UTC-aware contract instead of
+  silently dropping duplicate timestamps
+- primary CSV bars now fail fast on naive daily timestamps
+- duplicate per-symbol bar timestamps now fail fast during normalization
+- signal-output regression tests now cover unsorted dates and length mismatch
+- `docs/add-strategy.md` now explicitly states the required UTC-aware daily CSV
+  timestamp format
+
+Validation run:
+
+- date: 2026-04-16
+- command:
+
+```bash
+.venv/bin/python -m pytest \
+  tests/test_data_contract_runtime.py \
+  tests/test_price_data.py \
+  tests/test_execution_run.py \
+  tests/test_paper.py \
+  tests/test_engine_loader.py
+```
+
+- result: `29 passed in 0.72s`
+
+Evidence captured:
+
+- `normalize_bars(...)` rejects naive daily timestamps with a `UTC-aware`
+  contract error
+- `normalize_bars(...)` rejects duplicate per-symbol timestamps instead of
+  deduplicating them implicitly
+- `run` fails early when the primary feed CSV uses naive timestamps
+- `validate_signal_output(...)` rejects unsorted dates
+- `validate_signal_output(...)` rejects mismatched `(positions, dates, prices)`
+  lengths
+
+Milestone conclusion:
+
+- runtime gate coverage now includes malformed primary bars, malformed
+  auxiliary alignment inputs, undeclared feed access, and malformed signal
+  tuples in the tested daily-contract slice
+- the supported execution path is materially closer to the desired strong
+  runtime contract, because invalid inputs are no longer "fixed up" silently
+- the next milestone can move from synthetic gate coverage toward more realistic
+  bundled example migration or wrapper/composite strategy validation

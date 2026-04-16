@@ -14,6 +14,7 @@ from causal_edge.cli import main
 from causal_edge.config import load_config
 from causal_edge.engine.feed_contract import FeedAlignmentError, align_series_to_dates
 from causal_edge.engine.ledger import read_trade_log
+from causal_edge.engine.signal_contract import SignalContractError, validate_signal_output
 
 
 FEED_ENGINE_CODE = """
@@ -107,6 +108,29 @@ class NaiveDatesEngine(StrategyEngine):
 """.strip()
 
 
+PRIMARY_ONLY_ENGINE_CODE = """
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from causal_edge.engine.base import StrategyEngine
+
+
+class PrimaryOnlyEngine(StrategyEngine):
+    def compute_signals(self):
+        bars = self.load_bars(limit=3)
+        target = bars[bars['symbol'] == self.context.get('asset', 'ETHUSD')].copy().sort_values('timestamp')
+        dates = pd.DatetimeIndex(target['timestamp'])
+        prices = target['close'].astype(float).to_numpy()
+        positions = np.zeros(len(target), dtype=float)
+        return self.finalize_signals(positions, dates, prices)
+
+    def get_latest_signal(self):
+        return {'position': 0.0}
+""".strip()
+
+
 def _reset_strategy_modules() -> None:
     for name in list(sys.modules):
         if name == "strategies" or name.startswith("strategies."):
@@ -114,7 +138,14 @@ def _reset_strategy_modules() -> None:
     importlib.invalidate_caches()
 
 
-def _write_engine_project(root: Path, *, engine_name: str, engine_code: str, extra_yaml: str = "") -> None:
+def _write_engine_project(
+    root: Path,
+    *,
+    engine_name: str,
+    engine_code: str,
+    extra_yaml: str = "",
+    primary_csv: str | None = None,
+) -> None:
     _reset_strategy_modules()
     (root / "strategies").mkdir()
     (root / "strategies" / "__init__.py").write_text("", encoding="utf-8")
@@ -124,10 +155,13 @@ def _write_engine_project(root: Path, *, engine_name: str, engine_code: str, ext
     (strategy_dir / "engine.py").write_text(engine_code, encoding="utf-8")
     (root / "data").mkdir(exist_ok=True)
     (root / "data" / "ethusd.csv").write_text(
-        "timestamp,close\n"
-        "2026-01-01T00:00:00Z,100\n"
-        "2026-01-02T00:00:00Z,110\n"
-        "2026-01-03T00:00:00Z,120\n",
+        primary_csv
+        or (
+            "timestamp,close\n"
+            "2026-01-01T00:00:00Z,100\n"
+            "2026-01-02T00:00:00Z,110\n"
+            "2026-01-03T00:00:00Z,120\n"
+        ),
         encoding="utf-8",
     )
     yaml = f"""
@@ -211,6 +245,24 @@ def test_align_series_rejects_naive_auxiliary_dates():
         align_series_to_dates(aux, dates, profile="daily")
 
 
+def test_validate_signal_output_rejects_unsorted_dates():
+    with pytest.raises(SignalContractError, match="strictly increasing"):
+        validate_signal_output(
+            [0.0, 1.0],
+            pd.to_datetime(["2026-01-02T00:00:00Z", "2026-01-01T00:00:00Z"], utc=True),
+            [100.0, 110.0],
+        )
+
+
+def test_validate_signal_output_rejects_mismatched_lengths():
+    with pytest.raises(SignalContractError, match="identical lengths"):
+        validate_signal_output(
+            [0.0, 1.0],
+            pd.to_datetime(["2026-01-01T00:00:00Z"], utc=True),
+            [100.0, 110.0],
+        )
+
+
 def test_run_fails_early_on_naive_signal_dates(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
@@ -271,6 +323,32 @@ def test_run_supports_declared_series_feed_via_framework_path(tmp_path):
         assert result.exit_code == 0, result.output
         trade_df = read_trade_log("data/trade_log_feed_demo.csv")
         assert list(trade_df["position"].round(2)) == [0.2, 0.4, 0.6]
+        sys.path.pop(0)
+        _reset_strategy_modules()
+
+
+def test_run_fails_early_on_naive_primary_feed_timestamps(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        _write_engine_project(
+            root,
+            engine_name="primary_only",
+            engine_code=PRIMARY_ONLY_ENGINE_CODE,
+            primary_csv=(
+                "timestamp,close\n"
+                "2026-01-01,100\n"
+                "2026-01-02,110\n"
+                "2026-01-03,120\n"
+            ),
+        )
+        sys.path.insert(0, str(root))
+
+        result = runner.invoke(main, ["run", "--strategy", "primary_only"])
+
+        assert result.exit_code != 0
+        assert "PrimaryOnlyEngine" in result.output
+        assert "UTC-aware" in result.output
         sys.path.pop(0)
         _reset_strategy_modules()
 

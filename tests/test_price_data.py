@@ -6,13 +6,14 @@ import pandas as pd
 import pytest
 
 from causal_edge import config as config_module
+from causal_edge.engine.feed_contract import FeedNormalizationError
 from causal_edge.engine import price_data as price_data_module
 
 
 def test_normalize_bars_maps_aliases_and_sorts():
     df = pd.DataFrame(
         {
-            "date": ["2025-01-02", "2025-01-01"],
+            "date": ["2025-01-02T00:00:00Z", "2025-01-01T00:00:00Z"],
             "symbol": ["ETHUSD", "ETHUSD"],
             "price": [2.0, 1.0],
         }
@@ -24,16 +25,42 @@ def test_normalize_bars_maps_aliases_and_sorts():
 
 def test_load_bars_from_csv_fills_single_symbol(tmp_path):
     path = tmp_path / "prices.csv"
-    pd.DataFrame({"timestamp": ["2025-01-01"], "close": [1.0]}).to_csv(path, index=False)
+    pd.DataFrame({"timestamp": ["2025-01-01T00:00:00Z"], "close": [1.0]}).to_csv(path, index=False)
     bars = price_data_module.load_bars_from_csv(path, symbols=["ETHUSD"])
     assert list(bars["symbol"]) == ["ETHUSD"]
 
 
 def test_load_bars_from_csv_requires_symbol_for_multi_symbol(tmp_path):
     path = tmp_path / "prices.csv"
-    pd.DataFrame({"timestamp": ["2025-01-01"], "close": [1.0]}).to_csv(path, index=False)
+    pd.DataFrame({"timestamp": ["2025-01-01T00:00:00Z"], "close": [1.0]}).to_csv(path, index=False)
     with pytest.raises(ValueError, match="include 'symbol'"):
         price_data_module.load_bars_from_csv(path, symbols=["ETHUSD", "BTCUSD"])
+
+
+def test_normalize_bars_rejects_naive_daily_timestamps():
+    df = pd.DataFrame(
+        {
+            "timestamp": ["2025-01-01", "2025-01-02"],
+            "symbol": ["ETHUSD", "ETHUSD"],
+            "close": [1.0, 2.0],
+        }
+    )
+
+    with pytest.raises(FeedNormalizationError, match="UTC-aware"):
+        price_data_module.normalize_bars(df)
+
+
+def test_normalize_bars_rejects_duplicate_symbol_timestamps():
+    df = pd.DataFrame(
+        {
+            "timestamp": ["2025-01-01T00:00:00Z", "2025-01-01T00:00:00Z"],
+            "symbol": ["ETHUSD", "ETHUSD"],
+            "close": [1.0, 2.0],
+        }
+    )
+
+    with pytest.raises(FeedNormalizationError, match="duplicate timestamps"):
+        price_data_module.normalize_bars(df)
 
 
 def test_resolve_price_config_uses_strategy_override():

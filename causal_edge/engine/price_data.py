@@ -7,6 +7,8 @@ from typing import Callable
 
 import pandas as pd
 
+from causal_edge.engine.feed_contract import FeedNormalizationError, validate_datetime_index
+
 BarsLoader = Callable[..., pd.DataFrame]
 REQUIRED_BAR_COLUMNS = ("timestamp", "symbol", "close")
 CSV_ALIASES = {"date": "timestamp", "price": "close"}
@@ -26,14 +28,26 @@ def normalize_bars(df: pd.DataFrame) -> pd.DataFrame:
     renamed = df.rename(columns=CSV_ALIASES).copy()
     missing = [col for col in REQUIRED_BAR_COLUMNS if col not in renamed.columns]
     if missing:
-        raise ValueError(f"Price data missing required columns: {missing}")
+        raise FeedNormalizationError(f"Price data missing required columns: {missing}")
 
-    renamed["timestamp"] = pd.to_datetime(renamed["timestamp"], utc=True)
+    try:
+        renamed["timestamp"] = pd.to_datetime(renamed["timestamp"], utc=False)
+    except (TypeError, ValueError) as exc:
+        raise FeedNormalizationError("Price data contains invalid timestamp values.") from exc
     renamed["symbol"] = renamed["symbol"].astype(str)
-    renamed["close"] = renamed["close"].astype(float)
-    renamed = renamed.sort_values(["symbol", "timestamp"]).drop_duplicates(
-        subset=["symbol", "timestamp"], keep="last"
-    )
+    numeric_cols = [col for col in ["close", "open", "high", "low", "volume"] if col in renamed.columns]
+    for col in numeric_cols:
+        renamed[col] = pd.to_numeric(renamed[col], errors="coerce")
+        if renamed[col].isna().any():
+            raise FeedNormalizationError(f"Price data column '{col}' contains non-numeric values.")
+
+    renamed = renamed.sort_values(["symbol", "timestamp"]).reset_index(drop=True)
+    for symbol, group in renamed.groupby("symbol", sort=False):
+        renamed.loc[group.index, "timestamp"] = validate_datetime_index(
+            group["timestamp"],
+            profile="daily",
+            name=f"price_data[{symbol}].timestamp",
+        )
     return renamed.reset_index(drop=True)
 
 
