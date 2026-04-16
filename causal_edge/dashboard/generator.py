@@ -314,6 +314,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         since_date=since, n_days=ledger_days,
     )
 
+    signals_flat.sort(key=lambda x: x["ytd_pnl"], reverse=True)
     return {
         "today_pnl": today_pnl,
         "mtd_pnl": mtd_pnl,
@@ -322,6 +323,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         "n_flat": len(signals_flat),
         "n_strats": len([s for s in strategies if s["has_data"]]),
         "signals_active": signals_active,
+        "signals_flat": signals_flat,
         "recent_days": recent_days,
         "prices": prices,
         "stale_hours": stale_hours,
