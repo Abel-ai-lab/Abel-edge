@@ -155,11 +155,15 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
     now = datetime.now()
     capital = settings.get("capital", 100_000)
 
-    # Collect latest signals
+    # Collect latest signals with per-strategy YTD/MTD
     signals_active = []
     signals_flat = []
     today_pnl = 0.0
+    mtd_pnl = 0.0
+    total_pnl = 0.0
     n_active = 0
+    current_month = now.month
+    current_year = now.year
     portfolio_id = next(
         (c["id"] for c in _strat_cfgs if c.get("asset") == "MULTI"), None
     )
@@ -170,19 +174,44 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         pos = s["latest_position"]
         pnl_today = s["latest_pnl"]
         changed = abs(pos - s["prev_position"]) > 0.01
+
+        strat_ytd = 0.0
+        strat_mtd = 0.0
+        cfg = next((sc for sc in _strat_cfgs if sc["id"] == s["id"]), None)
+        if cfg:
+            df_s = _load_trade_log(cfg["trade_log"])
+            if df_s is not None:
+                df_s["date"] = pd.to_datetime(df_s["date"])
+                df_s["_ds"] = df_s["date"].dt.strftime("%Y-%m-%d")
+                if "source" in df_s.columns:
+                    df_s["_sr"] = df_s["source"].map(
+                        {"live": 1, "backfill": 0}
+                    ).fillna(0)
+                    df_s = df_s.sort_values(["_ds", "_sr"])
+                df_s = df_s.drop_duplicates(subset=["_ds"], keep="last")
+                ym = df_s["date"].dt.year == current_year
+                strat_ytd = float(df_s.loc[ym, "pnl"].sum())
+                strat_mtd = float(
+                    df_s.loc[ym & (df_s["date"].dt.month == current_month),
+                             "pnl"].sum()
+                )
+
         if s["id"] == portfolio_id:
             today_pnl = pnl_today
+            total_pnl = strat_ytd
+            mtd_pnl = strat_mtd
+            continue
 
         sig = {
             "name": s["name"],
             "color": s["color"],
             "position": pos,
             "today_pnl": pnl_today,
+            "ytd_pnl": strat_ytd,
+            "mtd_pnl": strat_mtd,
             "changed": changed,
             "id": s["id"],
         }
-        if s["id"] == portfolio_id:
-            continue
         if abs(pos) > 0.01:
             signals_active.append(sig)
             n_active += 1
@@ -190,33 +219,6 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
             signals_flat.append(sig)
 
     signals_active.sort(key=lambda x: x["position"], reverse=True)
-
-    # MTD and YTD PnL from the portfolio strategy (EW average of components).
-    # Using the portfolio's own trade log avoids double-counting and gives the
-    # correct capital-weighted return instead of a raw sum across strategies.
-    mtd_pnl = 0.0
-    total_pnl = 0.0
-    current_month = now.month
-    current_year = now.year
-
-    portfolio_log_path = next(
-        (sc["trade_log"] for sc in _strat_cfgs
-         if sc["id"] == portfolio_id),
-        "",
-    ) if portfolio_id else ""
-    df_port = _load_trade_log(portfolio_log_path) if portfolio_log_path else None
-    if df_port is not None:
-        df_port["date"] = pd.to_datetime(df_port["date"])
-        df_u = df_port.copy()
-        df_u["_date_str"] = df_u["date"].dt.strftime("%Y-%m-%d")
-        if "source" in df_u.columns:
-            df_u["_src_rank"] = df_u["source"].map({"live": 1, "backfill": 0}).fillna(0)
-            df_u = df_u.sort_values(["_date_str", "_src_rank"])
-        df_u = df_u.drop_duplicates(subset=["_date_str"], keep="last")
-        ytd_mask = df_u["date"].dt.year == current_year
-        total_pnl = float(df_u.loc[ytd_mask, "pnl"].sum())
-        mtd_mask = ytd_mask & (df_u["date"].dt.month == current_month)
-        mtd_pnl = float(df_u.loc[mtd_mask, "pnl"].sum())
 
     # Recent days + ledger: both dedup (strategy, date). Extracted to portfolio.py
     # so this file stays under the 400-line structural limit.

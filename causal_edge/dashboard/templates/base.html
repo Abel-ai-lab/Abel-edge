@@ -161,7 +161,7 @@
             <div class="hero-number {{ 'pos' if portfolio.mtd_pnl >= 0 else 'neg' }}">
                 {{ "%+.2f"|format(portfolio.mtd_pnl * 100) }}%
             </div>
-            <div class="hero-sub">month to date</div>
+            <div class="hero-sub">Abel Portfolio · month to date</div>
             <div class="hero-row">
                 <div class="hero-stat">
                     <div class="val {{ 'pos' if portfolio.today_pnl >= 0 else 'neg' }}">{{ "%+.2f"|format(portfolio.today_pnl * 100) }}%</div>
@@ -188,6 +188,15 @@
                     {% endfor %}
                 </div>
             </div>
+            <div class="signal-row" style="opacity:0.55; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">
+                <div class="signal-dot" style="background:transparent;"></div>
+                <div class="signal-name">strategy</div>
+                <div class="signal-bar-wrap"></div>
+                <div class="signal-pos">pos</div>
+                <div class="signal-pnl" title="today">today</div>
+                <div class="signal-pnl" title="MTD" style="min-width:56px;">mtd</div>
+                <div class="signal-pnl" title="YTD" style="min-width:56px;">ytd</div>
+            </div>
             {% for sig in portfolio.signals_active %}
             <div class="signal-row">
                 <div class="signal-dot" style="background: {{ sig.color }};"></div>
@@ -197,11 +206,24 @@
                 </div>
                 <div class="signal-pos">{{ "%.2f"|format(sig.position) }}</div>
                 {% if sig.changed %}<div class="signal-badge">NEW</div>{% endif %}
-                <div class="signal-pnl {{ 'pos' if sig.today_pnl > 0 else 'neg' if sig.today_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.today_pnl > 0 else 'neg' if sig.today_pnl < 0 else 'muted' }}" title="today">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.mtd_pnl > 0 else 'neg' if sig.mtd_pnl < 0 else 'muted' }}" title="MTD" style="min-width:56px;">{{ "%+.1f"|format(sig.mtd_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.ytd_pnl > 0 else 'neg' if sig.ytd_pnl < 0 else 'muted' }}" title="YTD" style="min-width:56px;">{{ "%+.1f"|format(sig.ytd_pnl * 100) }}%</div>
             </div>
             {% endfor %}
-            {% if portfolio.n_flat > 0 %}
-            <div class="flat-summary">{{ portfolio.n_flat }} flat</div>
+            {% if portfolio.signals_flat %}
+            <div class="flat-summary" style="margin-top:10px;">flat ({{ portfolio.n_flat }})</div>
+            {% for sig in portfolio.signals_flat %}
+            <div class="signal-row" style="opacity:0.55;">
+                <div class="signal-dot" style="background: {{ sig.color }};"></div>
+                <div class="signal-name">{{ sig.name }}</div>
+                <div class="signal-bar-wrap"></div>
+                <div class="signal-pos muted">—</div>
+                <div class="signal-pnl muted" title="today">—</div>
+                <div class="signal-pnl {{ 'pos' if sig.mtd_pnl > 0 else 'neg' if sig.mtd_pnl < 0 else 'muted' }}" title="MTD" style="min-width:56px;">{{ "%+.1f"|format(sig.mtd_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.ytd_pnl > 0 else 'neg' if sig.ytd_pnl < 0 else 'muted' }}" title="YTD" style="min-width:56px;">{{ "%+.1f"|format(sig.ytd_pnl * 100) }}%</div>
+            </div>
+            {% endfor %}
             {% endif %}
         </div>
 
