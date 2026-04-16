@@ -144,21 +144,37 @@ discovery:
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
 ```
 
-You can also use `causal-edge login`, or set `ABEL_API_KEY` directly. Override endpoints with
+For a global install instead of a project-local skill copy, use:
+
+```bash
+npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -g -y
+```
+
+`causal-edge` prefers reusing an existing `causal-abel` auth file before asking you to authorize
+again. Use `causal-edge login` when you want a standalone fallback that stores `ABEL_API_KEY`
+directly for the current project, or set `ABEL_API_KEY` directly. Override endpoints with
 `ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
 
 After `causal-abel` OAuth succeeds, `causal-edge` checks the current project `.env`,
-`ABEL_AUTH_ENV_FILE`, and the local `.agents/skills/causal-abel/.env.skill` fallback before
-failing for a missing key. That lets agent-driven installs reuse the `causal-abel` auth file
-without copying the key into each workspace.
+`ABEL_AUTH_ENV_FILE`, the local `.agents/skills/causal-abel/.env.skill` fallback, and known global
+skill installs such as `~/.config/opencode/skills/causal-abel/.env.skill` or
+`~/.codex/skills/causal-abel/.env.skill` before failing for a missing key. That lets
+agent-driven installs reuse the `causal-abel` auth file without copying the key into each
+workspace.
 
 If discovery still reports a missing key after `causal-abel` is installed, run:
 
 ```bash
-python .agents/skills/causal-abel/scripts/cap_probe.py auth-status --compact
+python <causal-abel-skill-root>/scripts/cap_probe.py auth-status --compact
 ```
 
-If your auth file lives outside the project, point `causal-edge` at it with `ABEL_AUTH_ENV_FILE`.
+For example, the skill root might be one of these locations:
+
+- project-local: `.agents/skills/causal-abel`
+- OpenCode global: `~/.config/opencode/skills/causal-abel`
+- Codex global: `~/.codex/skills/causal-abel`
+
+If your auth file lives outside those paths, point `causal-edge` at it with `ABEL_AUTH_ENV_FILE`.
 
 For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON
 handoff event first, then a final JSON result after authorization completes.

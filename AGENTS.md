@@ -36,10 +36,11 @@ Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loo
 
 #### Use Abel causal discovery (optional)
 1. Read `causal_edge/plugins/AGENTS.md`
-2. If you do not already have a key, run `causal-edge login`
-3. For agent-driven setups, install `causal-abel` and complete OAuth there if needed
-4. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
-5. Run `causal-edge discover <TICKER>`
+2. If you do not already have a key, prefer installing `causal-abel` and completing OAuth there for agent-driven setups
+3. `causal-edge` reuses shared auth from project-local `.agents/skills/causal-abel`, known OpenCode/Codex global installs, or `ABEL_AUTH_ENV_FILE`
+4. Run `causal-edge login` only when you want the standalone fallback that stores `ABEL_API_KEY` directly for the project
+5. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
+6. Run `causal-edge discover <TICKER>`
 
 ### Architecture
 - `ARCHITECTURE.md` — dependency direction diagram

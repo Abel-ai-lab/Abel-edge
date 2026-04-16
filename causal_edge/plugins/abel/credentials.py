@@ -10,6 +10,14 @@ DEFAULT_CAP_BASE_URL = "https://cap.abel.ai/api"
 CAUSAL_ABEL_ENV_BASENAMES = (".env.skill", ".env.skills", ".env")
 
 
+def _global_causal_abel_skill_dirs() -> tuple[Path, ...]:
+    home_dir = Path.home()
+    return (
+        home_dir / ".config" / "opencode" / "skills" / "causal-abel",
+        home_dir / ".codex" / "skills" / "causal-abel",
+    )
+
+
 class MissingAbelApiKeyError(RuntimeError):
     """Raised when Abel-backed features are used without credentials."""
 
@@ -69,6 +77,12 @@ def _candidate_shared_auth_files(*, env_path: str | Path = ".env") -> list[Path]
         for basename in CAUSAL_ABEL_ENV_BASENAMES:
             candidates.append(skill_dir / basename)
 
+    for skill_dir in _global_causal_abel_skill_dirs():
+        if not skill_dir.is_dir():
+            continue
+        for basename in CAUSAL_ABEL_ENV_BASENAMES:
+            candidates.append(skill_dir / basename)
+
     return _dedupe_paths(candidates)
 
 
@@ -125,7 +139,10 @@ def require_api_key(*, env_path: str | Path = ".env") -> str:
     raise MissingAbelApiKeyError(
         "Abel API key not found. Install the `causal-abel` skill and complete its OAuth flow, "
         "or set ABEL_API_KEY or CAP_API_KEY in your environment or project .env before using Abel-backed "
-        f"features. causal-edge also checks ABEL_AUTH_ENV_FILE and .agents/skills/causal-abel/.env.skill. {shared_auth_hint}"
+        "features. causal-edge also checks ABEL_AUTH_ENV_FILE, project-local "
+        ".agents/skills/causal-abel/.env.skill, and known global skill installs such as "
+        "~/.config/opencode/skills/causal-abel/.env.skill or ~/.codex/skills/causal-abel/.env.skill. "
+        f"{shared_auth_hint}"
     )
 
 

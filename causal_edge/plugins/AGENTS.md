@@ -6,15 +6,17 @@ Optional integrations. Removing this entire directory must not break anything.
 ## I want to...
 
 ### Use Abel causal discovery
-1. Run: `causal-edge login`
+1. If your workflow relies on external skills, install `causal-abel` with `npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y`
+2. Optionally install it globally with `-g` instead; `causal-edge` also checks known OpenCode/Codex global skill roots for the shared `.env.skill`
+3. Reuse the same `causal-abel` OAuth instead of reauthorizing in `causal-edge` when possible
+4. Standalone fallback: run `causal-edge login`
    Agent-friendly form: `causal-edge login --json --no-browser`
    This emits a JSON handoff event before polling for completion.
-2. If your workflow relies on external skills, you can also install `causal-abel` with `npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y`
-3. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
-4. Run: `causal-edge discover <TICKER>`
-5. Use `--mode parents` or `--mode mb` depending on the discovery need
-6. Copy the output YAML into your `strategies.yaml`
-7. No API key? Fill `parents:` manually — framework works identically
+5. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
+6. Run: `causal-edge discover <TICKER>`
+7. Use `--mode parents` or `--mode mb` depending on the discovery need
+8. Copy the output YAML into your `strategies.yaml`
+9. No API key? Fill `parents:` manually — framework works identically
 
 ### Align Abel price APIs
 - Default real-price source is Abel market data

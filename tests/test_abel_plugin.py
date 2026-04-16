@@ -4,6 +4,7 @@ import os
 
 import pandas as pd
 
+import causal_edge.plugins.abel.credentials as credentials_module
 from causal_edge.plugins.abel.auth import login_with_oauth
 from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
 from causal_edge.plugins.abel.credentials import (
@@ -71,6 +72,40 @@ def test_resolve_api_key_auto_discovers_causal_abel_skill_env(monkeypatch, tmp_p
     assert api_key == "abel_skill"
 
 
+def test_resolve_api_key_auto_discovers_opencode_global_skill_env(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir(parents=True)
+    skill_env = home_dir / ".config" / "opencode" / "skills" / "causal-abel" / ".env.skill"
+    skill_env.parent.mkdir(parents=True)
+    skill_env.write_text("ABEL_API_KEY=abel_opencode\n", encoding="utf-8")
+    monkeypatch.setattr(credentials_module.Path, "home", lambda: home_dir)
+
+    api_key = resolve_api_key(env_path=project_dir / ".env")
+
+    assert api_key == "abel_opencode"
+
+
+def test_resolve_api_key_auto_discovers_codex_global_skill_env(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir(parents=True)
+    skill_env = home_dir / ".codex" / "skills" / "causal-abel" / ".env.skill"
+    skill_env.parent.mkdir(parents=True)
+    skill_env.write_text("ABEL_API_KEY=abel_codex\n", encoding="utf-8")
+    monkeypatch.setattr(credentials_module.Path, "home", lambda: home_dir)
+
+    api_key = resolve_api_key(env_path=project_dir / ".env")
+
+    assert api_key == "abel_codex"
+
+
 def test_resolve_api_key_prefers_project_dotenv_over_skill_env(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
@@ -88,10 +123,31 @@ def test_resolve_api_key_prefers_project_dotenv_over_skill_env(monkeypatch, tmp_
     assert api_key == "abel_project"
 
 
+def test_resolve_api_key_prefers_explicit_auth_env_file_over_global_skill(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    home_dir = tmp_path / "home"
+    project_dir = tmp_path / "project"
+    project_dir.mkdir(parents=True)
+    shared_env = tmp_path / "shared" / ".env.skill"
+    shared_env.parent.mkdir(parents=True)
+    shared_env.write_text("ABEL_API_KEY=abel_explicit\n", encoding="utf-8")
+    skill_env = home_dir / ".config" / "opencode" / "skills" / "causal-abel" / ".env.skill"
+    skill_env.parent.mkdir(parents=True)
+    skill_env.write_text("ABEL_API_KEY=abel_global\n", encoding="utf-8")
+    monkeypatch.setenv("ABEL_AUTH_ENV_FILE", str(shared_env))
+    monkeypatch.setattr(credentials_module.Path, "home", lambda: home_dir)
+
+    api_key = resolve_api_key(env_path=project_dir / ".env")
+
+    assert api_key == "abel_explicit"
+
+
 def test_require_api_key_raises_when_missing(monkeypatch, tmp_path):
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
     monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    monkeypatch.setattr(credentials_module.Path, "home", lambda: tmp_path / "home")
 
     try:
         require_api_key(env_path=tmp_path / ".env")
@@ -106,6 +162,7 @@ def test_require_api_key_mentions_auth_status_when_skill_installed(monkeypatch, 
     monkeypatch.delenv("ABEL_API_KEY", raising=False)
     monkeypatch.delenv("CAP_API_KEY", raising=False)
     monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    monkeypatch.setattr(credentials_module.Path, "home", lambda: tmp_path / "home")
     project_dir = tmp_path / "project"
     project_dir.mkdir()
     skill_dir = project_dir / ".agents" / "skills" / "causal-abel"
@@ -231,6 +288,7 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
     opened_urls = []
     notices = []
     handoffs = []
+    monkeypatch.setattr(credentials_module.Path, "home", lambda: tmp_path / "home")
     monkeypatch.setattr("webbrowser.open", lambda url: opened_urls.append(url) or True)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
 
