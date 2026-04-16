@@ -211,6 +211,93 @@ strategies:
     assert strategy["_feeds"]["primary"]["symbol"] == "ETHUSD"
 
 
+def test_load_config_allows_primary_symbol_override_in_price_data(tmp_path):
+    config_path = tmp_path / "strategies.yaml"
+    config_path.write_text(
+        """
+settings: {}
+strategies:
+  - id: demo
+    name: Demo
+    asset: TON
+    color: "#2563EB"
+    engine: strategies.demo.engine
+    trade_log: data/demo.csv
+    price_data:
+      adapter: csv
+      symbol: TONUSD
+      path: data/tonusd.csv
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(config_path)
+
+    assert cfg["strategies"][0]["_feeds"]["primary"]["symbol"] == "TONUSD"
+
+
+def test_load_config_preserves_primary_feed_extra_options_from_price_data(tmp_path):
+    config_path = tmp_path / "strategies.yaml"
+    config_path.write_text(
+        """
+settings: {}
+strategies:
+  - id: demo
+    name: Demo
+    asset: ETH
+    color: "#2563EB"
+    engine: strategies.demo.engine
+    trade_log: data/demo.csv
+    price_data:
+      adapter: csv
+      symbol: ETHUSD
+      path: data/ethusd.csv
+      adjusted: false
+      backend: fmp
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(config_path)
+
+    primary = cfg["strategies"][0]["_feeds"]["primary"]
+    assert primary["symbol"] == "ETHUSD"
+    assert primary["adjusted"] is False
+    assert primary["backend"] == "fmp"
+
+
+def test_load_config_preserves_multi_symbol_bars_feeds_without_asset_fallback(tmp_path):
+    config_path = tmp_path / "strategies.yaml"
+    config_path.write_text(
+        """
+settings: {}
+strategies:
+  - id: demo
+    name: Demo
+    asset: TON
+    color: "#2563EB"
+    engine: strategies.demo.engine
+    trade_log: data/demo.csv
+    feeds:
+      parents_bars:
+        kind: bars
+        adapter: csv
+        path: data/parents.csv
+        symbols:
+          - WTM
+          - SPY
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    cfg = load_config(config_path)
+
+    assert "symbol" not in cfg["strategies"][0]["_feeds"]["parents_bars"]
+
+
 def test_load_config_rejects_user_defined_primary_feed(tmp_path):
     config_path = tmp_path / "strategies.yaml"
     config_path.write_text(

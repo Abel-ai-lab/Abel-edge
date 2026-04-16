@@ -196,7 +196,10 @@ def _normalize_feed(
     )
     normalized["profile"] = profile
     if normalized["kind"] == "bars":
-        normalized.setdefault("symbol", feed.get("symbol") or strategy.get("asset"))
+        if feed.get("symbol"):
+            normalized["symbol"] = feed["symbol"]
+        elif not feed.get("symbols"):
+            normalized.setdefault("symbol", strategy.get("asset"))
     if normalized["kind"] == "series" and feed.get("symbol"):
         normalized["symbol"] = feed["symbol"]
     if normalized["adapter"] == "csv" and feed.get("path"):
@@ -224,9 +227,14 @@ def _synthesized_primary_feed(
         "kind": "bars",
         "adapter": adapter,
         "timeframe": timeframe,
-        "symbol": strategy.get("asset"),
+        "symbol": strategy_price.get("symbol") or strategy.get("asset"),
         "profile": profile,
     }
+    for key, value in strategy_price.items():
+        if key in {"adapter", "source", "timeframe", "symbol", "path", "env_path"}:
+            continue
+        if value is not None:
+            primary[key] = value
     if adapter == "csv" and strategy_price.get("path"):
         primary["path"] = strategy_price["path"]
     if strategy_price.get("env_path"):
