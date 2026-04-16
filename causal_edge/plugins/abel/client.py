@@ -145,11 +145,12 @@ class AbelClient:
         return response.json()
 
     def _post_market(self, *, endpoint: str, body: dict[str, Any], api_key: str) -> dict[str, Any]:
-        token = api_key.removeprefix("Bearer ").strip()
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "api-key": token,
+            "Authorization": api_key
+            if api_key.lower().startswith("bearer ")
+            else f"Bearer {api_key}",
         }
         response = self.session.post(
             f"{self.cap_base_url}/market/{endpoint}",
