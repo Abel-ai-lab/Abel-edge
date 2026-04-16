@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from causal_edge.config import load_config
+from causal_edge.engine.base import StrategyEngine
 from causal_edge.engine.feed_contract import FeedAlignmentError, align_series_to_dates
 from causal_edge.engine.signal_contract import SignalContractError, validate_signal_output
 
@@ -175,3 +176,17 @@ def test_validate_signal_output_rejects_mismatched_lengths():
             pd.to_datetime(["2026-01-01T00:00:00Z"], utc=True),
             [100.0, 110.0],
         )
+
+
+def test_bind_price_loader_fails_with_migration_guidance():
+    class DummyEngine(StrategyEngine):
+        def compute_signals(self):
+            raise NotImplementedError
+
+        def get_latest_signal(self):
+            return {"position": 0.0}
+
+    engine = DummyEngine()
+
+    with pytest.raises(RuntimeError, match="deprecated and no longer supported"):
+        engine.bind_price_loader(object(), {})

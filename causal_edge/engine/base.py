@@ -28,13 +28,17 @@ class StrategyEngine(ABC):
         self.context = context
 
     def bind_price_loader(self, loader, price_data_config: dict | None = None) -> None:
-        """Compatibility shim for older call sites.
+        """Deprecated legacy loader hook.
 
-        Primary bars are now resolved through the synthesized framework-managed
-        `primary` feed, so strategies should use `load_bars()` / `load_feed()`
-        instead of relying on an injected loader.
+        Primary bars now come from the synthesized framework-managed `primary`
+        feed, and all external data must flow through `price_data` / `feeds`
+        plus `load_bars()` / `load_feed()`.
         """
-        return None
+        raise RuntimeError(
+            "StrategyEngine.bind_price_loader() is deprecated and no longer supported. "
+            "Declare primary data via strategy price_data, declare auxiliary inputs via feeds, "
+            "and load them with load_bars() / load_feed()."
+        )
 
     def load_bars(
         self,
