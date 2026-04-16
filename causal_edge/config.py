@@ -22,6 +22,9 @@ DEFAULTS: dict[str, Any] = {
         "default_source": "abel",
         "default_timeframe": "1d",
     },
+    "data_contract": {
+        "profile": "daily",
+    },
 }
 
 REQUIRED_STRATEGY_FIELDS = ("id", "name", "asset", "color", "engine", "trade_log")
@@ -73,6 +76,10 @@ def _validate_strategy(strategy: dict, index: int) -> None:
             f"strategy '{strategy.get('id', index)}' paper_log must be a string path when provided."
         )
 
+    feeds = strategy.get("feeds")
+    if feeds is not None:
+        _validate_feeds(feeds, scope=f"strategy '{strategy.get('id', index)}'")
+
 
 def _validate_price_data(price_data: Any, *, scope: str) -> None:
     if not isinstance(price_data, dict):
@@ -99,6 +106,34 @@ def _validate_execution(execution: Any, *, scope: str) -> None:
         raise ValueError(f"{scope} execution.max_abs_position must be > 0 when provided.")
 
 
+def _validate_data_contract(data_contract: Any, *, scope: str) -> None:
+    if not isinstance(data_contract, dict):
+        raise ValueError(f"{scope} data_contract must be a mapping.")
+    profile = str(data_contract.get("profile", "daily")).strip().lower()
+    if profile != "daily":
+        raise ValueError(f"{scope} data_contract.profile must be 'daily', got '{profile}'.")
+
+
+def _validate_feeds(feeds: Any, *, scope: str) -> None:
+    if not isinstance(feeds, dict):
+        raise ValueError(f"{scope} feeds must be a mapping.")
+    if "primary" in feeds:
+        raise ValueError(f"{scope} feeds.primary is reserved and may not be declared explicitly.")
+    for name, feed in feeds.items():
+        if not isinstance(feed, dict):
+            raise ValueError(f"{scope} feed '{name}' must be a mapping.")
+        kind = str(feed.get("kind", "")).strip().lower()
+        if kind not in {"bars", "series"}:
+            raise ValueError(f"{scope} feed '{name}' kind must be 'bars' or 'series'.")
+        source = feed.get("source")
+        if source is not None and source not in {"abel", "csv"}:
+            raise ValueError(f"{scope} feed '{name}' source must be 'abel' or 'csv'.")
+        if source == "csv" and not feed.get("path"):
+            raise ValueError(f"{scope} feed '{name}' path is required when source='csv'.")
+        if kind == "series" and not feed.get("field"):
+            raise ValueError(f"{scope} feed '{name}' field is required when kind='series'.")
+
+
 def _merge_settings(user_settings: dict[str, Any]) -> dict[str, Any]:
     settings = {**DEFAULTS, **user_settings}
     settings["price_data"] = {
@@ -109,7 +144,81 @@ def _merge_settings(user_settings: dict[str, Any]) -> dict[str, Any]:
         **DEFAULTS.get("execution", {}),
         **(user_settings.get("execution") or {}),
     }
+    settings["data_contract"] = {
+        **DEFAULTS.get("data_contract", {}),
+        **(user_settings.get("data_contract") or {}),
+    }
     return settings
+
+
+def _normalize_feed(
+    name: str,
+    feed: dict[str, Any],
+    *,
+    settings: dict[str, Any],
+    strategy: dict[str, Any],
+    profile: str,
+) -> dict[str, Any]:
+    price_settings = settings.get("price_data") or {}
+    normalized = dict(feed)
+    normalized["name"] = name
+    normalized["kind"] = str(feed.get("kind", "")).strip().lower()
+    normalized["source"] = (
+        feed.get("source") or price_settings.get("default_source", "abel")
+    )
+    normalized["timeframe"] = (
+        feed.get("timeframe") or price_settings.get("default_timeframe", "1d")
+    )
+    normalized["profile"] = profile
+    if normalized["kind"] == "bars":
+        normalized.setdefault("symbol", feed.get("symbol") or strategy.get("asset"))
+    if normalized["kind"] == "series" and feed.get("symbol"):
+        normalized["symbol"] = feed["symbol"]
+    if normalized["source"] == "csv" and feed.get("path"):
+        normalized["path"] = feed["path"]
+    if normalized["kind"] == "series":
+        normalized["field"] = feed["field"]
+    return normalized
+
+
+def _synthesized_primary_feed(
+    strategy: dict[str, Any],
+    *,
+    settings: dict[str, Any],
+    profile: str,
+) -> dict[str, Any]:
+    price_settings = settings.get("price_data") or {}
+    strategy_price = strategy.get("price_data") or {}
+    source = strategy_price.get("source") or price_settings.get("default_source", "abel")
+    timeframe = strategy_price.get("timeframe") or price_settings.get("default_timeframe", "1d")
+    primary = {
+        "name": "primary",
+        "kind": "bars",
+        "source": source,
+        "timeframe": timeframe,
+        "symbol": strategy.get("asset"),
+        "profile": profile,
+    }
+    if source == "csv" and strategy_price.get("path"):
+        primary["path"] = strategy_price["path"]
+    return primary
+
+
+def _normalize_strategy_runtime(strategy: dict[str, Any], settings: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(strategy)
+    profile = str((settings.get("data_contract") or {}).get("profile", "daily")).strip().lower()
+    feeds = {"primary": _synthesized_primary_feed(strategy, settings=settings, profile=profile)}
+    for name, feed in ((strategy.get("feeds") or {}).items()):
+        feeds[name] = _normalize_feed(
+            name,
+            feed,
+            settings=settings,
+            strategy=strategy,
+            profile=profile,
+        )
+    normalized["_feeds"] = feeds
+    normalized["_data_contract"] = {"profile": profile}
+    return normalized
 
 
 def resolve_config_path(path: str | Path | None = None) -> Path:
@@ -160,8 +269,11 @@ def load_config(path: str | Path | None = None) -> dict[str, Any]:
         _validate_price_data(settings["price_data"], scope="settings")
     if "execution" in settings:
         _validate_execution(settings["execution"], scope="settings")
+    if "data_contract" in settings:
+        _validate_data_contract(settings["data_contract"], scope="settings")
 
     for i, strat in enumerate(strategies):
         _validate_strategy(strat, i)
 
-    return {"settings": settings, "strategies": strategies}
+    normalized_strategies = [_normalize_strategy_runtime(strat, settings) for strat in strategies]
+    return {"settings": settings, "strategies": normalized_strategies}
