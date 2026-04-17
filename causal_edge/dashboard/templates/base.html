@@ -3,342 +3,493 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>causal-edge dashboard</title>
+    <title>Trading Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: #1a1a2e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-        .header { background: #16213e; padding: 16px 24px; border-bottom: 1px solid #0f3460; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
-        .header .meta { font-size: 12px; color: #888; }
-        .tabs { display: flex; gap: 4px; padding: 8px 24px; background: #16213e; border-bottom: 1px solid #0f3460; }
-        .tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 13px; color: #aaa; background: transparent; border: none; }
-        .tab:hover { color: #fff; background: #1a1a2e; }
-        .tab.active { color: #fff; background: #1a1a2e; border-bottom: 2px solid #0a84ff; }
-        .content { padding: 24px; max-width: 1280px; margin: 0 auto; }
-        .panel { display: none; }
-        .panel.active { display: block; }
-        table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid #0f3460; font-size: 12px; color: #888; text-transform: uppercase; }
-        td { padding: 10px 12px; border-bottom: 1px solid #1e2a4a; font-size: 14px; }
-        .pnl-pos { color: #30d158; }
-        .pnl-neg { color: #ff453a; }
-        .muted { color: #94a3b8; }
-        .chart-container, .info-card { margin-top: 16px; background: #16213e; border-radius: 12px; padding: 16px; border: 1px solid #1f3a5f; }
-        .strategy-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; margin-bottom: 16px; }
-        .strategy-header .title { display: flex; align-items: center; gap: 12px; }
-        .strategy-header .dot { width: 12px; height: 12px; border-radius: 50%; }
-        .strategy-header h2 { font-size: 18px; }
-        .hero-meta { display: flex; flex-wrap: wrap; gap: 12px; color: #94a3b8; font-size: 13px; }
-        .section-tabs { display: flex; gap: 8px; margin: 16px 0; }
-        .section-tab { padding: 10px 14px; border-radius: 999px; border: 1px solid #1f3a5f; background: transparent; color: #94a3b8; cursor: pointer; font-size: 13px; }
-        .section-tab.active { background: #16213e; color: #fff; }
-        .section-panel { display: none; }
-        .section-panel.active { display: block; }
-        .cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
-        .info-card .label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em; }
-        .info-card .value { font-size: 28px; font-weight: 700; margin-top: 8px; }
-        .info-card .subtext { margin-top: 6px; color: #94a3b8; font-size: 13px; }
-        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-        .overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
-        .full { grid-column: 1 / -1; }
-        .row-list { margin-top: 12px; }
-        .row-head, .row-item { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1fr; gap: 12px; padding: 10px 0; }
-        .row-head { color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; border-bottom: 1px solid rgba(148, 163, 184, 0.2); }
-        .row-item { color: #e2e8f0; border-bottom: 1px solid rgba(148, 163, 184, 0.08); }
-        .row-item:last-child { border-bottom: none; }
-        .empty { margin-top: 16px; padding: 28px; text-align: center; color: #94a3b8; border-radius: 12px; background: #111827; border: 1px dashed #334155; }
-        .no-data { text-align: center; padding: 60px; color: #666; }
-        code { color: #bfdbfe; }
-        @media (max-width: 960px) {
-            .cards, .grid, .overview-grid { grid-template-columns: 1fr; }
-            .strategy-header { flex-direction: column; }
-            .row-head, .row-item { grid-template-columns: repeat(2, 1fr); }
+        :root {
+            --bg: #000000;
+            --card: #1c1c1e;
+            --elevated: #2c2c2e;
+            --separator: #38383a;
+            --label: #86868b;
+            --text: #f5f5f7;
+            --green: #30d158;
+            --red: #ff453a;
+            --blue: #0a84ff;
+            --orange: #ff9f0a;
         }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+
+        /* Navigation */
+        .nav { display: flex; justify-content: center; gap: 0; padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--separator); position: sticky; top: 0; z-index: 100; }
+        .nav-btn { padding: 8px 24px; font-size: 13px; font-weight: 500; color: var(--label); background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; letter-spacing: 0.3px; }
+        .nav-btn:hover { color: var(--text); }
+        .nav-btn.active { color: var(--text); border-bottom-color: var(--blue); }
+
+        /* Panels */
+        .panel { display: none; padding: 32px 24px; max-width: 960px; margin: 0 auto; }
+        .panel.active { display: block; }
+
+        /* Hero */
+        .hero { text-align: center; padding: 48px 0 32px; }
+        .hero-number { font-size: 56px; font-weight: 700; letter-spacing: -2px; line-height: 1; }
+        .hero-sub { font-size: 15px; color: var(--label); margin-top: 8px; font-weight: 400; }
+        .hero-row { display: flex; justify-content: center; gap: 48px; margin-top: 24px; }
+        .hero-stat { text-align: center; }
+        .hero-stat .val { font-size: 17px; font-weight: 600; }
+        .hero-stat .lbl { font-size: 11px; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+        /* Signal table */
+        .section-title { font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--separator); }
+        .signal-row { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(56,56,58,0.4); }
+        .signal-row:last-child { border-bottom: none; }
+        .signal-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 12px; flex-shrink: 0; }
+        .signal-name { flex: 0 0 160px; font-size: 14px; font-weight: 500; }
+        .signal-bar-wrap { flex: 1; display: flex; align-items: center; gap: 8px; }
+        .signal-bar { height: 6px; border-radius: 3px; background: var(--green); opacity: 0.8; transition: width 0.3s; }
+        .signal-bar-bg { flex: 1; height: 6px; border-radius: 3px; background: var(--elevated); max-width: 120px; }
+        .signal-pos { font-size: 13px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; color: var(--label); width: 48px; text-align: right; }
+        .signal-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: rgba(48,209,88,0.15); color: var(--green); margin-left: 8px; flex-shrink: 0; }
+        .signal-pnl { font-size: 14px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; width: 80px; text-align: right; font-weight: 500; }
+        .signal-flat .signal-name { color: var(--label); font-weight: 400; }
+        .signal-flat .signal-pos { color: rgba(134,134,139,0.5); }
+        .flat-summary { padding: 10px 0; color: var(--label); font-size: 13px; padding-left: 20px; }
+
+        /* Recent days */
+        .recent-row { display: flex; align-items: center; padding: 8px 0; font-size: 13px; }
+        .recent-date { width: 80px; color: var(--label); font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; }
+        .recent-active { width: 90px; color: var(--label); }
+        .recent-pnl { width: 80px; text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-weight: 500; }
+        .recent-spark { flex: 1; padding-left: 16px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 11px; color: var(--label); letter-spacing: 1px; }
+
+        /* Ledger */
+        .ledger-date-header { padding: 10px 0 4px; font-size: 11px; font-weight: 600; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--separator); margin-top: 16px; }
+        .ledger-date-header:first-child { margin-top: 0; }
+        .ledger-row { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(56,56,58,0.2); font-size: 13px; }
+        .ledger-strat { width: 140px; font-weight: 500; }
+        .ledger-action { width: 100px; font-size: 11px; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; }
+        .ledger-action-long { color: var(--green); }
+        .ledger-action-flat { color: var(--label); }
+        .ledger-action-change { color: var(--orange); }
+        .ledger-pos { width: 60px; text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; color: var(--label); }
+        .ledger-pnl { width: 80px; text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-weight: 500; }
+        .ledger-cum { width: 80px; text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 12px; }
+        .ledger-bar { flex: 1; padding-left: 12px; }
+        .ledger-bar-inner { height: 4px; border-radius: 2px; min-width: 1px; }
+
+        /* Section spacing */
+        .section { margin-top: 40px; }
+
+        /* Price badge */
+        .price-row { display: flex; justify-content: flex-end; gap: 16px; margin-bottom: 16px; }
+        .price-badge { font-size: 12px; color: var(--label); font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; }
+        .price-badge .ticker { color: var(--text); font-weight: 500; }
+
+        /* Portfolio table */
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--separator); font-size: 10px; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        th.num { text-align: right; }
+        td { padding: 10px 12px; border-bottom: 1px solid rgba(56,56,58,0.3); font-size: 14px; }
+        td.num { text-align: right; font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 13px; }
+        tr:hover td { background: var(--card); }
+        tr { cursor: pointer; }
+        .pos { color: var(--green); }
+        .neg { color: var(--red); }
+        .muted { color: var(--label); }
+
+        /* Strategy detail */
+        .strat-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .strat-header h2 { font-size: 22px; font-weight: 600; }
+        .strat-header .asset { color: var(--label); font-size: 15px; }
+        .badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+        .badge-pass { background: rgba(48,209,88,0.12); color: var(--green); }
+        .badge-fail { background: rgba(255,69,58,0.12); color: var(--red); }
+
+        .metrics-bar { display: flex; gap: 32px; flex-wrap: wrap; padding: 16px 20px; background: var(--card); border-radius: 12px; margin-bottom: 16px; }
+        .metric { text-align: center; }
+        .metric .lbl { font-size: 10px; color: var(--label); text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric .val { font-size: 20px; font-weight: 600; margin-top: 2px; }
+
+        .chart-box { background: var(--card); border-radius: 12px; padding: 16px; margin-top: 12px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+        .yearly-table { margin-top: 12px; }
+        .yearly-table td { padding: 6px 10px; font-size: 13px; }
+
+        /* Validation */
+        .val-triangle { display: flex; gap: 32px; margin-bottom: 16px; }
+        .val-table td { font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 13px; }
+        .val-failures { margin-top: 12px; padding: 8px 12px; background: rgba(255,69,58,0.06); border-radius: 8px; }
+        .val-failures div { font-size: 13px; color: var(--red); font-family: monospace; }
+
+        /* Strategy selector */
+        .strat-select { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 24px; }
+        .strat-btn { padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; color: var(--label); background: var(--card); border: 1px solid var(--separator); cursor: pointer; transition: all 0.15s; }
+        .strat-btn:hover { border-color: var(--label); color: var(--text); }
+        .strat-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+        /* Live/BT health indicator */
+        .health { letter-spacing: 2px; }
+        .health-good { color: var(--green); }
+        .health-warn { color: var(--orange); }
+        .health-bad { color: var(--red); }
+
+        /* Stale warning */
+        .stale-warn { color: var(--orange); font-size: 12px; }
+
+        .no-data { text-align: center; padding: 60px; color: var(--label); }
+
+        /* Transitions */
+        .panel { animation: fadeIn 0.15s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>causal-edge</h1>
-        <div class="meta">Generated {{ generated_at }}</div>
-    </div>
+    <!-- Navigation -->
+    <nav class="nav">
+        <button class="nav-btn active" onclick="showPage('live')">Live</button>
+        <button class="nav-btn" onclick="showPage('portfolio')">Portfolio</button>
+        <button class="nav-btn" onclick="showPage('strategy')">Strategy</button>
+    </nav>
 
-    <div class="tabs">
-        <button class="tab active" onclick="showTab('overview', event)">Overview</button>
-        {% for s in strategies %}
-        <button class="tab" onclick="showTab('{{ s.id }}', event)" style="border-left: 3px solid {{ s.color }}">
-            {{ s.name }}
-        </button>
-        {% endfor %}
-    </div>
-
-    <div class="content">
-        <div id="panel-overview" class="panel active">
-            {% if strategies %}
-            {% if live_overview.has_live_data %}
-            <section class="cards">
-                {% for card in live_overview.live_cards %}
-                <div class="info-card">
-                    <div class="label">{{ card.label }}</div>
-                    <div class="value">{{ card.value }}</div>
-                    <div class="subtext">{{ card.subtext }}</div>
+    <!-- ═══════════════ PAGE 1: LIVE ═══════════════ -->
+    <div id="page-live" class="panel active">
+        <!-- Hero -->
+        <div class="hero">
+            <div class="hero-number {{ 'pos' if portfolio.mtd_pnl >= 0 else 'neg' }}">
+                {{ "%+.2f"|format(portfolio.mtd_pnl * 100) }}%
+            </div>
+            <div class="hero-sub">Abel Portfolio · month to date</div>
+            <div class="hero-row">
+                <div class="hero-stat">
+                    <div class="val {{ 'pos' if portfolio.today_pnl >= 0 else 'neg' }}">{{ "%+.2f"|format(portfolio.today_pnl * 100) }}%</div>
+                    <div class="lbl">today</div>
                 </div>
-                {% endfor %}
-            </section>
-
-            <div class="overview-grid">
-                <div class="chart-container">
-                    <div class="label">Live Signals</div>
-                    <div class="row-list">
-                        <div class="row-head"><span>Strategy</span><span>Position</span><span>Latest PnL</span><span>Status</span><span>Since</span></div>
-                        {% for sig in live_overview.signals_active %}
-                        <div class="row-item">
-                            <span><span style="color: {{ sig.color }}">&#9679;</span> {{ sig.name }}</span>
-                            <span>{{ "%.2f"|format(sig.position) }}</span>
-                            <span class="{{ 'pnl-pos' if sig.today_pnl > 0 else 'pnl-neg' if sig.today_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</span>
-                            <span>{{ 'Changed' if sig.changed else 'Holding' }}</span>
-                            <span>{{ live_overview.live_since }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% if live_overview.n_flat %}
-                    <div class="subtext" style="margin-top: 12px;">{{ live_overview.n_flat }} signals are currently flat.</div>
-                    {% endif %}
+                <div class="hero-stat">
+                    <div class="val {{ 'pos' if portfolio.total_pnl >= 0 else 'neg' }}">{{ "%+.2f"|format(portfolio.total_pnl * 100) }}%</div>
+                    <div class="lbl">YTD</div>
                 </div>
-
-                <div class="chart-container">
-                    <div class="label">Recent Live Days</div>
-                    <div class="row-list">
-                        <div class="row-head"><span>Date</span><span>Active</span><span>PnL</span><span>Spark</span></div>
-                        {% for day in live_overview.recent_days %}
-                        <div class="row-item">
-                            <span>{{ day.date }}</span>
-                            <span>{{ day.n_active }}</span>
-                            <span class="{{ 'pnl-pos' if day.pnl > 0 else 'pnl-neg' if day.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(day.pnl * 100) }}%</span>
-                            <span>{{ day.spark }}</span>
-                        </div>
-                        {% endfor %}
-                    </div>
+                <div class="hero-stat">
+                    <div class="val">{{ portfolio.n_active }}/{{ portfolio.n_strats }}</div>
+                    <div class="lbl">active</div>
                 </div>
             </div>
+        </div>
 
-            <div class="chart-container">
-                <div class="label">Live Performance</div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Strategy</th>
-                            <th>Days</th>
-                            <th>Active</th>
-                            <th>Sharpe</th>
-                            <th>PnL</th>
-                            <th>MaxDD</th>
-                            <th>Win</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in live_overview.live_perf %}
-                        <tr>
-                            <td><span style="color: {{ s.color }}">&#9679;</span> {{ s.name }}</td>
-                            <td>{{ s.days }}</td>
-                            <td>{{ s.active_days }}</td>
-                            <td>{{ "%.2f"|format(s.sharpe) }}</td>
-                            <td class="{{ 'pnl-pos' if s.pnl > 0 else 'pnl-neg' if s.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(s.pnl * 100) }}%</td>
-                            <td>{{ "%+.2f"|format(-1 * s.max_dd * 100) }}%</td>
-                            <td>{{ "%.0f"|format(s.win_rate * 100) }}%</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="chart-container">
-                <div class="label">Live Ledger</div>
-                {% for day in live_overview.ledger %}
-                <div class="row-list">
-                    <div class="label" style="margin-top: 16px;">{{ day.date }}{% if day.total_pnl != 0 %} · {{ "%+.2f"|format(day.total_pnl * 100) }}%{% endif %}</div>
-                    <div class="row-head"><span>Strategy</span><span>Action</span><span>Signal</span><span>PnL</span><span>Cum</span></div>
-                    {% for entry in day.entries %}
-                    <div class="row-item">
-                        <span><span style="color: {{ entry.color }}">&#9679;</span> {{ entry.name }}</span>
-                        <span class="{{ entry.action_class }}">{{ entry.action }}</span>
-                        <span>{{ "%.2f"|format(entry.position) }}</span>
-                        <span class="{{ 'pnl-pos' if entry.pnl > 0 else 'pnl-neg' if entry.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.pnl * 100) }}%</span>
-                        <span class="{{ 'pnl-pos' if entry.cum_pnl > 0 else 'pnl-neg' if entry.cum_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.cum_pnl * 100) }}%</span>
-                    </div>
+        <!-- Signals -->
+        <div class="section">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <div class="section-title">Signals</div>
+                <div>
+                    {% for ticker, price in portfolio.prices.items() %}
+                    <span class="price-badge"><span class="ticker">{{ ticker }}</span> ${{ "%.2f"|format(price) }}</span>&nbsp;&nbsp;
                     {% endfor %}
                 </div>
-                {% endfor %}
             </div>
-            {% endif %}
-
-            <table>
-                <thead>
-                    <tr>
-                        <th>Strategy</th>
-                        <th>Asset</th>
-                        <th>Sharpe</th>
-                        <th>PnL</th>
-                        <th>Signal</th>
-                        <th>Source</th>
-                        <th>Paper</th>
-                        <th>Live Through</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for s in strategies %}
-                    <tr>
-                        <td><span style="color: {{ s.color }}">&#9679;</span> {{ s.name }}</td>
-                        <td>{{ s.asset }}</td>
-                        {% if s.has_data %}
-                        <td>{{ "%.2f"|format(s.metrics.sharpe) }}</td>
-                        <td class="{{ 'pnl-pos' if s.metrics.cum_return > 0 else 'pnl-neg' }}">{{ fmt_pnl_pct(s.metrics.cum_return) }}</td>
-                        {% else %}
-                        <td colspan="2" class="muted">No backtest data</td>
-                        {% endif %}
-                        <td>{{ s.display_signal_label }}</td>
-                        <td>{{ s.display_signal_source }}</td>
-                        <td>{{ s.tracking_status }}</td>
-                        <td>{{ s.tracking_latest_date or 'N/A' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="no-data">No strategies configured. Add strategies to <code>strategies.yaml</code>.</div>
+            <div class="signal-row" style="opacity:0.55; font-size:10px; text-transform:uppercase; letter-spacing:0.5px;">
+                <div class="signal-dot" style="background:transparent;"></div>
+                <div class="signal-name">strategy</div>
+                <div class="signal-bar-wrap"></div>
+                <div class="signal-pos">pos</div>
+                <div class="signal-pnl" title="today">today</div>
+                <div class="signal-pnl" title="MTD" style="min-width:56px;">mtd</div>
+                <div class="signal-pnl" title="YTD" style="min-width:56px;">ytd</div>
+            </div>
+            {% for sig in portfolio.signals_active %}
+            <div class="signal-row">
+                <div class="signal-dot" style="background: {{ sig.color }};"></div>
+                <div class="signal-name">{{ sig.name }}</div>
+                <div class="signal-bar-wrap">
+                    <div class="signal-bar-bg"><div class="signal-bar" style="width: {{ (sig.position * 100)|int }}%;"></div></div>
+                </div>
+                <div class="signal-pos">{{ "%.2f"|format(sig.position) }}</div>
+                {% if sig.changed %}<div class="signal-badge">NEW</div>{% endif %}
+                <div class="signal-pnl {{ 'pos' if sig.today_pnl > 0 else 'neg' if sig.today_pnl < 0 else 'muted' }}" title="today">{{ "%+.2f"|format(sig.today_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.mtd_pnl > 0 else 'neg' if sig.mtd_pnl < 0 else 'muted' }}" title="MTD" style="min-width:56px;">{{ "%+.1f"|format(sig.mtd_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.ytd_pnl > 0 else 'neg' if sig.ytd_pnl < 0 else 'muted' }}" title="YTD" style="min-width:56px;">{{ "%+.1f"|format(sig.ytd_pnl * 100) }}%</div>
+            </div>
+            {% endfor %}
+            {% if portfolio.signals_flat %}
+            <div class="flat-summary" style="margin-top:10px;">flat ({{ portfolio.n_flat }})</div>
+            {% for sig in portfolio.signals_flat %}
+            <div class="signal-row" style="opacity:0.55;">
+                <div class="signal-dot" style="background: {{ sig.color }};"></div>
+                <div class="signal-name">{{ sig.name }}</div>
+                <div class="signal-bar-wrap"></div>
+                <div class="signal-pos muted">—</div>
+                <div class="signal-pnl muted" title="today">—</div>
+                <div class="signal-pnl {{ 'pos' if sig.mtd_pnl > 0 else 'neg' if sig.mtd_pnl < 0 else 'muted' }}" title="MTD" style="min-width:56px;">{{ "%+.1f"|format(sig.mtd_pnl * 100) }}%</div>
+                <div class="signal-pnl {{ 'pos' if sig.ytd_pnl > 0 else 'neg' if sig.ytd_pnl < 0 else 'muted' }}" title="YTD" style="min-width:56px;">{{ "%+.1f"|format(sig.ytd_pnl * 100) }}%</div>
+            </div>
+            {% endfor %}
             {% endif %}
         </div>
 
-        {% for s in strategies %}
-        <div id="panel-{{ s.id }}" class="panel">
-            <div class="strategy-header">
-                <div>
-                    <div class="title">
-                        <div class="dot" style="background: {{ s.color }}"></div>
-                        <h2>{{ s.name }}</h2>
-                        <span class="muted">{{ s.asset }}</span>
-                    </div>
-                    <div class="hero-meta" style="margin-top: 10px;">
-                        <span>Signal: {{ s.display_signal_label }}</span>
-                        <span>Source: {{ s.display_signal_source }}</span>
-                        <span>Paper: {{ s.tracking_status }}</span>
-                        <span>Live through: {{ s.tracking_latest_date or 'N/A' }}</span>
-                    </div>
-                </div>
-                <div class="muted">{{ s.tracking_status_detail }}</div>
+        <!-- Recent days -->
+        <div class="section">
+            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                <div class="section-title">Recent</div>
+                <span class="{{ 'stale-warn' if portfolio.stale_hours > 24 else 'muted' }}" style="font-size:11px;">
+                    updated {{ portfolio.stale_label }}
+                </span>
             </div>
-
-            <div class="section-tabs">
-                <button class="section-tab active" onclick="showSectionTab('{{ s.id }}', 'backtest', event)">Backtest</button>
-                <button class="section-tab" onclick="showSectionTab('{{ s.id }}', 'paper', event)">Paper Trading</button>
+            {% for day in portfolio.recent_days %}
+            <div class="recent-row">
+                <div class="recent-date">{{ day.date }}</div>
+                <div class="recent-active">{{ day.n_active }} active</div>
+                <div class="recent-pnl {{ 'pos' if day.pnl > 0 else 'neg' if day.pnl < 0 else 'muted' }}">{{ "%+.2f"|format(day.pnl * 100) }}%</div>
+                <div class="recent-spark">{{ day.spark }}</div>
             </div>
+            {% endfor %}
+        </div>
 
-            <div id="section-{{ s.id }}-backtest" class="section-panel active">
-                {% if s.has_data %}
-                <section class="cards">
-                    {% for card in s.summary_cards %}
-                    <div class="info-card">
-                        <div class="label">{{ card.label }}</div>
-                        <div class="value">{{ card.value }}</div>
-                        <div class="subtext">{{ s.asset }}</div>
-                    </div>
-                    {% endfor %}
-                    <div class="info-card">
-                        <div class="label">Paper Status</div>
-                        <div class="value">{{ s.tracking_status }}</div>
-                        <div class="subtext">{{ s.display_signal_source }} signal</div>
-                    </div>
-                </section>
-                <div class="grid">
-                    <div class="chart-container full"><div id="equity-{{ s.id }}"></div></div>
-                    <div class="chart-container full"><div id="position-{{ s.id }}"></div></div>
-                </div>
-                {% else %}
-                <div class="no-data">No trade log data. Run <code>causal-edge run --strategy {{ s.id }}</code>.</div>
-                {% endif %}
+        <!-- Live Performance Summary -->
+        {% if portfolio.live_perf %}
+        <div class="section">
+            <div class="section-title">Live Performance (since March 2026)</div>
+            <table style="font-size:13px;">
+                <thead><tr>
+                    <th>Strategy</th>
+                    <th class="num">Days</th>
+                    <th class="num">Active</th>
+                    <th class="num">Sharpe</th>
+                    <th class="num">PnL</th>
+                    <th class="num">MaxDD</th>
+                    <th class="num">Win</th>
+                </tr></thead>
+                <tbody>
+                {% for p in portfolio.live_perf %}
+                <tr onclick="showStrategy('{{ p.id }}')">
+                    <td><span style="color:{{ p.color }};font-size:8px;">&#9679;</span>&nbsp; {{ p.name }}</td>
+                    <td class="num">{{ p.days }}</td>
+                    <td class="num muted">{{ p.active_days }}</td>
+                    <td class="num {{ 'pos' if p.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(p.sharpe) }}</td>
+                    <td class="num {{ 'pos' if p.pnl > 0 else 'neg' }}">{{ "%+.2f"|format(p.pnl * 100) }}%</td>
+                    <td class="num neg">{% if p.max_dd > 0 %}-{{ "%.1f"|format(p.max_dd * 100) }}%{% else %}0%{% endif %}</td>
+                    <td class="num">{{ "%.0f"|format(p.win_rate * 100) }}%</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <!-- Live Ledger: per-strategy daily detail -->
+        <div class="section">
+            <div class="section-title">Ledger</div>
+            <div class="ledger-row" style="border-bottom:1px solid var(--separator);padding-bottom:8px;">
+                <div class="ledger-strat" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Strategy</div>
+                <div class="ledger-action" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Action</div>
+                <div class="ledger-pos" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Size</div>
+                <div class="ledger-pnl" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">PnL</div>
+                <div class="ledger-cum" style="font-size:10px;color:var(--label);text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Cum</div>
+                <div class="ledger-bar"></div>
             </div>
-
-            <div id="section-{{ s.id }}-paper" class="section-panel">
-                <section class="cards">
-                    {% if s.has_tracking_data %}
-                    {% for card in s.tracking_summary_cards %}
-                    <div class="info-card">
-                        <div class="label">{{ card.label }}</div>
-                        <div class="value">{{ card.value }}</div>
-                        <div class="subtext">Paper trading</div>
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <div class="info-card"><div class="label">Paper Status</div><div class="value">Not started</div><div class="subtext">Run <code>causal-edge paper --strategy {{ s.id }}</code></div></div>
-                    <div class="info-card"><div class="label">Next Position</div><div class="value">N/A</div><div class="subtext">No live signal yet</div></div>
-                    <div class="info-card"><div class="label">Live Through</div><div class="value">N/A</div><div class="subtext">Awaiting first closed bar</div></div>
-                    <div class="info-card"><div class="label">Source</div><div class="value">Backtest</div><div class="subtext">Fallback display signal</div></div>
+            {% for day in portfolio.ledger %}
+            <div class="ledger-date-header">{{ day.date }}{% if day.total_pnl != 0 %} <span class="{{ 'pos' if day.total_pnl > 0 else 'neg' }}" style="float:right;font-size:12px;font-family:'SF Mono',monospace;">{{ "%+.2f"|format(day.total_pnl * 100) }}%</span>{% endif %}</div>
+            {% for entry in day.entries %}
+            <div class="ledger-row">
+                <div class="ledger-strat" style="color: {{ entry.color }};">{{ entry.name }}</div>
+                <div class="ledger-action {{ entry.action_class }}">{{ entry.action }}</div>
+                <div class="ledger-pos">{{ "%.2f"|format(entry.position) if entry.position > 0.01 else "—" }}</div>
+                <div class="ledger-pnl {{ 'pos' if entry.pnl > 0 else 'neg' if entry.pnl < 0 else 'muted' }}">{{ "%+.3f"|format(entry.pnl * 100) }}%</div>
+                <div class="ledger-cum {{ 'pos' if entry.cum_pnl > 0 else 'neg' if entry.cum_pnl < 0 else 'muted' }}">{{ "%+.2f"|format(entry.cum_pnl * 100) }}%</div>
+                <div class="ledger-bar">
+                    {% if entry.pnl > 0 %}
+                    <div class="ledger-bar-inner" style="background:var(--green);opacity:0.5;width:{{ (entry.pnl * 2000)|int }}px;max-width:100%;"></div>
+                    {% elif entry.pnl < 0 %}
+                    <div class="ledger-bar-inner" style="background:var(--red);opacity:0.5;width:{{ (entry.pnl * -2000)|int }}px;max-width:100%;"></div>
                     {% endif %}
-                </section>
-
-                {% if s.has_tracking_data %}
-                <div class="grid">
-                    <div class="chart-container">
-                        {% if s.has_tracking_asset_chart %}
-                        <div id="tracking-asset-{{ s.id }}"></div>
-                        {% else %}
-                        <div class="label">Ticker Price Since Tracking Began</div>
-                        <div class="empty">Legacy live rows do not include asset price returns, so this chart is hidden.</div>
-                        {% endif %}
-                    </div>
-                    <div class="chart-container"><div id="tracking-position-{{ s.id }}"></div></div>
-                    <div class="chart-container full">
-                        <div class="label">Live Rows</div>
-                        <div class="row-list">
-                            <div class="row-head"><span>Date</span><span>Close</span><span>Signal</span><span>Next</span><span>PnL</span></div>
-                            {% for row in s.tracking_rows %}
-                            <div class="row-item"><span>{{ row.date }}</span><span>{{ row.close }}</span><span>{{ row.signal }}</span><span>{{ row.next_position }}</span><span>{{ row.pnl }}</span></div>
-                            {% endfor %}
-                        </div>
-                    </div>
                 </div>
-                {% elif s.has_tracking_preview %}
-                <div class="empty">No live paper rows yet. The preview below shows the final backtest context before paper trading starts.</div>
-                <div class="grid">
-                    <div class="chart-container full"><div id="tracking-preview-{{ s.id }}"></div></div>
-                </div>
-                {% else %}
-                <div class="empty">Paper trading has not started and no preview data is available yet.</div>
-                {% endif %}
             </div>
+            {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ═══════════════ PAGE 2: PORTFOLIO ═══════════════ -->
+    <div id="page-portfolio" class="panel">
+        <table>
+            <thead><tr>
+                <th>Strategy</th>
+                <th>Asset</th>
+                <th class="num">Sharpe</th>
+                <th class="num">Lo</th>
+                <th class="num">IC</th>
+                <th class="num">Omega</th>
+                <th class="num">MaxDD</th>
+                <th class="num">PnL</th>
+                <th>Health</th>
+                <th>Score</th>
+            </tr></thead>
+            <tbody>
+                {% for s in strategies %}
+                <tr onclick="showStrategy('{{ s.id }}')">
+                    <td><span style="color: {{ s.color }}; font-size: 8px;">&#9679;</span>&nbsp; {{ s.name }}</td>
+                    <td class="muted">{{ s.asset }}</td>
+                    {% if s.has_data %}
+                    <td class="num {{ 'pos' if s.metrics.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(s.metrics.sharpe) }}</td>
+                    <td class="num">{% if s.validation and s.validation.metrics.lo_adjusted is defined %}{{ "%.2f"|format(s.validation.metrics.lo_adjusted) }}{% else %}—{% endif %}</td>
+                    <td class="num">{% if s.validation and s.validation.metrics.ic is defined %}{{ "%.3f"|format(s.validation.metrics.ic) }}{% else %}—{% endif %}</td>
+                    <td class="num">{% if s.validation and s.validation.metrics.omega is defined %}{{ "%.1f"|format(s.validation.metrics.omega) }}{% else %}—{% endif %}</td>
+                    <td class="num neg">{{ "%.1f"|format(s.metrics.max_dd * -100) }}%</td>
+                    <td class="num {{ 'pos' if s.metrics.cum_pnl > 0 else 'neg' }}">{{ fmt_pnl_pct(s.metrics.cum_pnl) }}</td>
+                    <td><span class="health {{ s.health_class }}">{{ s.health_dots }}</span></td>
+                    <td>{% if s.validation %}<span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">{{ s.validation.score }}</span>{% endif %}</td>
+                    {% else %}
+                    <td colspan="8" class="muted">no data</td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ═══════════════ PAGE 3: STRATEGY ═══════════════ -->
+    <div id="page-strategy" class="panel">
+        <div class="strat-select">
+            {% for s in strategies %}
+            <button class="strat-btn" onclick="showStrategyDetail('{{ s.id }}')" id="btn-{{ s.id }}" style="border-left: 3px solid {{ s.color }};">{{ s.name }}</button>
+            {% endfor %}
+        </div>
+
+        {% for s in strategies %}
+        <div id="detail-{{ s.id }}" class="strat-detail" style="display:none;">
+            <div class="strat-header">
+                <div class="signal-dot" style="background: {{ s.color }}; width: 12px; height: 12px;"></div>
+                <h2>{{ s.name }}</h2>
+                <span class="asset">{{ s.asset }}</span>
+                {% if s.validation %}<span class="badge {{ 'badge-pass' if s.validation.verdict == 'PASS' else 'badge-fail' }}">{{ s.validation.score }} {{ s.validation.verdict }}</span>{% endif %}
+            </div>
+
+            {% if s.has_data %}
+            <div class="metrics-bar">
+                {% for lbl, key, fmt in [("Sharpe", "sharpe", "%.2f"), ("PnL", "cum_pnl", None), ("MaxDD", "max_dd", None), ("Calmar", "calmar", "%.1f"), ("Win Rate", "win_rate", None), ("Days", "n_days", "%d")] %}
+                <div class="metric">
+                    <div class="lbl">{{ lbl }}</div>
+                    <div class="val {% if key == 'cum_pnl' %}{{ 'pos' if s.metrics[key] > 0 else 'neg' }}{% elif key == 'max_dd' %}neg{% endif %}">
+                        {% if key == 'cum_pnl' %}{{ fmt_pnl_pct(s.metrics[key]) }}{% elif key == 'max_dd' %}-{{ "%.1f"|format(s.metrics[key] * 100) }}%{% elif key == 'win_rate' %}{{ "%.0f"|format(s.metrics[key] * 100) }}%{% elif fmt %}{{ fmt|format(s.metrics[key]) }}{% else %}{{ s.metrics[key] }}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if s.validation %}
+            <div class="metrics-bar" style="border-left: 3px solid var(--blue);">
+                {% for lbl, val in [("Lo-adjusted", s.validation.metrics.get("lo_adjusted", 0)), ("IC", s.validation.metrics.get("ic", 0)), ("Omega", s.validation.metrics.get("omega", 0)), ("DSR", s.validation.metrics.get("dsr", 0)), ("PBO", s.validation.metrics.get("pbo", 0)), ("OOS/IS", s.validation.metrics.get("oos_is", 0))] %}
+                <div class="metric">
+                    <div class="lbl">{{ lbl }}</div>
+                    <div class="val">{% if lbl in ('DSR', 'PBO') %}{{ "%.0f"|format(val * 100) }}%{% else %}{{ "%.3f"|format(val) }}{% endif %}</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if s.live %}
+            <div class="metrics-bar" style="border-left: 3px solid var(--green);">
+                <div class="metric"><div class="lbl">Live</div><div class="val pos">{{ s.live.n_days }}d</div></div>
+                <div class="metric"><div class="lbl">Live Sharpe</div><div class="val {{ 'pos' if s.live.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(s.live.sharpe) }}</div></div>
+                <div class="metric"><div class="lbl">Live PnL</div><div class="val {{ 'pos' if s.live.cum_pnl > 0 else 'neg' }}">{{ fmt_pnl_pct(s.live.cum_pnl) }}</div></div>
+                <div class="metric"><div class="lbl">Period</div><div class="val" style="font-size:13px;">{{ s.live.start }} → {{ s.live.end }}</div></div>
+            </div>
+            {% endif %}
+
+            <div class="chart-box"><div id="equity-{{ s.id }}"></div></div>
+            <div class="grid-2">
+                <div class="chart-box"><div id="drawdown-{{ s.id }}"></div></div>
+                <div class="chart-box"><div id="rolling-{{ s.id }}"></div></div>
+            </div>
+            <div class="grid-2">
+                <div class="chart-box"><div id="daily-{{ s.id }}"></div></div>
+                <div class="chart-box"><div id="monthly-{{ s.id }}"></div></div>
+            </div>
+
+            {% if s.yearly %}
+            <table class="yearly-table" style="margin-top:12px;">
+                <thead><tr><th>Year</th><th class="num">Sharpe</th><th class="num">PnL</th><th class="num">Days</th></tr></thead>
+                <tbody>
+                {% for y in s.yearly %}
+                <tr>
+                    <td>{{ y.year }}</td>
+                    <td class="num {{ 'pos' if y.sharpe > 0 else 'neg' }}">{{ "%.2f"|format(y.sharpe) }}</td>
+                    <td class="num {{ 'pos' if y.pnl_pct > 0 else 'neg' }}">{{ "%+.1f"|format(y.pnl_pct) }}%</td>
+                    <td class="num muted">{{ y.n_days }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if s.live and s.live.ledger %}
+            <div class="chart-box" style="margin-top:12px;">
+                <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:8px;">Live Ledger</div>
+                <table style="font-size:13px;">
+                    <thead><tr><th>Date</th><th>Position</th>{% if s.live.ledger[0].price is defined and s.live.ledger[0].price %}<th class="num">Price</th>{% endif %}<th class="num">PnL</th><th class="num">Cum</th></tr></thead>
+                    <tbody>
+                    {% for row in s.live.ledger[-20:] %}
+                    <tr>
+                        <td class="muted">{{ row.date }}</td>
+                        <td>{% if row.position > 0.01 %}<span class="pos">{{ "%.2f"|format(row.position) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+                        {% if row.price %}<td class="num">${{ "%.2f"|format(row.price) }}</td>{% endif %}
+                        <td class="num {{ 'pos' if row.pnl_pct > 0 else 'neg' if row.pnl_pct < 0 else '' }}">{{ "%+.3f"|format(row.pnl_pct) }}%</td>
+                        <td class="num {{ 'pos' if row.cum_pct > 0 else 'neg' }}">{{ "%+.2f"|format(row.cum_pct) }}%</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="no-data">No data. Run <code>causal-edge run --strategy {{ s.id }}</code></div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
 
     <script>
-        function showTab(id, event) {
+        function showPage(id) {
             document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.getElementById('panel-' + id).classList.add('active');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('page-' + id).classList.add('active');
             event.target.classList.add('active');
+            if (id === 'strategy') initCharts();
         }
-
-        function showSectionTab(strategyId, sectionId, event) {
-            document.querySelectorAll('#panel-' + strategyId + ' .section-panel').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('#panel-' + strategyId + ' .section-tab').forEach(t => t.classList.remove('active'));
-            document.getElementById('section-' + strategyId + '-' + sectionId).classList.add('active');
-            event.target.classList.add('active');
+        function showStrategy(id) {
+            showPage('strategy');
+            showStrategyDetail(id);
+            document.querySelectorAll('.nav-btn')[2].classList.add('active');
         }
-
-        {% for s in strategies %}
-        {% if s.has_data %}
-        Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json | safe }}.data, {{ s.equity_json | safe }}.layout, {responsive: true});
-        Plotly.newPlot('position-{{ s.id }}', {{ s.position_json | safe }}.data, {{ s.position_json | safe }}.layout, {responsive: true});
+        function showStrategyDetail(id) {
+            document.querySelectorAll('.strat-detail').forEach(d => d.style.display = 'none');
+            document.querySelectorAll('.strat-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('detail-' + id).style.display = 'block';
+            document.getElementById('btn-' + id).classList.add('active');
+            initCharts();
+        }
+        var chartsLoaded = {};
+        function initCharts() {
+            {% for s in strategies %}
+            {% if s.has_data %}
+            if (!chartsLoaded['{{ s.id }}'] && document.getElementById('detail-{{ s.id }}').style.display !== 'none') {
+                Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json }}.data, {{ s.equity_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('drawdown-{{ s.id }}', {{ s.drawdown_json }}.data, {{ s.drawdown_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('rolling-{{ s.id }}', {{ s.rolling_sharpe_json }}.data, {{ s.rolling_sharpe_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('daily-{{ s.id }}', {{ s.daily_pnl_json }}.data, {{ s.daily_pnl_json }}.layout, {responsive:true,displayModeBar:false});
+                Plotly.newPlot('monthly-{{ s.id }}', {{ s.monthly_json }}.data, {{ s.monthly_json }}.layout, {responsive:true,displayModeBar:false});
+                chartsLoaded['{{ s.id }}'] = true;
+            }
+            {% endif %}
+            {% endfor %}
+        }
+        // Show first strategy by default when switching to strategy page
+        {% if strategies %}
+        document.addEventListener('DOMContentLoaded', function() {
+            showStrategyDetail('{{ strategies[0].id }}');
+        });
         {% endif %}
-        {% if s.has_tracking_data %}
-        {% if s.has_tracking_asset_chart %}
-        Plotly.newPlot('tracking-asset-{{ s.id }}', {{ s.tracking_asset_price_json | safe }}.data, {{ s.tracking_asset_price_json | safe }}.layout, {responsive: true});
-        {% endif %}
-        Plotly.newPlot('tracking-position-{{ s.id }}', {{ s.tracking_position_json | safe }}.data, {{ s.tracking_position_json | safe }}.layout, {responsive: true});
-        {% elif s.has_tracking_preview %}
-        Plotly.newPlot('tracking-preview-{{ s.id }}', {{ s.tracking_preview_json | safe }}.data, {{ s.tracking_preview_json | safe }}.layout, {responsive: true});
-        {% endif %}
-        {% endfor %}
     </script>
 </body>
 </html>
