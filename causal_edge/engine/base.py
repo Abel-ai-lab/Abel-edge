@@ -11,7 +11,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
 
-from causal_edge.engine.price_data import normalize_bars
+from causal_edge.engine.feed_contract import align_series_to_dates
+from causal_edge.engine.feed_loader import load_declared_feed
+from causal_edge.engine.signal_contract import validate_signal_output
 
 
 class StrategyEngine(ABC):
@@ -24,12 +26,19 @@ class StrategyEngine(ABC):
 
     def __init__(self, context: dict | None = None) -> None:
         self.context = context
-        self._bars_loader = None
-        self._price_data_config = {}
 
     def bind_price_loader(self, loader, price_data_config: dict | None = None) -> None:
-        self._bars_loader = loader
-        self._price_data_config = price_data_config or {}
+        """Deprecated legacy loader hook.
+
+        Primary bars now come from the synthesized framework-managed `primary`
+        feed, and all external data must flow through `price_data` / `feeds`
+        plus `load_bars()` / `load_feed()`.
+        """
+        raise RuntimeError(
+            "StrategyEngine.bind_price_loader() is deprecated and no longer supported. "
+            "Declare primary data via strategy price_data, declare auxiliary inputs via feeds, "
+            "and load them with load_bars() / load_feed()."
+        )
 
     def load_bars(
         self,
@@ -41,21 +50,95 @@ class StrategyEngine(ABC):
         limit: int | None = None,
         fields: list[str] | None = None,
     ) -> pd.DataFrame:
-        if self._bars_loader is None:
-            raise RuntimeError("Price loader is not configured for this engine.")
-        resolved_symbols = symbols or [
-            self._price_data_config.get("symbol") or self.context.get("asset")
-        ]
-        df = self._bars_loader(
-            symbols=resolved_symbols,
+        bars = self.load_feed(
+            "primary",
             start=start,
             end=end,
-            timeframe=timeframe or self._price_data_config.get("timeframe", "1d"),
-            limit=limit or self._price_data_config.get("limit"),
+            timeframe=timeframe,
+            limit=limit,
             fields=fields,
-            config=self._price_data_config,
         )
-        return normalize_bars(df)
+        if symbols is None:
+            return bars
+        return bars[bars["symbol"].isin(symbols)].reset_index(drop=True)
+
+    def load_feed(
+        self,
+        name: str,
+        *,
+        start=None,
+        end=None,
+        timeframe: str | None = None,
+        limit: int | None = None,
+        fields: list[str] | None = None,
+    ) -> pd.DataFrame:
+        return load_declared_feed(
+            self,
+            name,
+            start=start,
+            end=end,
+            timeframe=timeframe,
+            limit=limit,
+            fields=fields,
+        )
+
+    def feed_series(
+        self,
+        name: str,
+        field: str = "close",
+        *,
+        align_to=None,
+        method: str | None = None,
+        allow_gaps: bool = True,
+    ) -> pd.Series:
+        frame = self.load_feed(name)
+        feed_cfg = ((self.context or {}).get("_feeds") or {}).get(name) or {}
+        kind = feed_cfg.get("kind")
+        if kind == "series":
+            series = pd.Series(frame["value"].to_numpy(), index=pd.DatetimeIndex(frame["timestamp"]))
+        else:
+            if field not in frame.columns:
+                raise ValueError(f"Feed '{name}' does not expose field '{field}'.")
+            series = pd.Series(frame[field].to_numpy(), index=pd.DatetimeIndex(frame["timestamp"]))
+        if align_to is not None:
+            series = self.align_series(
+                series,
+                align_to,
+                method="ffill" if method is None else method,
+                allow_gaps=allow_gaps,
+            )
+        return series
+
+    def align_series(
+        self,
+        series: pd.Series,
+        dates,
+        *,
+        method: str | None = "ffill",
+        allow_gaps: bool = True,
+    ) -> pd.Series:
+        profile = ((self.context or {}).get("_data_contract") or {}).get("profile", "daily")
+        return align_series_to_dates(
+            series,
+            dates,
+            profile=profile,
+            method=method,
+            allow_gaps=allow_gaps,
+        )
+
+    def finalize_signals(
+        self,
+        positions,
+        dates,
+        prices,
+    ) -> tuple[np.ndarray, pd.DatetimeIndex, np.ndarray]:
+        profile = ((self.context or {}).get("_data_contract") or {}).get("profile", "daily")
+        return validate_signal_output(
+            positions,
+            dates,
+            prices,
+            profile=profile,
+        )
 
     @abstractmethod
     def compute_signals(

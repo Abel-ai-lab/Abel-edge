@@ -1,12 +1,9 @@
-"""Tests for the optional Abel plugin."""
+"""Tests for Abel auth and credential helpers."""
 
 import os
 
-import pandas as pd
-
 import causal_edge.plugins.abel.credentials as credentials_module
 from causal_edge.plugins.abel.auth import login_with_oauth
-from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
 from causal_edge.plugins.abel.credentials import (
     MissingAbelApiKeyError,
     persist_env_value,
@@ -15,13 +12,6 @@ from causal_edge.plugins.abel.credentials import (
     resolve_auth_base_url,
     resolve_cap_base_url,
 )
-from examples.causal_demo.engine import CausalDemoEngine, resolve_price_column
-
-
-def test_normalize_public_node_id_ethusd():
-    assert normalize_public_node_id("ETHUSD") == "ETHUSD.price"
-    assert normalize_public_node_id("ETH") == "ETHUSD.price"
-    assert normalize_public_node_id("ETHUSD_close") == "ETHUSD.price"
 
 
 def test_resolve_api_key_prefers_env(monkeypatch, tmp_path):
@@ -151,9 +141,9 @@ def test_require_api_key_raises_when_missing(monkeypatch, tmp_path):
 
     try:
         require_api_key(env_path=tmp_path / ".env")
-    except MissingAbelApiKeyError as e:
-        assert "ABEL_API_KEY" in str(e)
-        assert "ABEL_AUTH_ENV_FILE" in str(e)
+    except MissingAbelApiKeyError as exc:
+        assert "ABEL_API_KEY" in str(exc)
+        assert "ABEL_AUTH_ENV_FILE" in str(exc)
     else:
         raise AssertionError("Expected MissingAbelApiKeyError")
 
@@ -171,9 +161,9 @@ def test_require_api_key_mentions_auth_status_when_skill_installed(monkeypatch, 
     monkeypatch.chdir(project_dir)
     try:
         require_api_key(env_path=project_dir / ".env")
-    except MissingAbelApiKeyError as e:
-        assert "auth-status --compact" in str(e)
-        assert "causal-abel" in str(e)
+    except MissingAbelApiKeyError as exc:
+        assert "auth-status --compact" in str(exc)
+        assert "causal-abel" in str(exc)
     else:
         raise AssertionError("Expected MissingAbelApiKeyError")
 
@@ -361,192 +351,3 @@ def test_login_with_oauth_returns_existing_key(monkeypatch, tmp_path):
 
     assert result["status"] == "already_configured"
     assert result["api_key"] == "abel_existing"
-
-
-def test_resolve_price_column_prefers_close():
-    df = pd.DataFrame({"close": [1.0], "price": [2.0], "volume": [3.0]})
-    assert resolve_price_column(df, "price") == "close"
-    assert resolve_price_column(df, "volume") == "volume"
-
-
-def test_causal_demo_runs_with_default_parent_metadata():
-    engine = CausalDemoEngine()
-    positions, dates, prices = engine.compute_signals()
-    assert len(positions) == len(dates) == len(prices)
-    assert positions[-1] >= 0.0
-
-
-def test_causal_demo_realistic_csv_mapping_demo(tmp_path):
-    price_path = tmp_path / "ethusd.csv"
-    pd.DataFrame(
-        {
-            "date": pd.bdate_range("2025-01-01", periods=5),
-            "close": [100, 101, 102, 103, 104],
-            "volume": [10, 11, 12, 13, 14],
-        }
-    ).to_csv(price_path, index=False)
-    df = pd.read_csv(price_path)
-    assert resolve_price_column(df, "price") == "close"
-
-
-def test_fetch_bars_uses_market_prod_base_url(monkeypatch):
-    monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
-
-    class StubSession:
-        def __init__(self):
-            self.calls = []
-
-        def post(self, url, json=None, headers=None, timeout=20):
-            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
-            return StubResponse({"data": []})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    session = StubSession()
-    client = AbelClient(session=session)
-    client.fetch_bars(
-        symbols=["ETHUSD"],
-        start=None,
-        end=None,
-        timeframe="1d",
-        limit=10,
-        fields=None,
-        api_key="abel_test",
-    )
-
-    assert session.calls[0]["url"] == "https://cap.abel.ai/api/market/day_bar"
-    assert session.calls[0]["json"]["symbols"] == ["ETHUSD"]
-    assert session.calls[0]["headers"]["Authorization"] == "Bearer abel_test"
-    assert "api-key" not in session.calls[0]["headers"]
-
-
-def test_fetch_bars_uses_custom_base_url():
-    class StubSession:
-        def __init__(self):
-            self.calls = []
-
-        def post(self, url, json=None, headers=None, timeout=20):
-            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
-            return StubResponse({"data": []})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    session = StubSession()
-    client = AbelClient(cap_base_url="https://cap.custom.abel.ai/api/", session=session)
-    client.fetch_bars(
-        symbols=["ETHUSD"],
-        start=None,
-        end=None,
-        timeframe="1d",
-        limit=10,
-        fields=None,
-        api_key="abel_test",
-    )
-
-    assert session.calls[0]["url"] == "https://cap.custom.abel.ai/api/market/day_bar"
-
-
-def test_fetch_bars_preserves_bearer_auth_header():
-    class StubSession:
-        def __init__(self):
-            self.calls = []
-
-        def post(self, url, json=None, headers=None, timeout=20):
-            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
-            return StubResponse({"data": []})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    session = StubSession()
-    client = AbelClient(session=session)
-    client.fetch_bars(
-        symbols=["ETHUSD"],
-        start=None,
-        end=None,
-        timeframe="1d",
-        limit=10,
-        fields=None,
-        api_key="Bearer abel_test",
-    )
-
-    assert session.calls[0]["headers"]["Authorization"] == "Bearer abel_test"
-    assert "api-key" not in session.calls[0]["headers"]
-
-
-def test_discover_uses_cap_prod_base_url(monkeypatch):
-    monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
-
-    class StubSession:
-        def __init__(self):
-            self.calls = []
-
-        def post(self, url, json=None, headers=None, timeout=20):
-            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
-            return StubResponse({"result": []})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    session = StubSession()
-    client = AbelClient(session=session)
-    client.discover_parents(node_id="ETHUSD", limit=5, api_key="abel_test")
-
-    assert session.calls[0]["url"] == "https://cap.abel.ai/api/cap"
-    assert session.calls[0]["json"]["verb"] == "traverse.parents"
-
-
-def test_discover_uses_custom_base_url():
-    class StubSession:
-        def __init__(self):
-            self.calls = []
-
-        def post(self, url, json=None, headers=None, timeout=20):
-            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
-            return StubResponse({"result": []})
-
-    class StubResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return self.payload
-
-    session = StubSession()
-    client = AbelClient(cap_base_url="https://cap.custom.abel.ai/api/", session=session)
-    client.discover_parents(node_id="ETHUSD", limit=5, api_key="abel_test")
-
-    assert session.calls[0]["url"] == "https://cap.custom.abel.ai/api/cap"

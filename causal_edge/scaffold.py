@@ -88,7 +88,7 @@ settings:
   port: 8080
   theme: dark
   price_data:
-    default_source: abel
+    default_adapter: abel
     default_timeframe: 1d
 
 strategies:
