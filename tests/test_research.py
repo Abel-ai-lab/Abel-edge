@@ -5,8 +5,10 @@ import warnings
 from pathlib import Path
 
 from click.testing import CliRunner
+import pandas as pd
 
 from causal_edge.cli import main
+from causal_edge.engine.base import StrategyEngine
 import causal_edge.research.evaluate as research_evaluate
 from causal_edge.research.evaluate import (
     check_look_ahead,
@@ -293,6 +295,124 @@ class TestRunEvaluation:
 
         assert result["verdict"] == "ERROR"
         assert "module-owned StrategyEngine subclass" in result["failures"][0]
+
+
+class TestResearchHelpers:
+    def test_strategy_engine_exposes_discovery_and_readiness_helpers(self):
+        class DemoEngine(StrategyEngine):
+            def compute_signals(self):
+                raise NotImplementedError
+
+            def get_latest_signal(self):
+                return {"position": 0.0}
+
+        engine = DemoEngine(
+            context={
+                "ticker": "sony",
+                "discovery": {
+                    "ticker": "SONY",
+                    "parents": [{"ticker": "AAPL", "field": "price"}],
+                    "blanket_new": [{"ticker": "MSFT", "field": "price", "roles": ["spouse"]}],
+                    "children": [{"ticker": "NVDA", "field": "price"}],
+                    "data_readiness": {
+                        "results": [
+                            {
+                                "ticker": "SONY",
+                                "status": "full_window",
+                                "usable": True,
+                                "full_window": True,
+                            },
+                            {
+                                "ticker": "AAPL",
+                                "status": "full_window",
+                                "usable": True,
+                                "full_window": True,
+                                "rows": 252,
+                            },
+                            {
+                                "ticker": "MSFT",
+                                "status": "partial_window",
+                                "usable": True,
+                                "full_window": False,
+                                "rows": 120,
+                            },
+                            {
+                                "ticker": "NVDA",
+                                "status": "no_data",
+                                "usable": False,
+                                "full_window": False,
+                            },
+                        ]
+                    },
+                },
+                "_research": {
+                    "requested_window": {"start": "2020-01-01", "end": None},
+                },
+            }
+        )
+
+        assert engine.research_target_ticker() == "SONY"
+        assert engine.research_requested_start() == "2020-01-01"
+        assert engine.research_driver_tickers() == ["AAPL", "MSFT"]
+        assert engine.research_driver_tickers(require_full_window=True) == ["AAPL"]
+        assert engine.research_driver_tickers(roles=("parent",)) == ["AAPL"]
+
+        candidates = engine.research_driver_candidates(require_usable=False)
+        assert [item["ticker"] for item in candidates] == ["AAPL", "MSFT", "NVDA"]
+        assert candidates[0]["discovery_roles"] == ["parent"]
+        assert candidates[1]["discovery_roles"] == ["blanket", "spouse"]
+        assert candidates[2]["readiness_status"] == "no_data"
+
+    def test_strategy_engine_can_load_research_bars_and_close_frame(self):
+        class DemoEngine(StrategyEngine):
+            def compute_signals(self):
+                raise NotImplementedError
+
+            def get_latest_signal(self):
+                return {"position": 0.0}
+
+            def load_bars(self, symbols=None, **kwargs):
+                assert symbols == ["SONY", "AAPL"]
+                assert kwargs["start"] == "2020-01-01"
+                assert kwargs["limit"] == 600
+                return pd.DataFrame(
+                    {
+                        "timestamp": pd.to_datetime(
+                            [
+                                "2020-01-01",
+                                "2020-01-01",
+                                "2020-01-02",
+                                "2020-01-02",
+                            ],
+                            utc=True,
+                        ),
+                        "symbol": ["SONY", "AAPL", "SONY", "AAPL"],
+                        "close": [100.0, 50.0, 101.0, 51.0],
+                    }
+                )
+
+        engine = DemoEngine(
+            context={
+                "discovery": {
+                    "ticker": "SONY",
+                    "parents": [{"ticker": "AAPL", "field": "price"}],
+                    "data_readiness": {
+                        "results": [
+                            {"ticker": "AAPL", "status": "full_window", "usable": True, "full_window": True},
+                        ]
+                    },
+                },
+                "_research": {"requested_window": {"start": "2020-01-01", "end": None}},
+            }
+        )
+
+        bars = engine.load_research_bars(require_full_window=True)
+        frame = engine.research_close_frame(require_full_window=True)
+
+        assert list(bars["symbol"]) == ["SONY", "AAPL", "SONY", "AAPL"]
+        assert list(frame.columns) == ["SONY", "AAPL"]
+        assert float(frame.iloc[-1]["SONY"]) == 101.0
+        assert float(frame.iloc[-1]["AAPL"]) == 51.0
 
 
 class TestValidationMarkdown:
