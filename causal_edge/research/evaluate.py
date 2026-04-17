@@ -151,6 +151,7 @@ def run_evaluation(
         return _error(
             f"causal-edge validation failed: {exc}",
             implementation_contract="engine",
+            runtime_stage="validation",
         )
 
     csv_path.unlink(missing_ok=True)
@@ -422,6 +423,14 @@ def _classify_error_message(message: str) -> tuple[str, list[str]]:
             [
                 "Abel auth was missing for a data fetch path.",
                 "Run `causal-edge login` or provide a workspace `.env` with ABEL_API_KEY.",
+            ],
+        )
+    if "causal-edge validation failed:" in text:
+        return (
+            "validation_failed",
+            [
+                "Signal generation completed, but validation could not finish cleanly.",
+                "Re-run `causal-edge debug-evaluate --workdir ...` and inspect the validation stage diagnostics.",
             ],
         )
     return (

@@ -1,11 +1,13 @@
 """Tests for engine-backed research evaluation helpers."""
 
 import json
+import warnings
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from causal_edge.cli import main
+import causal_edge.research.evaluate as research_evaluate
 from causal_edge.research.evaluate import (
     check_look_ahead,
     compute_k,
@@ -230,12 +232,30 @@ class TestRunEvaluation:
 
     def test_includes_runtime_diagnostics_for_constant_position(self, tmp_path):
         _write_engine(tmp_path / "engine.py", flat=True)
-        result = run_evaluation(tmp_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = run_evaluation(tmp_path)
 
         diagnostics = result["diagnostics"]
         assert diagnostics["failure_signature"] == "constant_position"
         assert diagnostics["signal"]["position_switches"] == 0
         assert diagnostics["signal"]["unique_position_count"] == 1
+
+    def test_validation_exception_surfaces_runtime_stage(self, tmp_path, monkeypatch):
+        _write_engine(tmp_path / "engine.py", flat=True)
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("validation exploded")
+
+        monkeypatch.setattr(research_evaluate, "validate_strategy", boom)
+
+        result = run_evaluation(tmp_path)
+
+        assert result["verdict"] == "ERROR"
+        diagnostics = result["diagnostics"]
+        assert diagnostics["runtime_stage"] == "validation"
+        assert diagnostics["failure_signature"] == "validation_failed"
+        assert "validation exploded" in result["failures"][0]
 
     def test_reports_alignment_collapse_when_series_cannot_align(self, tmp_path):
         _write_alignment_failure_engine(tmp_path / "engine.py")
