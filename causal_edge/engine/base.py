@@ -189,6 +189,72 @@ class StrategyEngine(ABC):
             )
         return frame
 
+    def research_target_driver_frame(
+        self,
+        *,
+        driver_tickers: list[str] | None = None,
+        require_usable: bool = True,
+        require_full_window: bool = False,
+        overlap: str = "intersection",
+        require_drivers: bool = False,
+        start=None,
+        end=None,
+        timeframe: str | None = None,
+        limit: int | None = 600,
+    ) -> tuple[pd.Series, pd.DataFrame]:
+        """Return a safely prepared target series plus aligned driver frame.
+
+        overlap:
+            - "intersection": keep only timestamps where target and every selected
+              driver are present.
+            - "target_only": keep timestamps where the target is present and leave
+              driver gaps explicit for the engine to handle intentionally.
+        """
+        target = self.research_target_ticker()
+        if not target:
+            raise ValueError("Research target ticker is not available in the injected context.")
+        if overlap not in {"intersection", "target_only"}:
+            raise ValueError(
+                f"Unsupported overlap mode '{overlap}'. Supported: 'intersection', 'target_only'."
+            )
+
+        frame = self.research_close_frame(
+            driver_tickers=driver_tickers,
+            include_target=True,
+            require_usable=require_usable,
+            require_full_window=require_full_window,
+            start=start,
+            end=end,
+            timeframe=timeframe,
+            limit=limit,
+        )
+        if target not in frame.columns:
+            raise ValueError(f"Research close frame is missing the target ticker '{target}'.")
+
+        aligned = frame.dropna(subset=[target]).copy()
+        driver_frame = aligned.drop(columns=[target], errors="ignore")
+        if require_drivers and driver_frame.shape[1] == 0:
+            raise ValueError("No driver columns remain after applying the research driver filters.")
+        if overlap == "intersection" and driver_frame.shape[1] > 0:
+            aligned = aligned.dropna()
+            driver_frame = aligned.drop(columns=[target], errors="ignore")
+        if aligned.empty:
+            if overlap == "intersection":
+                raise ValueError(
+                    "No overlapping target/driver rows survived the selected research frame. "
+                    "Trim the driver list or relax the overlap mode before continuing."
+                )
+            raise ValueError(
+                "No target rows survived the selected research frame. "
+                "Check the requested window and target data availability."
+            )
+
+        target_series = aligned[target].astype(float)
+        driver_frame = driver_frame.astype(float)
+        target_series.index = pd.DatetimeIndex(pd.to_datetime(target_series.index, utc=True))
+        driver_frame.index = pd.DatetimeIndex(pd.to_datetime(driver_frame.index, utc=True))
+        return target_series, driver_frame
+
     def bind_price_loader(self, loader, price_data_config: dict | None = None) -> None:
         """Deprecated legacy loader hook.
 

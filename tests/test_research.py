@@ -414,6 +414,72 @@ class TestResearchHelpers:
         assert float(frame.iloc[-1]["SONY"]) == 101.0
         assert float(frame.iloc[-1]["AAPL"]) == 51.0
 
+    def test_strategy_engine_can_build_target_driver_frame_with_safe_overlap_modes(self):
+        class DemoEngine(StrategyEngine):
+            def compute_signals(self):
+                raise NotImplementedError
+
+            def get_latest_signal(self):
+                return {"position": 0.0}
+
+            def load_bars(self, symbols=None, **kwargs):
+                assert symbols == ["SONY", "AAPL", "MSFT"]
+                return pd.DataFrame(
+                    {
+                        "timestamp": pd.to_datetime(
+                            [
+                                "2020-01-01",
+                                "2020-01-01",
+                                "2020-01-01",
+                                "2020-01-02",
+                                "2020-01-02",
+                                "2020-01-03",
+                                "2020-01-03",
+                                "2020-01-03",
+                            ],
+                            utc=True,
+                        ),
+                        "symbol": ["SONY", "AAPL", "MSFT", "SONY", "MSFT", "SONY", "AAPL", "MSFT"],
+                        "close": [100.0, 50.0, 20.0, 101.0, 21.0, 102.0, 52.0, 22.0],
+                    }
+                )
+
+        engine = DemoEngine(
+            context={
+                "discovery": {
+                    "ticker": "SONY",
+                    "parents": [{"ticker": "AAPL"}, {"ticker": "MSFT"}],
+                    "data_readiness": {
+                        "results": [
+                            {"ticker": "AAPL", "status": "full_window", "usable": True, "full_window": True},
+                            {"ticker": "MSFT", "status": "full_window", "usable": True, "full_window": True},
+                        ]
+                    },
+                },
+                "_research": {"requested_window": {"start": "2020-01-01", "end": None}},
+            }
+        )
+
+        target_intersection, drivers_intersection = engine.research_target_driver_frame(
+            require_full_window=True,
+            overlap="intersection",
+            require_drivers=True,
+        )
+        target_target_only, drivers_target_only = engine.research_target_driver_frame(
+            require_full_window=True,
+            overlap="target_only",
+            require_drivers=True,
+        )
+
+        assert list(target_intersection.index.strftime("%Y-%m-%d")) == ["2020-01-01", "2020-01-03"]
+        assert list(drivers_intersection.columns) == ["AAPL", "MSFT"]
+        assert list(target_target_only.index.strftime("%Y-%m-%d")) == [
+            "2020-01-01",
+            "2020-01-02",
+            "2020-01-03",
+        ]
+        assert pd.isna(drivers_target_only.loc[pd.Timestamp("2020-01-02", tz="UTC"), "AAPL"])
+
 
 class TestValidationMarkdown:
     def test_renders_validation_summary(self, tmp_path):
