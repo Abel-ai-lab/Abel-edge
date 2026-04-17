@@ -278,6 +278,23 @@ def _build_research_context(
         data_contract = {}
     data_contract["profile"] = "daily"
     research_context["_data_contract"] = data_contract
+    feeds = research_context.get("_feeds")
+    if not isinstance(feeds, dict):
+        feeds = {}
+    if "primary" not in feeds:
+        ticker = (
+            research_context.get("ticker")
+            or (research_context.get("discovery") or {}).get("ticker")
+        )
+        feeds["primary"] = {
+            "name": "primary",
+            "kind": "bars",
+            "adapter": "abel",
+            "timeframe": "1d",
+            "symbol": str(ticker or "").strip().upper() or None,
+            "profile": "daily",
+        }
+    research_context["_feeds"] = feeds
     return research_context
 
 
