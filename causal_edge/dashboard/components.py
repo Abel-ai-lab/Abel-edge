@@ -50,8 +50,12 @@ def _layout(title, height, xaxis_title="", yaxis_title=""):
 # ── Metrics ──
 
 
-def compute_metrics(pnl: np.ndarray) -> dict:
+def compute_metrics(pnl: np.ndarray, *, periods_per_year: int = 252) -> dict:
     """Standard metrics from PnL array of daily log returns.
+
+    `periods_per_year` defaults to 252 (equity trading days). Pass 365 for
+    crypto (trades every calendar day). Scales Sharpe and annualized-return
+    denominators.
 
     `cum_pnl` is returned as the **compounded total return fraction**
     (`exp(sum(pnl)) - 1`). The trade-log `pnl` column stores log returns
@@ -64,7 +68,7 @@ def compute_metrics(pnl: np.ndarray) -> dict:
                     n_trades=0, n_days=0, calmar=0)
     cum = np.cumsum(pnl)
     std = np.std(pnl, ddof=1) if len(pnl) > 1 else 0.0
-    sharpe = float(np.mean(pnl) / std * np.sqrt(252)) if std > 0 else 0
+    sharpe = float(np.mean(pnl) / std * np.sqrt(periods_per_year)) if std > 0 else 0
     equity = np.exp(cum)
     peak = np.maximum.accumulate(equity)
     dd = (peak - equity) / peak
@@ -72,7 +76,7 @@ def compute_metrics(pnl: np.ndarray) -> dict:
     active = pnl[np.abs(pnl) > 1e-10]
     win_rate = float(np.mean(active > 0)) if len(active) > 0 else 0
     n_trades = int(np.sum(np.abs(pnl) > 1e-10))
-    yrs = len(pnl) / 252
+    yrs = len(pnl) / periods_per_year
     ann_ret = (equity[-1] ** (1 / yrs) - 1) if yrs > 0 and equity[-1] > 0 else 0
     calmar = float(ann_ret / max_dd) if max_dd > 0 else 0
     compounded = float(equity[-1] - 1) if len(equity) else 0.0

@@ -337,8 +337,14 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
 _strat_cfgs: list[dict] = []
 
 
-def generate(config_path: str, output_path: str) -> None:
-    """Generate the dashboard HTML."""
+def generate(config_path: str, output_path: str, *, bars_loader=None) -> None:
+    """Generate the dashboard HTML.
+
+    `bars_loader` is accepted for API compatibility with main-branch callers.
+    This dashboard reads asset_return from trade logs directly, so the loader
+    isn't used here. Ignored rather than raising.
+    """
+    del bars_loader  # accepted for CLI compatibility, not used
     global _strat_cfgs
     cfg = load_config(config_path)
     strat_list = cfg["strategies"]
