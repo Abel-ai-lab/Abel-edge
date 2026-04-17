@@ -12,8 +12,17 @@ REQUIRED_COLUMNS = ("date", "pnl", "position", "cum_return", "source")
 
 
 def read_trade_log(path: str | Path) -> pd.DataFrame:
-    """Read a trade log CSV. Returns DataFrame with standard columns."""
-    df = pd.read_csv(path, parse_dates=["date"])
+    """Read a trade log CSV. Returns DataFrame with standard columns.
+
+    Date parsing uses `format="mixed"` because backfill rows write midnight
+    timestamps ("2026-04-16 00:00:00+00:00") while live rows carry
+    sub-second ISO-8601 ("2026-04-17T05:55:06.150276+00:00"). The default
+    strptime fallback on mixed formats raises, which blocked every
+    subsequent `causal-edge run` once any live row existed.
+    """
+    df = pd.read_csv(path)
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], utc=True, format="mixed")
     return df
 
 
