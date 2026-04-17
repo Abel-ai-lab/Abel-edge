@@ -70,6 +70,7 @@ def run_evaluation(
     workdir: Path | str | None = None,
     *,
     start: str | None = None,
+    context_json: Path | None = None,
     output_csv: Path | None = None,
 ) -> dict:
     workspace = Path(workdir or ".")
@@ -86,8 +87,19 @@ def run_evaluation(
     if not hasattr(strategy_module, "run_strategy"):
         return _error("strategy.py must define run_strategy() -> (pnl, dates, positions)")
 
+    context = None
+    if context_json is not None:
+        try:
+            context = json.loads(context_json.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return _error(f"Invalid context JSON: {exc}")
+
     try:
-        pnl, dates, positions = _run_strategy(strategy_module.run_strategy, start=start)
+        pnl, dates, positions = _run_strategy(
+            strategy_module.run_strategy,
+            start=start,
+            context=context,
+        )
         pnl = np.asarray(pnl, dtype=float)
         positions = np.asarray(positions, dtype=float)
     except Exception as exc:
@@ -114,6 +126,7 @@ def run_evaluation(
     result["K"] = k_value
     result["requested_window"] = {"start": start, "end": None}
     result["effective_window"] = _effective_window(frame)
+    result["context_path"] = str(context_json.resolve()) if context_json is not None else None
     result["K_detail"] = {
         "tickers": tickers,
         "lags": lags,
@@ -200,13 +213,19 @@ def _load_strategy_module(strategy_path: Path):
     return module
 
 
-def _run_strategy(run_strategy, *, start: str | None):
+def _run_strategy(run_strategy, *, start: str | None, context: dict | None):
     signature = inspect.signature(run_strategy)
-    if "start" in signature.parameters or any(
+    accepts_kwargs = any(
         parameter.kind == inspect.Parameter.VAR_KEYWORD
         for parameter in signature.parameters.values()
-    ):
-        return run_strategy(start=start)
+    )
+    call_kwargs: dict[str, object] = {}
+    if "start" in signature.parameters or accepts_kwargs:
+        call_kwargs["start"] = start
+    if context is not None and ("context" in signature.parameters or accepts_kwargs):
+        call_kwargs["context"] = context
+    if call_kwargs:
+        return run_strategy(**call_kwargs)
     return run_strategy()
 
 
@@ -249,6 +268,11 @@ def main() -> None:
     parser.add_argument(
         "--start", default=None, help="Optional backtest start date passed to run_strategy"
     )
+    parser.add_argument(
+        "--context-json",
+        default=None,
+        help="Optional JSON file passed to run_strategy(context=...) when supported",
+    )
     parser.add_argument("--output-json", default=None, help="Optional path for raw JSON result")
     parser.add_argument(
         "--output-md", default=None, help="Optional path for raw validation markdown"
@@ -264,6 +288,7 @@ def main() -> None:
     result = run_evaluation(
         args.workdir,
         start=args.start,
+        context_json=Path(args.context_json) if args.context_json else None,
         output_csv=Path(args.output_csv) if args.output_csv else None,
     )
     write_evaluation_outputs(

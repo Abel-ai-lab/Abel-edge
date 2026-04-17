@@ -10,11 +10,16 @@ import click
 @click.command()
 @click.option("--workdir", default=".", show_default=True, help="Directory containing strategy.py")
 @click.option("--start", default=None, help="Optional backtest start date passed to run_strategy")
+@click.option(
+    "--context-json",
+    default=None,
+    help="Optional JSON file passed to run_strategy(context=...) when supported",
+)
 @click.option("--output-json", default=None, help="Optional path for raw JSON result")
 @click.option("--output-md", default=None, help="Optional path for raw validation markdown")
 @click.option("--output-csv", default=None, help="Optional path for metric input CSV")
 @click.option("--output-handoff", default=None, help="Optional path for edge-owned handoff JSON")
-def evaluate(workdir, start, output_json, output_md, output_csv, output_handoff):
+def evaluate(workdir, start, context_json, output_json, output_md, output_csv, output_handoff):
     """Evaluate one strategy and emit raw validation facts."""
     from causal_edge.research.evaluate import run_evaluation, write_evaluation_outputs
 
@@ -24,6 +29,7 @@ def evaluate(workdir, start, output_json, output_md, output_csv, output_handoff)
     result = run_evaluation(
         workdir,
         start=start,
+        context_json=Path(context_json) if context_json else None,
         output_csv=Path(output_csv) if output_csv else None,
     )
     write_evaluation_outputs(
@@ -43,6 +49,8 @@ def evaluate(workdir, start, output_json, output_md, output_csv, output_handoff)
         click.echo(f"Report:   {output_md}")
     if output_csv:
         click.echo(f"Input CSV: {output_csv}")
+    if context_json:
+        click.echo(f"Context:  {context_json}")
     if output_handoff:
         click.echo(f"Handoff:  {output_handoff}")
     raise SystemExit(0 if result.get("verdict") == "PASS" else 1)
