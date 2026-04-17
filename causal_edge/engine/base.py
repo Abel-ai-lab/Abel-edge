@@ -131,8 +131,12 @@ class StrategyEngine(ABC):
             require_usable=require_usable,
             require_full_window=require_full_window,
         )
+        if not symbols:
+            raise ValueError(
+                "No research symbols were selected. Include the target or choose at least one driver."
+            )
         return self.load_bars(
-            symbols=symbols or None,
+            symbols=symbols,
             start=self.research_requested_start() if start is None else start,
             end=end,
             timeframe=timeframe,

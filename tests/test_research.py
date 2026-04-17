@@ -6,6 +6,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 import pandas as pd
+import pytest
 
 from causal_edge.cli import main
 from causal_edge.engine.base import StrategyEngine
@@ -413,6 +414,19 @@ class TestResearchHelpers:
         assert list(frame.columns) == ["SONY", "AAPL"]
         assert float(frame.iloc[-1]["SONY"]) == 101.0
         assert float(frame.iloc[-1]["AAPL"]) == 51.0
+
+    def test_load_research_bars_rejects_empty_symbol_selection(self):
+        class DemoEngine(StrategyEngine):
+            def compute_signals(self):
+                raise NotImplementedError
+
+            def get_latest_signal(self):
+                return {"position": 0.0}
+
+        engine = DemoEngine(context={"_research": {"requested_window": {"start": "2020-01-01"}}})
+
+        with pytest.raises(ValueError, match="No research symbols were selected"):
+            engine.load_research_bars(include_target=False, driver_tickers=[])
 
     def test_strategy_engine_can_build_target_driver_frame_with_safe_overlap_modes(self):
         class DemoEngine(StrategyEngine):
