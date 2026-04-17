@@ -56,6 +56,42 @@ def generate(config_path: str | None, output_path: str, *, bars_loader=None) -> 
         live_overview=live_overview,
         settings=cfg["settings"],
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        initial_strategy_id=None,
+        initial_section="backtest",
+    )
+    Path(output_path).write_text(html, encoding="utf-8")
+
+
+def generate_strategy_dashboard(
+    config_path: str | None,
+    output_path: str,
+    strategy_id: str,
+    *,
+    bars_loader=None,
+    initial_section: str = "paper",
+) -> None:
+    """Generate the standard dashboard surface focused on one strategy."""
+    cfg = load_config(config_path)
+    strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
+    if not strategies_cfg:
+        available = ", ".join(s["id"] for s in cfg["strategies"]) or "none"
+        raise ValueError(
+            f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
+        )
+
+    strategies = [
+        prepare_strategy(strategies_cfg[0], settings=cfg["settings"], bars_loader=bars_loader)
+    ]
+    live_overview = build_live_overview(strategies, strategies_cfg, cfg["settings"])
+    env = _build_env(autoescape=True)
+    template = env.get_template("base.html")
+    html = template.render(
+        strategies=strategies,
+        live_overview=live_overview,
+        settings=cfg["settings"],
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        initial_strategy_id=strategy_id,
+        initial_section=initial_section,
     )
     Path(output_path).write_text(html, encoding="utf-8")
 
@@ -93,22 +129,11 @@ def generate_signal_demo(
 def generate_tracking_page(
     config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
 ) -> None:
-    cfg = load_config(config_path)
-    strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
-    if not strategies_cfg:
-        available = ", ".join(s["id"] for s in cfg["strategies"]) or "none"
-        raise ValueError(
-            f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
-        )
-
-    strategy = prepare_strategy(
-        strategies_cfg[0], settings=cfg["settings"], bars_loader=bars_loader
+    """Compatibility wrapper: tracking now reuses the dashboard surface."""
+    generate_strategy_dashboard(
+        config_path,
+        output_path,
+        strategy_id,
+        bars_loader=bars_loader,
+        initial_section="paper",
     )
-    env = _build_env(autoescape=False)
-    template = env.get_template("tracking.html")
-    html = template.render(
-        selected_strategy=strategy,
-        settings=cfg["settings"],
-        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
-    )
-    Path(output_path).write_text(html, encoding="utf-8")

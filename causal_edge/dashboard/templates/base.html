@@ -64,9 +64,9 @@
     </div>
 
     <div class="tabs">
-        <button class="tab active" onclick="showTab('overview', event)">Overview</button>
+        <button class="tab active" data-strategy-id="overview" onclick="showTab('overview', event)">Overview</button>
         {% for s in strategies %}
-        <button class="tab" onclick="showTab('{{ s.id }}', event)" style="border-left: 3px solid {{ s.color }}">
+        <button class="tab" data-strategy-id="{{ s.id }}" onclick="showTab('{{ s.id }}', event)" style="border-left: 3px solid {{ s.color }}">
             {{ s.name }}
         </button>
         {% endfor %}
@@ -278,14 +278,7 @@
 
                 {% if s.has_tracking_data %}
                 <div class="grid">
-                    <div class="chart-container">
-                        {% if s.has_tracking_asset_chart %}
-                        <div id="tracking-asset-{{ s.id }}"></div>
-                        {% else %}
-                        <div class="label">Ticker Price Since Tracking Began</div>
-                        <div class="empty">Legacy live rows do not include asset price returns, so this chart is hidden.</div>
-                        {% endif %}
-                    </div>
+                    <div class="chart-container full"><div id="tracking-equity-{{ s.id }}"></div></div>
                     <div class="chart-container"><div id="tracking-position-{{ s.id }}"></div></div>
                     <div class="chart-container full">
                         <div class="label">Live Rows</div>
@@ -325,15 +318,34 @@
             event.target.classList.add('active');
         }
 
+        document.addEventListener('DOMContentLoaded', function () {
+            const initialStrategyId = {{ initial_strategy_id | tojson }};
+            const initialSection = {{ initial_section | tojson }};
+            if (initialStrategyId) {
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                const panel = document.getElementById('panel-' + initialStrategyId);
+                const tab = document.querySelector('.tab[data-strategy-id="' + initialStrategyId + '"]');
+                if (panel) panel.classList.add('active');
+                if (tab) tab.classList.add('active');
+                if (initialSection) {
+                    document.querySelectorAll('#panel-' + initialStrategyId + ' .section-panel').forEach(p => p.classList.remove('active'));
+                    document.querySelectorAll('#panel-' + initialStrategyId + ' .section-tab').forEach(t => t.classList.remove('active'));
+                    const sectionPanel = document.getElementById('section-' + initialStrategyId + '-' + initialSection);
+                    const sectionTab = document.querySelector('#panel-' + initialStrategyId + ' .section-tab[onclick*="\'' + initialSection + '\'"]');
+                    if (sectionPanel) sectionPanel.classList.add('active');
+                    if (sectionTab) sectionTab.classList.add('active');
+                }
+            }
+        });
+
         {% for s in strategies %}
         {% if s.has_data %}
         Plotly.newPlot('equity-{{ s.id }}', {{ s.equity_json | safe }}.data, {{ s.equity_json | safe }}.layout, {responsive: true});
         Plotly.newPlot('position-{{ s.id }}', {{ s.position_json | safe }}.data, {{ s.position_json | safe }}.layout, {responsive: true});
         {% endif %}
         {% if s.has_tracking_data %}
-        {% if s.has_tracking_asset_chart %}
-        Plotly.newPlot('tracking-asset-{{ s.id }}', {{ s.tracking_asset_price_json | safe }}.data, {{ s.tracking_asset_price_json | safe }}.layout, {responsive: true});
-        {% endif %}
+        Plotly.newPlot('tracking-equity-{{ s.id }}', {{ s.tracking_equity_json | safe }}.data, {{ s.tracking_equity_json | safe }}.layout, {responsive: true});
         Plotly.newPlot('tracking-position-{{ s.id }}', {{ s.tracking_position_json | safe }}.data, {{ s.tracking_position_json | safe }}.layout, {responsive: true});
         {% elif s.has_tracking_preview %}
         Plotly.newPlot('tracking-preview-{{ s.id }}', {{ s.tracking_preview_json | safe }}.data, {{ s.tracking_preview_json | safe }}.layout, {responsive: true});

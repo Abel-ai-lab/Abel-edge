@@ -111,7 +111,7 @@ def test_dashboard_hides_legacy_paper_price_chart_without_asset_returns(tmp_path
         assert result.exit_code == 0, result.output
         html = Path("dashboard.html").read_text(encoding="utf-8")
         assert "Backtest vs ETHUSD" not in html
-        assert "Legacy live rows do not include asset price returns" in html
+        assert "tracking-equity-demo_signal" in html
         assert "tracking-asset-demo_signal" not in html
 
 
@@ -255,9 +255,12 @@ def test_tracking_strategy_renders_empty_state(tmp_path):
         )
         assert result.exit_code == 0, result.output
         html = Path("tracking.html").read_text(encoding="utf-8")
-        assert "Tracking View" in html
-        assert "No live tracking data yet" in html
-        assert "Tracking Launch Context" in html
+        assert "Paper Trading" in html
+        assert (
+            "No live paper rows yet. The preview below shows the final backtest context before paper trading starts."
+            in html
+        )
+        assert "showSectionTab('demo_signal', 'paper'" in html
 
 
 def test_tracking_strategy_renders_live_rows(tmp_path):
@@ -280,12 +283,13 @@ def test_tracking_strategy_renders_live_rows(tmp_path):
         )
         assert result.exit_code == 0, result.output
         html = Path("tracking.html").read_text(encoding="utf-8")
+        assert "Tracked Return" in html
         assert "Live Rows" in html
         assert "2024-01-03" in html
         assert "101.00" in html
 
 
-def test_tracking_hides_legacy_price_chart_without_asset_returns(tmp_path):
+def test_tracking_uses_dashboard_paper_charts_without_price_focus(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         write_demo_project(
@@ -301,10 +305,8 @@ def test_tracking_hides_legacy_price_chart_without_asset_returns(tmp_path):
         )
         assert result.exit_code == 0, result.output
         html = Path("tracking.html").read_text(encoding="utf-8")
-        assert "Legacy live rows do not include asset price returns" in html
-        assert (
-            "Legacy logs do not include backtest asset returns for a launch-context chart." in html
-        )
+        assert "tracking-equity-demo_signal" in html
+        assert "tracking-position-demo_signal" in html
         assert "tracking-preview" not in html
         assert "tracking-asset" not in html
-        assert "Position Since Tracking Began" in html
+        assert "ETHUSD Signal" in html
