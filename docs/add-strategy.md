@@ -23,6 +23,7 @@ Read `docs/validation-audit-matrix.md` for the long-lived timing and validation 
 | Simple | `examples/sma_crossover/` | 30-line minimal engine |
 | ML | `examples/momentum_ml/` | Walk-forward GBDT with shift(1) |
 | Causal | `examples/causal_demo/` | Abel graph voting + causal_graph.json |
+| Feed Path | `examples/feed_overlay_demo/` | Declared `bars` + `series` feed example |
 
 ### Quick Path
 
@@ -31,6 +32,7 @@ Read `docs/validation-audit-matrix.md` for the long-lived timing and validation 
 ```bash
 cp -r examples/sma_crossover/ strategies/my_strategy/
 # or: cp -r examples/causal_demo/ strategies/my_strategy/
+# or: cp -r examples/feed_overlay_demo/ strategies/my_strategy/
 ```
 
 2. Edit `strategies/my_strategy/engine.py` — implement your signal logic
@@ -46,9 +48,10 @@ strategies:
     engine: strategies.my_strategy.engine
     trade_log: "data/trade_log_my_strategy.csv"
     paper_log: "data/paper_log_my_strategy.csv"
-    # Optional: default live price source is Abel. Override with CSV if needed.
+    # Optional: default live price adapter is Abel. Override with CSV or a
+    # project-local adapter if needed.
     # price_data:
-    #   source: csv
+    #   adapter: csv
     #   path: data/prices.csv
 ```
 
@@ -67,7 +70,8 @@ Your engine must implement `StrategyEngine` from `causal_edge/engine/base.py`:
 ```python
 class MyEngine(StrategyEngine):
     def compute_signals(self):
-        # Optional: load price bars via self.load_bars()
+        # Primary bars: self.load_bars(...)
+        # Declared auxiliary feeds: self.load_feed(...) / self.feed_series(...)
         # Returns: (positions, dates, prices)
         # positions: np.ndarray of daily position sizes (0=flat, 1=long)
         # dates: pd.DatetimeIndex
@@ -82,15 +86,124 @@ class MyEngine(StrategyEngine):
 Define that engine class in the target module itself. Do not rely on `engine.py`
 only re-exporting or importing a `StrategyEngine` subclass from somewhere else.
 
+## External Data Contract
+
+Primary price data remains implicit and is loaded through `self.load_bars()`.
+Every non-primary external input should be declared under `feeds:` in
+`strategies.yaml` and loaded through framework helpers.
+
+Example:
+
+```yaml
+strategies:
+  - id: my_strategy
+    name: "My Strategy"
+    asset: ETHUSD
+    color: "#FF2D55"
+    engine: strategies.my_strategy.engine
+    trade_log: data/trade_log_my_strategy.csv
+    price_data:
+      adapter: csv
+      path: data/ethusd.csv
+    feeds:
+      btc_ref:
+        kind: bars
+        adapter: csv
+        path: data/btcusd.csv
+        symbol: BTCUSD
+      risk_scale:
+        kind: series
+        adapter: csv
+        path: data/risk_scale.csv
+        field: value
+```
+
+File-backed CSV feeds on the supported daily path may use either
+`2026-01-01T00:00:00Z` or a naive date like `2026-01-01`. When the framework
+loads a file-backed feed, naive timestamps are interpreted as UTC and
+standardized into the runtime contract. Inside strategy runtime, timestamps are
+always expected to be UTC-aware after loading.
+
+## Project-Local Adapters
+
+If your project already owns a data backend, register a local adapter module
+instead of forcing every strategy to pre-convert data into CSV files.
+
+```yaml
+settings:
+  price_data:
+    default_adapter: internal_market_data
+    default_timeframe: 1d
+  data_adapters:
+    imports:
+      - lib.edge_adapters
+
+strategies:
+  - id: my_strategy
+    name: "My Strategy"
+    asset: AAPL
+    color: "#FF2D55"
+    engine: strategies.my_strategy.engine
+    trade_log: data/trade_log_my_strategy.csv
+    price_data:
+      adapter: internal_market_data
+      backend: fmp
+      adjusted: false
+      symbol: AAPL
+```
+
+The same pattern applies to declared auxiliary feeds under `feeds:`. Adapter
+modules only own external-data access. The framework still owns timestamp
+normalization, daily-profile checks, alignment, and signal-output validation.
+
+Use the helpers inside `compute_signals()`:
+
+```python
+bars = self.load_bars(limit=200)
+target = bars[bars["symbol"] == self.context["asset"]].sort_values("timestamp")
+dates = pd.DatetimeIndex(target["timestamp"])
+prices = target["close"].astype(float).to_numpy()
+
+btc_close = self.feed_series(
+    "btc_ref",
+    field="close",
+    align_to=dates,
+    method="ffill",
+    allow_gaps=False,
+)
+scale = self.feed_series(
+    "risk_scale",
+    align_to=dates,
+    method="ffill",
+    allow_gaps=False,
+)
+positions = (scale * (btc_close > 0).astype(float)).to_numpy()
+return self.finalize_signals(positions, dates, prices)
+```
+
+Recommended helper boundaries:
+
+- `self.load_bars()` for the primary tradeable asset
+- `self.load_feed(name)` for declared multi-column auxiliary feeds
+- `self.feed_series(name, ...)` for declared single-series inputs or extracted
+  fields
+- `self.align_series(series, dates, ...)` only when a raw research series must
+  be aligned before use
+- `self.finalize_signals(...)` before returning from `compute_signals()`
+
 ## Rules
 
 - All features must use `shift(1)` — zero look-ahead tolerance
 - `rolling().mean()` must be followed by `.shift(1)` before use in decisions
 - Clip returns for training features only, use unclipped for PnL
 - strategies/ must not import causal_edge/ internals (except base.py)
-- `self.load_bars()` normalizes `timestamp` to UTC-aware datetimes; normalize any
-  auxiliary series to the same datetime semantics before `reindex(...)` or date
-  comparisons
+- do not hand-roll external data loading for production strategies when the data
+  can be declared as a framework feed
+- do not directly `reindex(...)` raw auxiliary series against strategy dates;
+  use `feed_series(..., align_to=...)` or `align_series(...)`
+- `self.load_bars()` and declared feeds normalize file-backed timestamps into
+  the framework daily UTC contract; once inside strategy runtime, naive
+  datetimes are outside the supported path
 
 ## Timing Contract
 

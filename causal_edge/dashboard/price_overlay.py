@@ -8,12 +8,10 @@ from causal_edge.engine.price_data import resolve_price_config
 from causal_edge.engine.trader import _load_engine
 
 
-def _fetch_price_overlay_from_engine(s_cfg: dict, settings: dict, bars_loader) -> dict | None:
+def _fetch_price_overlay_from_engine(s_cfg: dict) -> dict | None:
     try:
         engine_cls = _load_engine(s_cfg["engine"])
         engine = engine_cls(context=s_cfg)
-        if bars_loader is not None:
-            engine.bind_price_loader(bars_loader, resolve_price_config(settings or {}, s_cfg))
         signal_data = engine.compute_signals()
     except Exception:
         return None
@@ -79,7 +77,7 @@ def fetch_price_overlay(s_cfg: dict, settings: dict, bars_loader, *, start, end)
                     "close": closes.values.astype(float),
                 }
 
-    overlay = _fetch_price_overlay_from_engine(s_cfg, settings, bars_loader)
+    overlay = _fetch_price_overlay_from_engine(s_cfg)
     if overlay is None:
         return None
 
