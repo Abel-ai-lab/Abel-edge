@@ -17,6 +17,18 @@ causal-edge evaluate \
   --output-handoff edge-handoff.json
 ```
 
+### Check whether discovered drivers have usable data
+```bash
+causal-edge verify-data \
+  --discovery-json <session-or-branch>/discovery.json \
+  --start 2020-01-01
+```
+
+### Debug why a branch is dead or failing
+```bash
+causal-edge debug-evaluate --workdir <branch-dir>
+```
+
 ### Validate a handoff
 ```bash
 causal-edge validate-handoff path/to/edge-handoff.json
@@ -30,6 +42,8 @@ causal-edge validate-handoff path/to/edge-handoff.json
 - static look-ahead checks run before evaluation
 - engine outputs are validated through the shared signal contract
 - validation artifacts come from the same `validate_strategy()` gate used elsewhere
+- `verify-data` reports which discovered tickers have full, partial, missing, or broken history
+- `debug-evaluate` surfaces runtime diagnostics such as flat signals, constant positions, and alignment collapse
 
 ## What strategy authors decide
 

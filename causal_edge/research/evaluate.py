@@ -9,6 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from causal_edge.engine.backtest import run_backtest
@@ -81,6 +82,7 @@ def run_evaluation(
         return _error(
             "engine.py not found; research branches must define a module-owned StrategyEngine subclass.",
             implementation_contract="unknown",
+            runtime_stage="load_engine",
         )
 
     violations = check_look_ahead(engine_path)
@@ -88,6 +90,7 @@ def run_evaluation(
         return _error(
             f"Look-ahead violations: {violations}",
             implementation_contract="engine",
+            runtime_stage="static_checks",
         )
 
     k_value, tickers, lags = compute_k(engine_path)
@@ -101,6 +104,7 @@ def run_evaluation(
         return _error(
             str(exc),
             implementation_contract="engine",
+            runtime_stage="context_build",
         )
 
     try:
@@ -114,17 +118,21 @@ def run_evaluation(
         return _error(
             f"engine evaluation failed: {exc}",
             implementation_contract="engine",
+            runtime_stage="compute_signals",
         )
     except Exception as exc:  # pragma: no cover - defensive catch for user engines
         return _error(
             f"engine evaluation failed: {exc}",
             implementation_contract="engine",
+            runtime_stage="compute_signals",
         )
 
     if len(positions) < 30:
         return _error(
             f"Insufficient data: {len(positions)} days (need 30+)",
             implementation_contract="engine",
+            runtime_stage="signal_contract",
+            signal=_signal_summary(positions),
         )
 
     backtest = run_backtest(positions, prices)
@@ -159,6 +167,7 @@ def run_evaluation(
         "n_tickers": len(tickers),
         "n_lags": len(lags),
     }
+    result["diagnostics"] = _build_runtime_diagnostics(result, frame)
     return result
 
 
@@ -193,6 +202,17 @@ def render_validation_markdown(result: dict) -> str:
 - sharpe: `{metrics.get("sharpe", 0):.3f}`
 - total_return: `{metrics.get("total_return", 0) * 100:.1f}%`
 - max_dd: `{metrics.get("max_dd", 0) * 100:.1f}%`
+
+## Diagnostics
+
+- failure_signature: `{(result.get("diagnostics") or {}).get("failure_signature", "unknown")}`
+- runtime_stage: `{(result.get("diagnostics") or {}).get("runtime_stage", "unknown")}`
+- signal_activity: `{((result.get("diagnostics") or {}).get("signal") or {}).get("active_days", 0)} / {((result.get("diagnostics") or {}).get("signal") or {}).get("total_days", 0)}`
+- unique_positions: `{((result.get("diagnostics") or {}).get("signal") or {}).get("unique_position_count", 0)}`
+
+## Hints
+
+{_format_failures((result.get("diagnostics") or {}).get("hints", []))}
 
 ## Failures
 
@@ -286,7 +306,18 @@ def _effective_window(frame: pd.DataFrame) -> dict[str, str | None]:
     }
 
 
-def _error(message: str, *, implementation_contract: str) -> dict:
+def _error(
+    message: str,
+    *,
+    implementation_contract: str,
+    runtime_stage: str,
+    signal: dict | None = None,
+) -> dict:
+    diagnostics = _build_error_diagnostics(
+        message=message,
+        runtime_stage=runtime_stage,
+        signal=signal,
+    )
     return {
         "verdict": "ERROR",
         "score": "0/0",
@@ -295,8 +326,9 @@ def _error(message: str, *, implementation_contract: str) -> dict:
         "triangle": {"ratio": 0, "rank": 0, "shape": 0},
         "K": 0,
         "implementation_contract": implementation_contract,
-        "active_days": 0,
-        "total_days": 0,
+        "active_days": diagnostics["signal"]["active_days"],
+        "total_days": diagnostics["signal"]["total_days"],
+        "diagnostics": diagnostics,
     }
 
 
@@ -304,6 +336,123 @@ def _format_failures(failures: list[str]) -> str:
     if not failures:
         return "- none"
     return "\n".join(f"- {failure}" for failure in failures)
+
+
+def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
+    signal = _signal_summary(frame["position"].to_numpy(dtype=float))
+    metrics = result.get("metrics") or {}
+    failure_signature = "healthy_signal"
+    hints: list[str] = []
+    if signal["total_days"] == 0:
+        failure_signature = "no_usable_data"
+        hints.append("No usable bars survived the requested evaluation window.")
+    elif signal["active_days"] == 0:
+        failure_signature = "signal_always_flat"
+        hints.append("Positions never left zero. Check data readiness and threshold logic.")
+    elif signal["unique_position_count"] <= 1 or signal["position_switches"] == 0:
+        failure_signature = "constant_position"
+        hints.append("The engine produced only one position level. Check whether the signal ever changes sign.")
+    elif result.get("verdict") != "PASS" and abs(float(metrics.get("position_ic", 0) or 0)) < 1e-12:
+        failure_signature = "zero_information_signal"
+        hints.append("position_ic stayed at 0. Inspect feature construction, alignment, and active-day coverage.")
+    elif result.get("verdict") != "PASS":
+        failure_signature = "validation_failed"
+        hints.append("The engine executed, but validation metrics did not clear the research gate.")
+    else:
+        hints.append("Signal execution and validation both completed successfully.")
+    return {
+        "failure_signature": failure_signature,
+        "runtime_stage": "validation",
+        "signal": signal,
+        "hints": hints,
+    }
+
+
+def _build_error_diagnostics(
+    *,
+    message: str,
+    runtime_stage: str,
+    signal: dict | None = None,
+) -> dict:
+    failure_signature, hints = _classify_error_message(message)
+    return {
+        "failure_signature": failure_signature,
+        "runtime_stage": runtime_stage,
+        "signal": signal or _signal_summary(np.array([], dtype=float)),
+        "hints": hints,
+    }
+
+
+def _classify_error_message(message: str) -> tuple[str, list[str]]:
+    text = str(message or "").lower()
+    if "aligned to strategy dates without gaps" in text or "unsupported alignment method" in text:
+        return (
+            "alignment_collapse",
+            [
+                "A required series could not be aligned safely to the strategy dates.",
+                "Trim drivers to overlapping history or allow only explicitly justified gap handling.",
+            ],
+        )
+    if "insufficient data: 0 days" in text or "no bars returned" in text:
+        return (
+            "no_usable_data",
+            [
+                "No usable market data was available for the requested window.",
+                "Run `causal-edge verify-data` on the discovery payload before editing the branch further.",
+            ],
+        )
+    if "insufficient data:" in text:
+        return (
+            "insufficient_history",
+            [
+                "The engine produced too little history for validation.",
+                "Check the requested window and whether upstream filters removed most observations.",
+            ],
+        )
+    if "look-ahead violations" in text:
+        return (
+            "look_ahead_violation",
+            [
+                "Static look-ahead checks found a forward-looking pattern in engine.py.",
+            ],
+        )
+    if "api key" in text or "oauth" in text:
+        return (
+            "auth_missing",
+            [
+                "Abel auth was missing for a data fetch path.",
+                "Run `causal-edge login` or provide a workspace `.env` with ABEL_API_KEY.",
+            ],
+        )
+    return (
+        "engine_runtime_error",
+        [
+            "The engine failed before validation could score it.",
+            "Use `causal-edge debug-evaluate --workdir ...` to inspect the runtime diagnostics.",
+        ],
+    )
+
+
+def _signal_summary(positions) -> dict:
+    arr = np.asarray(positions, dtype=float)
+    if arr.size == 0:
+        return {
+            "active_days": 0,
+            "total_days": 0,
+            "unique_position_count": 0,
+            "unique_positions": [],
+            "position_switches": 0,
+        }
+    rounded = np.round(arr, 8)
+    unique_positions = sorted({float(value) for value in rounded.tolist()})
+    switches = int(np.count_nonzero(np.abs(np.diff(rounded)) > 1e-8)) if len(rounded) > 1 else 0
+    return {
+        "active_days": int((np.abs(arr) > 0.01).sum()),
+        "total_days": int(len(arr)),
+        "unique_position_count": len(unique_positions),
+        "unique_positions": unique_positions[:12],
+        "position_switches": switches,
+    }
 
 
 def main() -> None:

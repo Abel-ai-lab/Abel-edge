@@ -9,7 +9,9 @@ import click
 
 from causal_edge import __version__
 from causal_edge.cli_support import build_bars_loader
+from causal_edge.research.cli import debug_evaluate as debug_evaluate_command
 from causal_edge.research.cli import evaluate as evaluate_command
+from causal_edge.research.cli import verify_data as verify_data_command
 from causal_edge.research.cli import validate_handoff as validate_handoff_command
 
 CONFIG_OPTION_HELP = (
@@ -29,6 +31,8 @@ def main():
 
 
 main.add_command(evaluate_command)
+main.add_command(debug_evaluate_command)
+main.add_command(verify_data_command)
 main.add_command(validate_handoff_command)
 
 

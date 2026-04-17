@@ -1,5 +1,6 @@
 """Tests for engine-backed research evaluation helpers."""
 
+import json
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -11,6 +12,7 @@ from causal_edge.research.evaluate import (
     render_validation_markdown,
     run_evaluation,
 )
+from causal_edge.research.data_readiness import run_data_verification
 from causal_edge.research.workspace import init_workspace
 
 
@@ -79,6 +81,37 @@ def _write_start_aware_engine(path: Path) -> None:
                 "    def get_latest_signal(self):",
                 "        positions, dates, _ = self.compute_signals()",
                 "        return {'position': float(positions[-1]), 'date': str(dates[-1].date())}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _write_alignment_failure_engine(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "import numpy as np",
+                "import pandas as pd",
+                "",
+                "from causal_edge.engine.base import StrategyEngine",
+                "",
+                "",
+                "class BranchEngine(StrategyEngine):",
+                "    def compute_signals(self):",
+                "        dates = pd.date_range('2024-01-01', periods=40, freq='D', tz='UTC')",
+                "        aux = pd.Series(",
+                "            np.arange(3, dtype=float),",
+                "            index=pd.to_datetime(['2024-01-01', '2024-01-03', '2024-01-05'], utc=True),",
+                "        )",
+                "        self.align_series(aux, dates, method=None, allow_gaps=False)",
+                "        prices = np.linspace(100.0, 120.0, len(dates))",
+                "        positions = np.zeros(len(dates), dtype=float)",
+                "        return positions, dates, prices",
+                "",
+                "    def get_latest_signal(self):",
+                "        return {'position': 0.0}",
             ]
         )
         + "\n",
@@ -195,6 +228,24 @@ class TestRunEvaluation:
         payload = output_csv.read_text(encoding="utf-8")
         assert "date,pnl,position,asset_return" in payload
 
+    def test_includes_runtime_diagnostics_for_constant_position(self, tmp_path):
+        _write_engine(tmp_path / "engine.py", flat=True)
+        result = run_evaluation(tmp_path)
+
+        diagnostics = result["diagnostics"]
+        assert diagnostics["failure_signature"] == "constant_position"
+        assert diagnostics["signal"]["position_switches"] == 0
+        assert diagnostics["signal"]["unique_position_count"] == 1
+
+    def test_reports_alignment_collapse_when_series_cannot_align(self, tmp_path):
+        _write_alignment_failure_engine(tmp_path / "engine.py")
+        result = run_evaluation(tmp_path)
+
+        diagnostics = result["diagnostics"]
+        assert result["verdict"] == "ERROR"
+        assert diagnostics["failure_signature"] == "alignment_collapse"
+        assert diagnostics["runtime_stage"] == "compute_signals"
+
     def test_rejects_engine_that_only_reexports_imported_class(self, tmp_path):
         helper = tmp_path / "helper_engine.py"
         helper.write_text(
@@ -297,3 +348,98 @@ class TestEvaluateCli:
             result = runner.invoke(main, ["evaluate", "--workdir", str(workdir)])
             assert result.exit_code != 0
             assert "Verdict: FAIL" in result.output
+
+    def test_debug_evaluate_cli_surfaces_failure_signature(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            workdir = Path("workspace")
+            workdir.mkdir()
+            _write_engine(workdir / "engine.py", flat=True)
+
+            result = runner.invoke(main, ["debug-evaluate", "--workdir", str(workdir)])
+            assert result.exit_code == 0, result.output
+            assert "Failure signature: constant_position" in result.output
+            assert "Signal activity:" in result.output
+
+
+class TestVerifyData:
+    def test_run_data_verification_reports_full_partial_and_missing(self, monkeypatch, tmp_path):
+        from causal_edge.research import data_readiness as data_module
+
+        def _fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
+            ticker = symbols[0]
+            if ticker == "SONY":
+                return _bars_frame(["2020-01-01", "2020-01-02", "2020-01-03"])
+            if ticker == "CNET":
+                return _bars_frame(["2020-08-01", "2020-08-02"])
+            if ticker == "EMPTY":
+                return _bars_frame([])
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(data_module, "fetch_bars", _fake_fetch_bars)
+        discovery = tmp_path / "discovery.json"
+        discovery.write_text(
+            json.dumps(
+                {
+                    "ticker": "SONY",
+                    "backtest": {"start": "2020-01-01"},
+                    "parents": [{"ticker": "CNET"}],
+                    "blanket_new": [{"ticker": "EMPTY"}],
+                    "children": [{"ticker": "BROKEN"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = run_data_verification(discovery_json=discovery)
+
+        summary = report["summary"]
+        assert summary["ticker_count"] == 4
+        assert summary["full_window_count"] == 1
+        assert summary["partial_window_count"] == 1
+        assert summary["no_data_count"] == 1
+        assert summary["error_count"] == 1
+
+    def test_verify_data_cli_writes_json(self, monkeypatch, tmp_path):
+        from causal_edge.research import data_readiness as data_module
+
+        monkeypatch.setattr(
+            data_module,
+            "fetch_bars",
+            lambda **kwargs: _bars_frame(["2020-01-01", "2020-01-02"]),
+        )
+
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            output_json = Path("report.json")
+            result = runner.invoke(
+                main,
+                [
+                    "verify-data",
+                    "--ticker",
+                    "SONY",
+                    "--start",
+                    "2020-01-01",
+                    "--output-json",
+                    str(output_json),
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            assert "Research Data Verification" in result.output
+            assert output_json.exists()
+            payload = json.loads(output_json.read_text(encoding="utf-8"))
+            assert payload["summary"]["usable_count"] == 1
+
+
+def _bars_frame(dates: list[str]):
+    import pandas as pd
+
+    if not dates:
+        return pd.DataFrame(columns=["timestamp", "symbol", "close"])
+    return pd.DataFrame(
+        {
+            "timestamp": pd.to_datetime(dates, utc=True),
+            "symbol": ["SONY"] * len(dates),
+            "close": [100.0 + idx for idx in range(len(dates))],
+        }
+    )
