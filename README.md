@@ -129,6 +129,10 @@ causal-edge evaluate --workdir strategies/my_strategy --start 2020-01-01
                                 # pin the requested backtest start for upstream orchestration
 causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
                                 # persist raw JSON + markdown facts for an upstream orchestration layer
+causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md --output-handoff edge-handoff.json
+                                # emit an edge-owned handoff that upstream tools must preserve exactly
+causal-edge validate-handoff edge-handoff.json
+                                # reject invalid upstream handoffs with explicit reasons
 causal-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
 causal-edge validate --csv file.csv  # validate any backtest CSV directly
 causal-edge validate --export r.txt  # export report for sharing
@@ -192,10 +196,12 @@ If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands now pr
 `strategies.local.yaml` automatically. Use `--config` to point at any explicit file.
 
 `causal-edge evaluate` uses the same audited validation contract as the main CLI and emits
-only raw execution facts: verdict, score, metrics, triangle, failures, K, and the requested/effective
-evaluation window. It does not own
-exploration-session structure, branch organization, or narrative summaries. Those belong to
-the upstream orchestration layer such as `Abel-alpha`.
+raw execution facts: verdict, score, metrics, triangle, failures, K, profile, and the
+requested/effective evaluation window. When asked, it also emits an edge-owned handoff JSON
+for upstream orchestrators. `causal-edge validate-handoff` rejects any upstream handoff that
+does not exactly match the published contract. `causal-edge` still does not own exploration-session
+structure, branch organization, or narrative summaries; those belong to the upstream orchestration
+layer such as `Abel-alpha`.
 
 ## Architecture
 
@@ -219,6 +225,7 @@ tests/
 
 - [`CAPABILITY.md`](CAPABILITY.md) — agent capability acquisition (start here)
 - [`docs/validation-audit-matrix.md`](docs/validation-audit-matrix.md) — long-lived validation timing/score contract and migration notes
+- [`docs/strategy-handoff.md`](docs/strategy-handoff.md) — exact upstream handoff contract and rejection behavior
 - [Adding a Strategy](docs/add-strategy.md) — three paths: CSV / engine / causal
 - [Look-Ahead Rules](causal_edge/validation/look_ahead_rules.md) — semantic review checklist for leaked features
 - [Why Causal?](docs/why-causal.md) — Pearl, DGP, intervention invariance

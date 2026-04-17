@@ -103,6 +103,7 @@ class TestRunEvaluation:
         result = run_evaluation(tmp_path)
         assert result["verdict"] == "PASS"
         assert result["K"] >= 1
+        assert result["profile"] == "equity_daily"
 
     def test_start_aware_strategy_records_requested_and_effective_window(self, tmp_path):
         _write_start_aware_strategy(tmp_path / "strategy.py")

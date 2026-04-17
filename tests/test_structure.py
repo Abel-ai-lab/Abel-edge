@@ -90,7 +90,9 @@ class TestFileSizeLimit:
 
     def test_no_file_exceeds_limit(self):
         py_files = [
-            f for f in ROOT.rglob("*.py") if "__pycache__" not in str(f) and ".venv" not in str(f)
+            f
+            for f in ROOT.rglob("*.py")
+            if "__pycache__" not in str(f) and ".venv" not in str(f) and "build" not in f.parts
         ]
         violations = []
         for f in py_files:

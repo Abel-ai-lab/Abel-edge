@@ -137,13 +137,17 @@ causal-edge discover ETHUSD
 causal-edge evaluate --workdir strategies/my_strategy
 causal-edge evaluate --workdir strategies/my_strategy --start 2020-01-01
 causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
+causal-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md --output-handoff edge-handoff.json
+causal-edge validate-handoff edge-handoff.json
 ```
 
 `causal-edge evaluate` reuses the audited validation contract, derives `K` from discovered
-tickers and lags, and can optionally persist raw JSON plus a markdown report. The result also
-records the requested start date and effective start/end window. It does not
-organize experiments into sessions or branches; upstream tools such as `Abel-alpha` should
-own orchestration, process logs, and narrative summaries.
+tickers and lags, auto-detects the validation profile, and can optionally persist raw JSON,
+a markdown report, plus an edge-owned handoff JSON. The result also records the requested
+start date and effective start/end window. `causal-edge validate-handoff` rejects malformed
+or inconsistent upstream handoffs with explicit reasons. `causal-edge` does not organize
+experiments into sessions or branches; upstream tools such as `Abel-alpha` should own
+orchestration, process logs, and narrative summaries.
 
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow before
 running `causal-edge discover <TICKER>` or any workflow that triggers live Abel discovery:
@@ -186,6 +190,7 @@ not have usable history that early.
 
 Timing and audit contract reference: `docs/validation-audit-matrix.md`.
 Semantic look-ahead reference: `causal_edge/validation/look_ahead_rules.md`.
+Upstream handoff contract reference: `docs/strategy-handoff.md`.
 
 ## 8. Scaffold a Full Project
 

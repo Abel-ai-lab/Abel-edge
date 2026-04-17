@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from causal_edge.research.handoff import build_strategy_handoff, write_strategy_handoff
 from causal_edge.validation.gate import validate_strategy
 
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD"}
@@ -104,7 +105,7 @@ def run_evaluation(
         csv_path = Path(handle.name)
 
     try:
-        result = validate_strategy(csv_path, profile="crypto_daily", dsr_trials=k_value)
+        result = validate_strategy(csv_path, dsr_trials=k_value)
     except Exception as exc:
         csv_path.unlink(missing_ok=True)
         return _error(f"causal-edge validation failed: {exc}")
@@ -161,8 +162,10 @@ def render_validation_markdown(result: dict) -> str:
 def write_evaluation_outputs(
     result: dict,
     *,
+    workdir: Path | None = None,
     json_path: Path | None = None,
     markdown_path: Path | None = None,
+    handoff_path: Path | None = None,
 ) -> None:
     if json_path is not None:
         json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -170,6 +173,21 @@ def write_evaluation_outputs(
     if markdown_path is not None:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         markdown_path.write_text(render_validation_markdown(result), encoding="utf-8")
+    if handoff_path is not None:
+        if workdir is None:
+            raise ValueError("workdir is required when writing a strategy handoff.")
+        if json_path is None or markdown_path is None:
+            raise ValueError(
+                "json_path and markdown_path are required when writing a strategy handoff."
+            )
+        payload = build_strategy_handoff(
+            result,
+            strategy_path=workdir / "strategy.py",
+            result_path=json_path,
+            report_path=markdown_path,
+            handoff_path=handoff_path,
+        )
+        write_strategy_handoff(payload, handoff_path)
 
 
 def _load_strategy_module(strategy_path: Path):
@@ -236,7 +254,12 @@ def main() -> None:
         "--output-md", default=None, help="Optional path for raw validation markdown"
     )
     parser.add_argument("--output-csv", default=None, help="Optional path for metric input CSV")
+    parser.add_argument(
+        "--output-handoff", default=None, help="Optional path for edge-owned handoff JSON"
+    )
     args = parser.parse_args()
+    if args.output_handoff and (not args.output_json or not args.output_md):
+        raise SystemExit("--output-handoff requires both --output-json and --output-md.")
 
     result = run_evaluation(
         args.workdir,
@@ -245,8 +268,10 @@ def main() -> None:
     )
     write_evaluation_outputs(
         result,
+        workdir=Path(args.workdir),
         json_path=Path(args.output_json) if args.output_json else None,
         markdown_path=Path(args.output_md) if args.output_md else None,
+        handoff_path=Path(args.output_handoff) if args.output_handoff else None,
     )
     print(json.dumps(result, indent=2, default=str))
     sys.exit(0 if result.get("verdict") == "PASS" else 1)
