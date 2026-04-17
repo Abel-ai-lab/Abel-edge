@@ -8,12 +8,12 @@ import click
 
 
 @click.command()
-@click.option("--workdir", default=".", show_default=True, help="Directory containing strategy.py")
-@click.option("--start", default=None, help="Optional backtest start date passed to run_strategy")
+@click.option("--workdir", default=".", show_default=True, help="Directory containing engine.py")
+@click.option("--start", default=None, help="Optional backtest start date injected into research context")
 @click.option(
     "--context-json",
     default=None,
-    help="Optional JSON file passed to run_strategy(context=...) when supported",
+    help="Optional JSON file merged into the research engine context",
 )
 @click.option("--output-json", default=None, help="Optional path for raw JSON result")
 @click.option("--output-md", default=None, help="Optional path for raw validation markdown")

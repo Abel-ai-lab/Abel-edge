@@ -9,16 +9,33 @@ from causal_edge.cli import main
 from causal_edge.research.handoff import HANDOFF_CONTRACT
 
 
-def _write_strategy(path: Path, *, bias: float = 0.02) -> None:
+def _write_engine(path: Path, *, bias: float = 0.02) -> None:
     path.write_text(
-        "import numpy as np\n"
-        "import pandas as pd\n\n"
-        "def run_strategy(*, start=None):\n"
-        "    start = start or '2024-01-01'\n"
-        "    dates = pd.date_range(start, periods=120, freq='D')\n"
-        f"    pnl = {bias} + 0.012 * np.sin(np.linspace(0, 8 * np.pi, 120))\n"
-        "    positions = np.ones(120)\n"
-        "    return pnl, dates, positions\n",
+        "\n".join(
+            [
+                "import numpy as np",
+                "import pandas as pd",
+                "",
+                "from causal_edge.engine.base import StrategyEngine",
+                "",
+                "",
+                "class BranchEngine(StrategyEngine):",
+                "    def compute_signals(self):",
+                "        requested = ((self.context or {}).get('_research') or {}).get('requested_window') or {}",
+                "        start = requested.get('start') or '2024-01-01'",
+                "        dates = pd.date_range(start, periods=120, freq='D', tz='UTC')",
+                "        phase = np.linspace(0, 8 * np.pi, 120)",
+                "        positions = np.where(np.sin(phase) > 0, 1.0, -1.0)",
+                f"        returns = {bias} * positions + 0.002 * np.sin(phase)",
+                "        prices = 100.0 * np.cumprod(1.0 + returns)",
+                "        return positions, dates, prices",
+                "",
+                "    def get_latest_signal(self):",
+                "        positions, dates, _ = self.compute_signals()",
+                "        return {'position': float(positions[-1]), 'date': str(dates[-1].date())}",
+            ]
+        )
+        + "\n",
         encoding="utf-8",
     )
 
@@ -28,7 +45,7 @@ def test_evaluate_cli_writes_edge_handoff_and_validate_handoff_accepts(tmp_path)
     with runner.isolated_filesystem(temp_dir=tmp_path):
         workdir = Path("workspace")
         workdir.mkdir()
-        _write_strategy(workdir / "strategy.py", bias=0.02)
+        _write_engine(workdir / "engine.py", bias=0.02)
 
         result = runner.invoke(
             main,
@@ -50,6 +67,7 @@ def test_evaluate_cli_writes_edge_handoff_and_validate_handoff_accepts(tmp_path)
         assert payload["verdict"] == "PASS"
         assert payload["profile"] == "equity_daily"
         assert payload["blocking_failures"] == []
+        assert payload["strategy_path"] == "engine.py"
 
         accepted = runner.invoke(main, ["validate-handoff", str(workdir / "edge-handoff.json")])
         assert accepted.exit_code == 0, accepted.output
@@ -62,7 +80,7 @@ def test_validate_handoff_rejects_missing_required_fields(tmp_path):
         json.dumps(
             {
                 "contract": HANDOFF_CONTRACT,
-                "strategy_path": "strategy.py",
+                "strategy_path": "engine.py",
                 "verdict": "PASS",
                 "blocking_failures": [],
                 "edge_result_path": "edge-result.json",
@@ -78,8 +96,8 @@ def test_validate_handoff_rejects_missing_required_fields(tmp_path):
 
 
 def test_validate_handoff_rejects_result_mismatch(tmp_path):
-    strategy = tmp_path / "strategy.py"
-    strategy.write_text("def run_strategy():\n    raise NotImplementedError\n", encoding="utf-8")
+    engine = tmp_path / "engine.py"
+    engine.write_text("# engine\n", encoding="utf-8")
     report = tmp_path / "edge-validation.md"
     report.write_text("# report\n", encoding="utf-8")
     edge_result = tmp_path / "edge-result.json"
@@ -92,7 +110,7 @@ def test_validate_handoff_rejects_result_mismatch(tmp_path):
         json.dumps(
             {
                 "contract": HANDOFF_CONTRACT,
-                "strategy_path": "strategy.py",
+                "strategy_path": "engine.py",
                 "verdict": "PASS",
                 "profile": "equity_daily",
                 "blocking_failures": [],

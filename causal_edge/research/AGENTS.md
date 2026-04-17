@@ -2,37 +2,38 @@
 
 ## I want to...
 
-### Start researching a new asset
+### Evaluate a research branch
 ```bash
-causal-edge research init SOLUSD
-cd research/solusd
-# Edit strategy.py → implement run_strategy()
-causal-edge research run -d "baseline"
+cd <branch-dir>
+causal-edge evaluate --workdir .
 ```
 
-### Run an experiment
+### Emit raw artifacts for upstream orchestration
 ```bash
-# Edit strategy.py with ONE change
-causal-edge research run --mode exploit -d "added xcorr overlay"
-# Result is auto-validated, auto-recorded to results.tsv
+causal-edge evaluate \
+  --workdir <branch-dir> \
+  --output-json edge-result.json \
+  --output-md edge-validation.md \
+  --output-handoff edge-handoff.json
 ```
 
-### Check progress
+### Validate a handoff
 ```bash
-causal-edge research status
+causal-edge validate-handoff path/to/edge-handoff.json
 ```
 
-## What the harness enforces (you cannot bypass)
+## What the research layer enforces
 
-- **K auto-computed** from strategy.py AST (tickers × lags)
-- **validate_strategy()** runs on every experiment
-- **KEEP requires PASS** — append_results_tsv refuses otherwise
-- **results.tsv schema** validated on append
-- **Look-ahead check** before execution
+- `engine.py` is required
+- the branch must define a module-owned `StrategyEngine` subclass
+- K is auto-computed from `engine.py` AST
+- static look-ahead checks run before evaluation
+- engine outputs are validated through the shared signal contract
+- validation artifacts come from the same `validate_strategy()` gate used elsewhere
 
-## What you decide (judgment calls)
+## What strategy authors decide
 
-- What to write in strategy.py
-- Explore vs exploit classification
-- When to declare honest failure
-- How to interpret validation failures
+- what to write in `engine.py`
+- which causal drivers and lags to test
+- how to classify explore vs exploit at the orchestration layer
+- how to interpret failures and iterate
