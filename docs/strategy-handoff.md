@@ -29,7 +29,7 @@ The handoff must be a JSON object with exactly these fields:
 ```json
 {
   "contract": "causal-edge.strategy-handoff/v1",
-  "strategy_path": "../strategy.py",
+  "strategy_path": "../engine.py",
   "verdict": "PASS",
   "profile": "equity_daily",
   "blocking_failures": [],
