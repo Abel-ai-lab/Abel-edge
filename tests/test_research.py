@@ -112,6 +112,17 @@ class TestRunEvaluation:
         assert result["effective_window"]["start"] == "2020-01-01"
         assert result["effective_window"]["end"] == "2020-04-29"
 
+    def test_can_persist_metric_input_csv(self, tmp_path):
+        _write_strategy(tmp_path / "strategy.py")
+        output_csv = tmp_path / "artifacts" / "metric-input.csv"
+
+        result = run_evaluation(tmp_path, output_csv=output_csv)
+
+        assert result["verdict"] == "PASS"
+        assert output_csv.exists()
+        payload = output_csv.read_text(encoding="utf-8")
+        assert "date,pnl,position" in payload
+
 
 class TestValidationMarkdown:
     def test_renders_validation_summary(self, tmp_path):
@@ -141,12 +152,16 @@ class TestEvaluateCli:
                     str(workdir / "edge-result.json"),
                     "--output-md",
                     str(workdir / "edge-validation.md"),
+                    "--output-csv",
+                    str(workdir / "metric-input.csv"),
                 ],
             )
             assert result.exit_code == 0, result.output
             assert (workdir / "edge-result.json").exists()
             assert (workdir / "edge-validation.md").exists()
+            assert (workdir / "metric-input.csv").exists()
             assert "Verdict: PASS" in result.output
+            assert "Input CSV:" in result.output
 
     def test_evaluate_cli_passes_start_to_strategy(self, tmp_path):
         runner = CliRunner()

@@ -65,7 +65,12 @@ def check_look_ahead(strategy_path: Path) -> list[str]:
     return check_static_file(strategy_path)
 
 
-def run_evaluation(workdir: Path | str | None = None, *, start: str | None = None) -> dict:
+def run_evaluation(
+    workdir: Path | str | None = None,
+    *,
+    start: str | None = None,
+    output_csv: Path | None = None,
+) -> dict:
     workspace = Path(workdir or ".")
     strategy_path = workspace / "strategy.py"
     if not strategy_path.exists():
@@ -91,6 +96,9 @@ def run_evaluation(workdir: Path | str | None = None, *, start: str | None = Non
         return _error(f"Insufficient data: {len(pnl)} days (need 30+)")
 
     frame = pd.DataFrame({"date": dates, "pnl": pnl, "position": positions})
+    if output_csv is not None:
+        output_csv.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(output_csv, index=False)
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w") as handle:
         frame.to_csv(handle.name, index=False)
         csv_path = Path(handle.name)
@@ -151,7 +159,10 @@ def render_validation_markdown(result: dict) -> str:
 
 
 def write_evaluation_outputs(
-    result: dict, *, json_path: Path | None = None, markdown_path: Path | None = None
+    result: dict,
+    *,
+    json_path: Path | None = None,
+    markdown_path: Path | None = None,
 ) -> None:
     if json_path is not None:
         json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -224,9 +235,14 @@ def main() -> None:
     parser.add_argument(
         "--output-md", default=None, help="Optional path for raw validation markdown"
     )
+    parser.add_argument("--output-csv", default=None, help="Optional path for metric input CSV")
     args = parser.parse_args()
 
-    result = run_evaluation(args.workdir, start=args.start)
+    result = run_evaluation(
+        args.workdir,
+        start=args.start,
+        output_csv=Path(args.output_csv) if args.output_csv else None,
+    )
     write_evaluation_outputs(
         result,
         json_path=Path(args.output_json) if args.output_json else None,

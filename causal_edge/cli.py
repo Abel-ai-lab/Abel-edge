@@ -43,11 +43,16 @@ def version():
 @click.option("--start", default=None, help="Optional backtest start date passed to run_strategy")
 @click.option("--output-json", default=None, help="Optional path for raw JSON result")
 @click.option("--output-md", default=None, help="Optional path for raw validation markdown")
-def evaluate(workdir, start, output_json, output_md):
+@click.option("--output-csv", default=None, help="Optional path for metric input CSV")
+def evaluate(workdir, start, output_json, output_md, output_csv):
     """Evaluate one strategy and emit raw validation facts."""
     from causal_edge.research.evaluate import run_evaluation, write_evaluation_outputs
 
-    result = run_evaluation(workdir, start=start)
+    result = run_evaluation(
+        workdir,
+        start=start,
+        output_csv=Path(output_csv) if output_csv else None,
+    )
     write_evaluation_outputs(
         result,
         json_path=Path(output_json) if output_json else None,
@@ -61,6 +66,8 @@ def evaluate(workdir, start, output_json, output_md):
         click.echo(f"Raw JSON: {output_json}")
     if output_md:
         click.echo(f"Report:   {output_md}")
+    if output_csv:
+        click.echo(f"Input CSV: {output_csv}")
     raise SystemExit(0 if result.get("verdict") == "PASS" else 1)
 
 
