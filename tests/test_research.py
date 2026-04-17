@@ -124,6 +124,35 @@ def _write_alignment_failure_engine(path: Path) -> None:
     )
 
 
+def _write_feed_loader_engine(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "import numpy as np",
+                "import pandas as pd",
+                "",
+                "from causal_edge.engine.base import StrategyEngine",
+                "",
+                "",
+                "class BranchEngine(StrategyEngine):",
+                "    def compute_signals(self):",
+                "        bars = self.load_research_bars(limit=40)",
+                "        target = self.research_target_ticker() or 'SONY'",
+                "        target_bars = bars[bars['symbol'] == target].copy().sort_values('timestamp')",
+                "        dates = pd.DatetimeIndex(target_bars['timestamp'])",
+                "        prices = target_bars['close'].astype(float).to_numpy()",
+                "        positions = np.zeros(len(dates), dtype=float)",
+                "        return positions, dates, prices",
+                "",
+                "    def get_latest_signal(self):",
+                "        return {'position': 0.0}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 class TestInitWorkspace:
     def test_creates_engine_backed_files(self, tmp_path):
         workspace = init_workspace("SOLUSD", tmp_path / "sol")
@@ -296,6 +325,21 @@ class TestRunEvaluation:
 
         assert result["verdict"] == "ERROR"
         assert "module-owned StrategyEngine subclass" in result["failures"][0]
+
+    def test_context_json_build_synthesizes_primary_feed(self, tmp_path):
+        context_path = tmp_path / "context.json"
+        context_path.write_text(
+            json.dumps({"ticker": "SONY", "discovery": {"ticker": "SONY"}}),
+            encoding="utf-8",
+        )
+        context = research_evaluate._build_research_context(
+            workspace=tmp_path,
+            start=None,
+            context_json=context_path,
+        )
+
+        assert context["_feeds"]["primary"]["symbol"] == "SONY"
+        assert context["_feeds"]["primary"]["adapter"] == "abel"
 
 
 class TestResearchHelpers:
@@ -619,6 +663,9 @@ class TestVerifyData:
         assert summary["partial_window_count"] == 1
         assert summary["no_data_count"] == 1
         assert summary["error_count"] == 1
+        assert report["probe_limit"] == 500
+        assert report["recommended_starts"]["target_recommended_start"] == "2020-01-01"
+        assert report["recommended_starts"]["common_recommended_start"] == "2020-08-01"
 
     def test_verify_data_cli_writes_json(self, monkeypatch, tmp_path):
         from causal_edge.research import data_readiness as data_module

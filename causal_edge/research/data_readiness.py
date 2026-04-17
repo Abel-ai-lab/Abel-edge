@@ -9,6 +9,8 @@ import pandas as pd
 
 from causal_edge.plugins.abel.prices import fetch_bars
 
+DEFAULT_PROBE_LIMIT = 500
+
 
 def run_data_verification(
     *,
@@ -16,7 +18,7 @@ def run_data_verification(
     discovery_json: Path | None = None,
     start: str | None = None,
     end: str | None = None,
-    limit: int = 10,
+    limit: int = DEFAULT_PROBE_LIMIT,
     env_path: str = ".env",
 ) -> dict:
     payload = _load_discovery_payload(discovery_json) if discovery_json is not None else None
@@ -108,10 +110,13 @@ def run_data_verification(
         "no_data_count": sum(1 for item in results if item["status"] == "no_data"),
         "error_count": sum(1 for item in results if item["status"] == "error"),
     }
+    recommendations = _recommended_starts(results)
     return {
         "source": "discovery_json" if payload is not None else "tickers",
         "discovery_path": str(discovery_json.resolve()) if discovery_json is not None else None,
+        "probe_limit": limit,
         "requested_window": {"start": requested_start, "end": end},
+        "recommended_starts": recommendations,
         "results": results,
         "summary": summary,
     }
@@ -123,6 +128,7 @@ def render_data_verification_report(report: dict) -> str:
     lines = [
         "Research Data Verification",
         f"Source: {report.get('source', 'unknown')}",
+        f"Probe limit: {report.get('probe_limit', 'unknown')}",
         f"Requested window: {requested.get('start', 'latest')} -> {requested.get('end', 'latest')}",
         (
             "Summary: "
@@ -135,6 +141,15 @@ def render_data_verification_report(report: dict) -> str:
         ),
         "",
     ]
+    recommendations = report.get("recommended_starts") or {}
+    target_start = recommendations.get("target_recommended_start")
+    common_start = recommendations.get("common_recommended_start")
+    if target_start or common_start:
+        lines.append(
+            "Recommended starts: "
+            f"target={target_start or 'n/a'}, common={common_start or 'n/a'}"
+        )
+        lines.append("")
     for item in report.get("results") or []:
         roles = ",".join(item.get("roles") or [])
         lines.append(
@@ -199,3 +214,26 @@ def _covers_requested_start(first_timestamp: str | None, requested_start: str | 
     if requested_start is None or first_timestamp is None:
         return first_timestamp is not None
     return first_timestamp <= requested_start
+
+
+def _recommended_starts(results: list[dict[str, object]]) -> dict[str, str | None]:
+    target_start = None
+    common_start = None
+
+    usable_starts: list[str] = []
+    for item in results:
+        if not item.get("usable"):
+            continue
+        first_timestamp = item.get("first_timestamp")
+        if isinstance(first_timestamp, str) and first_timestamp:
+            usable_starts.append(first_timestamp)
+        roles = item.get("roles") or []
+        if "target" in roles and isinstance(first_timestamp, str) and first_timestamp:
+            target_start = first_timestamp
+
+    if usable_starts:
+        common_start = max(usable_starts)
+    return {
+        "target_recommended_start": target_start,
+        "common_recommended_start": common_start,
+    }
