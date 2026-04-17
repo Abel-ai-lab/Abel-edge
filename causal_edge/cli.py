@@ -9,6 +9,8 @@ import click
 
 from causal_edge import __version__
 from causal_edge.cli_support import build_bars_loader
+from causal_edge.research.cli import evaluate as evaluate_command
+from causal_edge.research.cli import validate_handoff as validate_handoff_command
 
 CONFIG_OPTION_HELP = (
     "Config file path (defaults to strategies.local.yaml if present, else strategies.yaml)"
@@ -26,36 +28,14 @@ def main():
     """causal-edge: Agent-native quant framework."""
 
 
+main.add_command(evaluate_command)
+main.add_command(validate_handoff_command)
+
+
 @main.command("version")
 def version():
     """Show causal-edge version."""
     click.echo(f"causal-edge, version {_get_version()}")
-
-
-@main.command()
-@click.option("--workdir", default=".", show_default=True, help="Directory containing strategy.py")
-@click.option("--start", default=None, help="Optional backtest start date passed to run_strategy")
-@click.option("--output-json", default=None, help="Optional path for raw JSON result")
-@click.option("--output-md", default=None, help="Optional path for raw validation markdown")
-def evaluate(workdir, start, output_json, output_md):
-    """Evaluate one strategy and emit raw validation facts."""
-    from causal_edge.research.evaluate import run_evaluation, write_evaluation_outputs
-
-    result = run_evaluation(workdir, start=start)
-    write_evaluation_outputs(
-        result,
-        json_path=Path(output_json) if output_json else None,
-        markdown_path=Path(output_md) if output_md else None,
-    )
-
-    click.echo(f"Verdict: {result.get('verdict', 'ERROR')}")
-    click.echo(f"Score:   {result.get('score', '?/?')}")
-    click.echo(f"K:       {result.get('K', '?')}")
-    if output_json:
-        click.echo(f"Raw JSON: {output_json}")
-    if output_md:
-        click.echo(f"Report:   {output_md}")
-    raise SystemExit(0 if result.get("verdict") == "PASS" else 1)
 
 
 @main.command()
