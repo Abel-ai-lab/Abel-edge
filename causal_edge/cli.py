@@ -329,7 +329,12 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
 
 @main.command()
 @click.argument("ticker")
-@click.option("--mode", type=click.Choice(["parents", "mb"]), default="parents", show_default=True)
+@click.option(
+    "--mode",
+    type=click.Choice(["parents", "mb", "all"]),
+    default="parents",
+    show_default=True,
+)
 @click.option(
     "--limit",
     default=10,
@@ -337,13 +342,21 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
     type=int,
     help="Maximum nodes to return (hard cap 20)",
 )
-def discover(ticker, mode, limit):
+@click.option("--json", "json_output", is_flag=True, help="Emit structured JSON output")
+def discover(ticker, mode, limit, json_output):
     """Discover causal graph nodes for an asset via Abel API."""
     try:
-        from causal_edge.plugins.abel.discover import discover_graph_nodes
+        from causal_edge.plugins.abel.discover import (
+            discover_graph_nodes,
+            discover_graph_payload,
+        )
     except ImportError:
         raise click.ClickException("Abel plugin not installed. See: causal_edge/plugins/AGENTS.md")
     try:
+        if json_output:
+            output = discover_graph_payload(ticker, mode=mode, limit=limit)
+            click.echo(json.dumps(output, indent=2, sort_keys=True))
+            return
         output = discover_graph_nodes(ticker, mode=mode, limit=limit)
     except Exception as e:
         raise click.ClickException(str(e))
