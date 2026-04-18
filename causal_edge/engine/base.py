@@ -85,10 +85,10 @@ class StrategyEngine(ABC):
 
             readiness = readiness_by_ticker.get(ticker, {})
             usable = bool(readiness.get("usable", False))
-            full_window = bool(readiness.get("full_window", False))
+            covers_requested_start = bool(readiness.get("covers_requested_start", False))
             if require_usable and not usable:
                 continue
-            if require_full_window and not full_window:
+            if require_full_window and not covers_requested_start:
                 continue
 
             merged.append(
@@ -98,10 +98,10 @@ class StrategyEngine(ABC):
                     "discovery_roles": discovery_roles,
                     "readiness_status": readiness.get("status", "unknown"),
                     "usable": usable,
-                    "full_window": full_window,
+                    "covers_requested_start": covers_requested_start,
                     "rows": int(readiness.get("rows", 0) or 0),
-                    "first_timestamp": readiness.get("first_timestamp"),
-                    "last_timestamp": readiness.get("last_timestamp"),
+                    "observed_first_timestamp": readiness.get("observed_first_timestamp"),
+                    "observed_last_timestamp": readiness.get("observed_last_timestamp"),
                     "note": readiness.get("note"),
                 }
             )

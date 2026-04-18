@@ -81,15 +81,12 @@ def run_data_verification(
 
     summary = _build_summary(results)
     coverage_hints = _coverage_hints(results, requested_start=requested_start, target_boundary=target_boundary)
-    recommendations = _recommended_starts(coverage_hints)
     probe = _probe_summary(limit, target_probe_meta)
     return {
         "source": "discovery_json" if payload is not None else "tickers",
         "discovery_path": str(discovery_json.resolve()) if discovery_json is not None else None,
-        "probe_limit": limit,
         "probe": probe,
         "requested_window": {"start": requested_start, "end": end},
-        "recommended_starts": recommendations,
         "coverage_hints": coverage_hints,
         "target_boundary": target_boundary,
         "results": results,
@@ -104,13 +101,13 @@ def render_data_verification_report(report: dict) -> str:
     lines = [
         "Research Data Verification",
         f"Source: {report.get('source', 'unknown')}",
-        f"Probe limit: {report.get('probe_limit', 'unknown')}",
+        f"Probe limit: {probe.get('limit', 'unknown')}",
         f"Requested window: {requested.get('start', 'latest')} -> {requested.get('end', 'latest')}",
         (
             "Summary: "
             f"{summary.get('ticker_count', 0)} tickers, "
             f"{summary.get('usable_count', 0)} usable, "
-            f"{summary.get('full_window_count', 0)} full-window, "
+            f"{summary.get('start_covered_count', 0)} start-covered, "
             f"{summary.get('partial_window_count', 0)} partial, "
             f"{summary.get('no_data_count', 0)} no-data, "
             f"{summary.get('error_count', 0)} error"
@@ -134,15 +131,6 @@ def render_data_verification_report(report: dict) -> str:
             "Coverage hints: "
             f"target_safe={target_safe_start or 'n/a'}, "
             f"dense_overlap={dense_overlap_hint_start or 'n/a'}"
-        )
-        lines.append("")
-    recommendations = report.get("recommended_starts") or {}
-    target_start = recommendations.get("target_recommended_start")
-    common_start = recommendations.get("common_recommended_start")
-    if target_start or common_start:
-        lines.append(
-            "Compatibility starts: "
-            f"target={target_start or 'n/a'}, common={common_start or 'n/a'}"
         )
         lines.append("")
     for item in report.get("results") or []:
@@ -249,13 +237,9 @@ def _result_from_bars(
             "roles": roles,
             "status": "no_data",
             "usable": False,
-            "full_window": False,
             "covers_requested_start": False,
             "rows": 0,
-            "probe_limit": probe_limit,
             "is_target": is_target,
-            "first_timestamp": None,
-            "last_timestamp": None,
             "observed_first_timestamp": None,
             "observed_last_timestamp": None,
             "left_boundary_confidence": "none",
@@ -265,8 +249,7 @@ def _result_from_bars(
     observed_first = _observed_first_timestamp(bars)
     observed_last = _observed_last_timestamp(bars)
     covers_requested_start = _covers_requested_start(observed_first, requested_start)
-    full_window = covers_requested_start
-    status = "full_window" if full_window else "partial_window"
+    status = "start_covered" if covers_requested_start else "partial_window"
     left_boundary_confidence = _left_boundary_confidence(
         rows=len(bars),
         probe_limit=probe_limit,
@@ -285,13 +268,9 @@ def _result_from_bars(
         "roles": roles,
         "status": status,
         "usable": True,
-        "full_window": full_window,
         "covers_requested_start": covers_requested_start,
         "rows": int(len(bars)),
-        "probe_limit": probe_limit,
         "is_target": is_target,
-        "first_timestamp": observed_first,
-        "last_timestamp": observed_last,
         "observed_first_timestamp": observed_first,
         "observed_last_timestamp": observed_last,
         "left_boundary_confidence": left_boundary_confidence,
@@ -305,13 +284,9 @@ def _error_result(*, ticker: str, roles: list[str], note: str) -> dict[str, obje
         "roles": roles,
         "status": "error",
         "usable": False,
-        "full_window": False,
         "covers_requested_start": False,
         "rows": 0,
-        "probe_limit": 0,
         "is_target": "target" in roles,
-        "first_timestamp": None,
-        "last_timestamp": None,
         "observed_first_timestamp": None,
         "observed_last_timestamp": None,
         "left_boundary_confidence": "none",
@@ -326,8 +301,9 @@ def _target_boundary_from_result(
     probe_meta: dict[str, object],
 ) -> dict[str, object]:
     observed_first = result.get("observed_first_timestamp")
+    observed_last = result.get("observed_last_timestamp")
     rows = int(result.get("rows", 0) or 0)
-    final_limit = int(probe_meta.get("final_limit", result.get("probe_limit", 0)) or 0)
+    final_limit = int(probe_meta.get("final_limit", 0) or 0)
     classification = "unknown_no_requested_start"
     if requested_start:
         if result.get("covers_requested_start"):
@@ -342,9 +318,10 @@ def _target_boundary_from_result(
         "ticker": result.get("ticker"),
         "requested_start": requested_start,
         "observed_first_timestamp": observed_first,
+        "observed_last_timestamp": observed_last,
         "classification": classification,
         "left_boundary_confidence": result.get("left_boundary_confidence", "unknown"),
-        "probe_limit": final_limit,
+        "final_probe_limit": final_limit,
         "confirmation_attempted": bool(probe_meta.get("confirmation_attempted", False)),
     }
 
@@ -353,7 +330,9 @@ def _build_summary(results: list[dict[str, object]]) -> dict[str, int]:
     return {
         "ticker_count": len(results),
         "usable_count": sum(1 for item in results if item["usable"]),
-        "full_window_count": sum(1 for item in results if item["status"] == "full_window"),
+        "start_covered_count": sum(
+            1 for item in results if item["status"] == "start_covered"
+        ),
         "partial_window_count": sum(1 for item in results if item["status"] == "partial_window"),
         "no_data_count": sum(1 for item in results if item["status"] == "no_data"),
         "error_count": sum(1 for item in results if item["status"] == "error"),
@@ -385,14 +364,6 @@ def _coverage_hints(
         "target_safe_start": target_safe_start,
         "dense_overlap_hint_start": dense_overlap_hint_start,
     }
-
-
-def _recommended_starts(coverage_hints: dict[str, object]) -> dict[str, str | None]:
-    return {
-        "target_recommended_start": coverage_hints.get("target_safe_start"),
-        "common_recommended_start": coverage_hints.get("dense_overlap_hint_start"),
-    }
-
 
 def _probe_summary(limit: int, target_probe_meta: dict[str, object] | None) -> dict[str, object]:
     probe_meta = target_probe_meta or _default_probe_meta(limit)

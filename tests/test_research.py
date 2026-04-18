@@ -363,29 +363,29 @@ class TestResearchHelpers:
                         "results": [
                             {
                                 "ticker": "SONY",
-                                "status": "full_window",
+                                "status": "start_covered",
                                 "usable": True,
-                                "full_window": True,
+                                "covers_requested_start": True,
                             },
                             {
                                 "ticker": "AAPL",
-                                "status": "full_window",
+                                "status": "start_covered",
                                 "usable": True,
-                                "full_window": True,
+                                "covers_requested_start": True,
                                 "rows": 252,
                             },
                             {
                                 "ticker": "MSFT",
                                 "status": "partial_window",
                                 "usable": True,
-                                "full_window": False,
+                                "covers_requested_start": False,
                                 "rows": 120,
                             },
                             {
                                 "ticker": "NVDA",
                                 "status": "no_data",
                                 "usable": False,
-                                "full_window": False,
+                                "covers_requested_start": False,
                             },
                         ]
                     },
@@ -443,7 +443,7 @@ class TestResearchHelpers:
                     "parents": [{"ticker": "AAPL", "field": "price"}],
                     "data_readiness": {
                         "results": [
-                            {"ticker": "AAPL", "status": "full_window", "usable": True, "full_window": True},
+                            {"ticker": "AAPL", "status": "start_covered", "usable": True, "covers_requested_start": True},
                         ]
                     },
                 },
@@ -509,8 +509,8 @@ class TestResearchHelpers:
                     "parents": [{"ticker": "AAPL"}, {"ticker": "MSFT"}],
                     "data_readiness": {
                         "results": [
-                            {"ticker": "AAPL", "status": "full_window", "usable": True, "full_window": True},
-                            {"ticker": "MSFT", "status": "full_window", "usable": True, "full_window": True},
+                            {"ticker": "AAPL", "status": "start_covered", "usable": True, "covers_requested_start": True},
+                            {"ticker": "MSFT", "status": "start_covered", "usable": True, "covers_requested_start": True},
                         ]
                     },
                 },
@@ -659,18 +659,16 @@ class TestVerifyData:
 
         summary = report["summary"]
         assert summary["ticker_count"] == 4
-        assert summary["full_window_count"] == 1
+        assert summary["start_covered_count"] == 1
         assert summary["partial_window_count"] == 1
         assert summary["no_data_count"] == 1
         assert summary["error_count"] == 1
-        assert report["probe_limit"] == 500
+        assert report["probe"]["limit"] == 500
         assert report["probe"]["strategy"] == "target_boundary_confirm"
         assert report["target_boundary"]["classification"] == "confirmed_before_requested_start"
         assert report["target_boundary"]["observed_first_timestamp"] == "2020-01-01"
         assert report["coverage_hints"]["target_safe_start"] == "2020-01-01"
         assert report["coverage_hints"]["dense_overlap_hint_start"] == "2020-08-01"
-        assert report["recommended_starts"]["target_recommended_start"] == "2020-01-01"
-        assert report["recommended_starts"]["common_recommended_start"] == "2020-08-01"
         cnet = next(item for item in report["results"] if item["ticker"] == "CNET")
         assert cnet["observed_first_timestamp"] == "2020-08-01"
         assert cnet["covers_requested_start"] is False
