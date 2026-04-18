@@ -278,6 +278,7 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
     opened_urls = []
     notices = []
     handoffs = []
+    pending = []
     monkeypatch.setattr(credentials_module.Path, "home", lambda: tmp_path / "home")
     monkeypatch.setattr("webbrowser.open", lambda url: opened_urls.append(url) or True)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
@@ -287,6 +288,7 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
         session=StubSession(),
         notify=notices.append,
         on_handoff=handoffs.append,
+        on_pending=pending.append,
         timeout_seconds=5,
     )
 
@@ -301,6 +303,18 @@ def test_login_with_oauth_persists_api_key(tmp_path, monkeypatch):
             "auth_url": "https://example.com/auth",
             "env_path": str(tmp_path / ".env"),
             "opened_browser": True,
+            "result_url": None,
+            "poll_token": "poll-123",
+            "poll_interval_seconds": 2.0,
+            "timeout_seconds": 5,
+        }
+    ]
+    assert pending == [
+        {
+            "status": "waiting_for_authorization",
+            "polls": 1,
+            "poll_interval_seconds": 2.0,
+            "timeout_seconds": 5,
         }
     ]
     assert "ABEL_API_KEY=abel_key" in (tmp_path / ".env").read_text(encoding="utf-8")

@@ -99,10 +99,12 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
 
     def _notify(message: str) -> None:
         click.echo(message, err=True)
+        click.get_text_stream("stderr").flush()
 
-    def _emit_handoff(payload: dict[str, object]) -> None:
-        if json_output:
-            click.echo(json.dumps(payload, sort_keys=True))
+    def _emit_json_event(payload: dict[str, object]) -> None:
+        stream = click.get_text_stream("stdout")
+        click.echo(json.dumps(payload, sort_keys=True), file=stream)
+        stream.flush()
 
     try:
         result = login_with_oauth(
@@ -111,7 +113,8 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
             timeout_seconds=timeout,
             force=force,
             notify=None if json_output else _notify,
-            on_handoff=_emit_handoff if json_output else None,
+            on_handoff=_emit_json_event if json_output else None,
+            on_pending=_emit_json_event if json_output else None,
         )
     except Exception as e:
         raise click.ClickException(str(e))
@@ -121,7 +124,7 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
         output.pop("api_key", None)
 
     if json_output:
-        click.echo(json.dumps(output, sort_keys=True))
+        _emit_json_event(output)
         return
 
     if result["status"] == "already_configured":

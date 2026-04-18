@@ -17,6 +17,18 @@ def test_login_json_output(monkeypatch):
                 "auth_url": "https://example.com/auth",
                 "env_path": ".env",
                 "opened_browser": False,
+                "result_url": None,
+                "poll_token": "poll-123",
+                "poll_interval_seconds": 2.0,
+                "timeout_seconds": 300,
+            }
+        )
+        kwargs["on_pending"](
+            {
+                "status": "waiting_for_authorization",
+                "polls": 1,
+                "poll_interval_seconds": 2.0,
+                "timeout_seconds": 300,
             }
         )
         return {
@@ -34,6 +46,7 @@ def test_login_json_output(monkeypatch):
     assert result.exit_code == 0, result.output
     lines = result.output.strip().splitlines()
     assert '"status": "awaiting_authorization"' in lines[0]
+    assert '"status": "waiting_for_authorization"' in lines[1]
     assert '"status": "authorized"' in lines[-1]
     assert "abel_login" not in result.output
 
