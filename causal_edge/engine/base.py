@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from causal_edge.engine.feed_contract import align_series_to_dates
-from causal_edge.engine.feed_loader import load_declared_feed
+from causal_edge.engine.feed_loader import load_declared_feed, load_feed_frame
 from causal_edge.engine.signal_contract import validate_signal_output
 
 
@@ -32,10 +32,24 @@ class StrategyEngine(ABC):
         research = (self.context or {}).get("_research")
         return dict(research) if isinstance(research, dict) else {}
 
+    def research_branch_spec(self) -> dict:
+        """Return the explicit branch specification injected by Abel-alpha."""
+        spec = (self.context or {}).get("branch_spec")
+        return dict(spec) if isinstance(spec, dict) else {}
+
+    def research_dependencies(self) -> dict:
+        """Return the prepared branch dependency payload when available."""
+        payload = (self.context or {}).get("dependencies")
+        return dict(payload) if isinstance(payload, dict) else {}
+
     def research_requested_window(self) -> dict:
         """Return the requested evaluation window for this research run."""
         requested = self.research_context().get("requested_window")
-        return dict(requested) if isinstance(requested, dict) else {"start": None, "end": None}
+        window = dict(requested) if isinstance(requested, dict) else {"start": None, "end": None}
+        branch_start = self.research_branch_spec().get("requested_start")
+        if branch_start:
+            window["start"] = str(branch_start)
+        return window
 
     def research_requested_start(self) -> str | None:
         """Return the requested research start date when present."""
@@ -48,11 +62,19 @@ class StrategyEngine(ABC):
 
     def research_data_readiness(self) -> dict:
         """Return the injected edge-owned data-readiness report for discovery tickers."""
-        readiness = self.research_discovery().get("data_readiness")
+        readiness = (self.context or {}).get("readiness")
+        if not isinstance(readiness, dict):
+            readiness = self.research_discovery().get("data_readiness")
         return dict(readiness) if isinstance(readiness, dict) else {}
 
     def research_target_ticker(self) -> str | None:
         """Return the normalized research target ticker."""
+        branch_spec = self.research_branch_spec()
+        ticker = branch_spec.get("target")
+        if ticker is not None:
+            normalized = str(ticker).strip().upper()
+            if normalized:
+                return normalized
         discovery = self.research_discovery()
         ticker = discovery.get("ticker") or (self.context or {}).get("ticker")
         if ticker is None:
@@ -73,6 +95,10 @@ class StrategyEngine(ABC):
         readiness_by_ticker = _readiness_by_ticker(self.research_data_readiness())
         allowed_roles = {str(role).strip().lower() for role in (roles or []) if str(role).strip()}
         candidates = _discovery_candidates(discovery)
+        explicit = _explicit_candidates(self.research_branch_spec())
+        explicit_selected = bool(explicit)
+        if explicit:
+            candidates = explicit
 
         merged: list[dict] = []
         for item in candidates:
@@ -85,11 +111,12 @@ class StrategyEngine(ABC):
 
             readiness = readiness_by_ticker.get(ticker, {})
             usable = bool(readiness.get("usable", False))
-            full_window = bool(readiness.get("full_window", False))
-            if require_usable and not usable:
-                continue
-            if require_full_window and not full_window:
-                continue
+            covers_requested_start = bool(readiness.get("covers_requested_start", False))
+            if not explicit_selected:
+                if require_usable and not usable:
+                    continue
+                if require_full_window and not covers_requested_start:
+                    continue
 
             merged.append(
                 {
@@ -98,10 +125,10 @@ class StrategyEngine(ABC):
                     "discovery_roles": discovery_roles,
                     "readiness_status": readiness.get("status", "unknown"),
                     "usable": usable,
-                    "full_window": full_window,
+                    "covers_requested_start": covers_requested_start,
                     "rows": int(readiness.get("rows", 0) or 0),
-                    "first_timestamp": readiness.get("first_timestamp"),
-                    "last_timestamp": readiness.get("last_timestamp"),
+                    "observed_first_timestamp": readiness.get("observed_first_timestamp"),
+                    "observed_last_timestamp": readiness.get("observed_last_timestamp"),
                     "note": readiness.get("note"),
                 }
             )
@@ -110,6 +137,46 @@ class StrategyEngine(ABC):
     def research_driver_tickers(self, **kwargs) -> list[str]:
         """Return only the tickers for research driver candidates."""
         return [item["ticker"] for item in self.research_driver_candidates(**kwargs)]
+
+    def research_data_requirements(self) -> dict:
+        """Return the prepared branch data requirements when present."""
+        dependencies = self.research_dependencies()
+        requirements = dependencies.get("data_requirements")
+        if isinstance(requirements, dict):
+            return dict(requirements)
+        branch_spec = self.research_branch_spec()
+        requirements = branch_spec.get("data_requirements")
+        return dict(requirements) if isinstance(requirements, dict) else {}
+
+    def _research_feed_defaults(self) -> tuple[str, str, str, dict[str, object]]:
+        """Resolve adapter/timeframe/profile/cache defaults for research bars."""
+        dependencies = self.research_dependencies()
+        cache = dependencies.get("cache")
+        cache_payload = dict(cache) if isinstance(cache, dict) else {}
+        primary = (((self.context or {}).get("_feeds") or {}).get("primary")) or {}
+        requirements = self.research_data_requirements()
+
+        adapter = str(
+            cache_payload.get("adapter")
+            or primary.get("adapter")
+            or "abel"
+        ).strip().lower()
+        timeframe = str(
+            cache_payload.get("timeframe")
+            or requirements.get("timeframe")
+            or primary.get("timeframe")
+            or "1d"
+        ).strip().lower()
+        profile = str(
+            cache_payload.get("profile")
+            or primary.get("profile")
+            or "daily"
+        ).strip().lower()
+        options: dict[str, object] = {}
+        cache_root = cache_payload.get("cache_root")
+        if cache_root:
+            options["cache_root"] = cache_root
+        return adapter, timeframe, profile, options
 
     def load_research_bars(
         self,
@@ -135,14 +202,37 @@ class StrategyEngine(ABC):
             raise ValueError(
                 "No research symbols were selected. Include the target or choose at least one driver."
             )
-        return self.load_bars(
-            symbols=symbols,
-            start=self.research_requested_start() if start is None else start,
-            end=end,
-            timeframe=timeframe,
-            limit=limit,
-            fields=fields,
-        )
+        adapter, default_timeframe, profile, options = self._research_feed_defaults()
+        effective_start = self.research_requested_start() if start is None else start
+        effective_timeframe = timeframe or default_timeframe
+        frames: list[pd.DataFrame] = []
+        for symbol in symbols:
+            feed_cfg = {
+                "name": f"research:{symbol}",
+                "kind": "bars",
+                "adapter": adapter,
+                "symbol": symbol,
+                "timeframe": effective_timeframe,
+                "profile": profile,
+                **options,
+            }
+            frame = load_feed_frame(
+                feed_cfg,
+                strategy_id=(self.context or {}).get("id"),
+                start=effective_start,
+                end=end,
+                timeframe=effective_timeframe,
+                limit=limit,
+                fields=fields,
+            )
+            if not frame.empty:
+                frames.append(frame)
+        if not frames:
+            return pd.DataFrame(columns=["timestamp", "symbol", *(fields or [])])
+        bars = pd.concat(frames, ignore_index=True)
+        bars["timestamp"] = pd.to_datetime(bars["timestamp"], utc=True, errors="coerce")
+        bars = bars.dropna(subset=["timestamp"]).sort_values(["timestamp", "symbol"])
+        return bars.reset_index(drop=True)
 
     def research_close_frame(
         self,
@@ -421,10 +511,13 @@ class StrategyEngine(ABC):
                 symbols.append(target)
         selected = driver_tickers
         if selected is None:
-            selected = self.research_driver_tickers(
-                require_usable=require_usable,
-                require_full_window=require_full_window,
-            )
+            explicit = self.research_branch_spec().get("selected_drivers") or []
+            selected = [str(item).strip().upper() for item in explicit if str(item).strip()]
+            if not selected:
+                selected = self.research_driver_tickers(
+                    require_usable=require_usable,
+                    require_full_window=require_full_window,
+                )
         for ticker in selected:
             normalized = _normalize_ticker(ticker)
             if normalized and normalized not in symbols:
@@ -479,6 +572,23 @@ def _discovery_candidates(discovery: dict) -> list[dict]:
         }
         for ticker, payload in sorted(combined.items())
     ]
+
+
+def _explicit_candidates(branch_spec: dict) -> list[dict]:
+    selected = branch_spec.get("selected_drivers") or []
+    candidates: list[dict] = []
+    for ticker in selected:
+        normalized = _normalize_ticker(ticker)
+        if not normalized:
+            continue
+        candidates.append(
+            {
+                "ticker": normalized,
+                "field": None,
+                "discovery_roles": ["selected"],
+            }
+        )
+    return candidates
 
 
 def _readiness_by_ticker(report: dict) -> dict[str, dict]:

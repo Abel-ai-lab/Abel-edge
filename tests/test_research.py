@@ -363,29 +363,29 @@ class TestResearchHelpers:
                         "results": [
                             {
                                 "ticker": "SONY",
-                                "status": "full_window",
+                                "status": "start_covered",
                                 "usable": True,
-                                "full_window": True,
+                                "covers_requested_start": True,
                             },
                             {
                                 "ticker": "AAPL",
-                                "status": "full_window",
+                                "status": "start_covered",
                                 "usable": True,
-                                "full_window": True,
+                                "covers_requested_start": True,
                                 "rows": 252,
                             },
                             {
                                 "ticker": "MSFT",
                                 "status": "partial_window",
                                 "usable": True,
-                                "full_window": False,
+                                "covers_requested_start": False,
                                 "rows": 120,
                             },
                             {
                                 "ticker": "NVDA",
                                 "status": "no_data",
                                 "usable": False,
-                                "full_window": False,
+                                "covers_requested_start": False,
                             },
                         ]
                     },
@@ -443,7 +443,7 @@ class TestResearchHelpers:
                     "parents": [{"ticker": "AAPL", "field": "price"}],
                     "data_readiness": {
                         "results": [
-                            {"ticker": "AAPL", "status": "full_window", "usable": True, "full_window": True},
+                            {"ticker": "AAPL", "status": "start_covered", "usable": True, "covers_requested_start": True},
                         ]
                     },
                 },
@@ -509,8 +509,8 @@ class TestResearchHelpers:
                     "parents": [{"ticker": "AAPL"}, {"ticker": "MSFT"}],
                     "data_readiness": {
                         "results": [
-                            {"ticker": "AAPL", "status": "full_window", "usable": True, "full_window": True},
-                            {"ticker": "MSFT", "status": "full_window", "usable": True, "full_window": True},
+                            {"ticker": "AAPL", "status": "start_covered", "usable": True, "covers_requested_start": True},
+                            {"ticker": "MSFT", "status": "start_covered", "usable": True, "covers_requested_start": True},
                         ]
                     },
                 },
@@ -659,13 +659,57 @@ class TestVerifyData:
 
         summary = report["summary"]
         assert summary["ticker_count"] == 4
-        assert summary["full_window_count"] == 1
+        assert summary["start_covered_count"] == 1
         assert summary["partial_window_count"] == 1
         assert summary["no_data_count"] == 1
         assert summary["error_count"] == 1
-        assert report["probe_limit"] == 500
-        assert report["recommended_starts"]["target_recommended_start"] == "2020-01-01"
-        assert report["recommended_starts"]["common_recommended_start"] == "2020-08-01"
+        assert report["probe"]["limit"] == 500
+        assert report["probe"]["strategy"] == "target_boundary_confirm"
+        assert report["target_boundary"]["classification"] == "confirmed_before_requested_start"
+        assert report["target_boundary"]["observed_first_timestamp"] == "2020-01-01"
+        assert report["coverage_hints"]["target_safe_start"] == "2020-01-01"
+        assert report["coverage_hints"]["dense_overlap_hint_start"] == "2020-08-01"
+        cnet = next(item for item in report["results"] if item["ticker"] == "CNET")
+        assert cnet["observed_first_timestamp"] == "2020-08-01"
+        assert cnet["covers_requested_start"] is False
+        assert cnet["left_boundary_confidence"] == "confirmed"
+
+    def test_run_data_verification_marks_target_boundary_unknown_when_probe_truncates(self, monkeypatch, tmp_path):
+        from causal_edge.research import data_readiness as data_module
+
+        def _fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
+            ticker = symbols[0]
+            if ticker != "META":
+                return _bars_frame(["2024-11-25", "2024-11-26"])
+            if limit == 500:
+                return _bars_range("2024-04-09", periods=500)
+            if limit == 1000:
+                return _bars_range("2023-04-10", periods=1000)
+            return _bars_range("2022-04-11", periods=2000)
+
+        monkeypatch.setattr(data_module, "fetch_bars", _fake_fetch_bars)
+        discovery = tmp_path / "discovery.json"
+        discovery.write_text(
+            json.dumps(
+                {
+                    "ticker": "META",
+                    "backtest": {"start": "2020-01-01"},
+                    "parents": [{"ticker": "PEER"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = run_data_verification(discovery_json=discovery)
+
+        assert report["target_boundary"]["classification"] == "unknown_probe_truncated"
+        assert report["target_boundary"]["observed_first_timestamp"] == "2022-04-11"
+        assert report["probe"]["target_confirmation_attempted"] is True
+        assert report["probe"]["target_final_limit"] == 2000
+        assert report["coverage_hints"]["target_safe_start"] == "2022-04-11"
+        meta = next(item for item in report["results"] if item["ticker"] == "META")
+        assert meta["left_boundary_confidence"] == "observed"
+        assert meta["covers_requested_start"] is False
 
     def test_verify_data_cli_writes_json(self, monkeypatch, tmp_path):
         from causal_edge.research import data_readiness as data_module
@@ -707,6 +751,19 @@ def _bars_frame(dates: list[str]):
         {
             "timestamp": pd.to_datetime(dates, utc=True),
             "symbol": ["SONY"] * len(dates),
+            "close": [100.0 + idx for idx in range(len(dates))],
+        }
+    )
+
+
+def _bars_range(start: str, periods: int):
+    import pandas as pd
+
+    dates = pd.date_range(start, periods=periods, freq="D", tz="UTC")
+    return pd.DataFrame(
+        {
+            "timestamp": dates,
+            "symbol": ["META"] * len(dates),
             "close": [100.0 + idx for idx in range(len(dates))],
         }
     )

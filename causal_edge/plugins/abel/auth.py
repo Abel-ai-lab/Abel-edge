@@ -17,6 +17,7 @@ from causal_edge.plugins.abel.credentials import (
 
 Notifier = Callable[[str], None]
 HandoffCallback = Callable[[dict[str, Any]], None]
+PendingCallback = Callable[[dict[str, Any]], None]
 
 
 class AbelLoginTimeoutError(RuntimeError):
@@ -53,6 +54,7 @@ class AbelAuthClient:
         poll_interval: float,
         timeout_seconds: int,
         notify: Notifier | None = None,
+        on_pending: PendingCallback | None = None,
     ) -> dict[str, Any]:
         if result_url:
             url = result_url
@@ -80,6 +82,24 @@ class AbelAuthClient:
             if status != "pending":
                 raise RuntimeError(f"Unexpected Abel authorization status: {status!r}")
             polls += 1
+            if on_pending is not None and polls == 1:
+                on_pending(
+                    {
+                        "status": "waiting_for_authorization",
+                        "polls": polls,
+                        "poll_interval_seconds": poll_interval,
+                        "timeout_seconds": timeout_seconds,
+                    }
+                )
+            elif on_pending is not None and polls % 15 == 0:
+                on_pending(
+                    {
+                        "status": "waiting_for_authorization",
+                        "polls": polls,
+                        "poll_interval_seconds": poll_interval,
+                        "timeout_seconds": timeout_seconds,
+                    }
+                )
             if notify is not None and polls % 15 == 0:
                 notify("Still waiting for browser authorization... (Ctrl+C to cancel)")
             time.sleep(poll_interval)
@@ -94,6 +114,7 @@ def login_with_oauth(
     force: bool = False,
     notify: Notifier | None = None,
     on_handoff: HandoffCallback | None = None,
+    on_pending: PendingCallback | None = None,
     session: requests.Session | None = None,
 ) -> dict[str, Any]:
     existing_api_key = None if force else resolve_api_key(env_path=env_path)
@@ -127,6 +148,10 @@ def login_with_oauth(
                 "auth_url": auth_url,
                 "env_path": env_path,
                 "opened_browser": opened_browser,
+                "result_url": handoff.get("resultUrl"),
+                "poll_token": handoff.get("pollToken"),
+                "poll_interval_seconds": poll_interval,
+                "timeout_seconds": timeout_seconds,
             }
         )
 
@@ -136,6 +161,7 @@ def login_with_oauth(
         poll_interval=poll_interval,
         timeout_seconds=timeout_seconds,
         notify=notify,
+        on_pending=on_pending,
     )
     api_key = normalize_api_key(result.get("apiKey"))
     if not api_key:

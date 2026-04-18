@@ -103,7 +103,7 @@ def debug_evaluate(workdir, start, context_json, output_json):
 @click.option("--ticker", "tickers", multiple=True, help="Explicit ticker to probe (repeatable)")
 @click.option("--start", default=None, help="Requested history start date")
 @click.option("--end", default=None, help="Requested history end date")
-@click.option("--limit", default=500, show_default=True, help="Rows requested per ticker probe")
+@click.option("--limit", default=5000, show_default=True, help="Rows requested per ticker probe")
 @click.option("--env-path", default=".env", show_default=True, help="Env file used to resolve Abel auth")
 @click.option("--output-json", default=None, help="Optional path for structured verification JSON")
 def verify_data(discovery_json, tickers, start, end, limit, env_path, output_json):

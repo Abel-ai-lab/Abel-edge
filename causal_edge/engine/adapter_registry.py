@@ -9,6 +9,13 @@ from typing import Any, Protocol
 
 import pandas as pd
 
+from causal_edge.engine.cache import (
+    cache_covers_request,
+    cache_entry_for_request,
+    load_cached_bars,
+    load_cached_metadata,
+    write_cached_bars,
+)
 from causal_edge.engine.feed_contract import FeedContractError
 
 
@@ -129,18 +136,45 @@ class AbelDataFeedAdapter:
             if isinstance(raw_fields, list):
                 fields = [str(field) for field in raw_fields]
 
-        try:
-            bars = fetch_bars(
-                symbols=[symbol],
-                start=request.start,
-                end=request.end,
-                timeframe=request.timeframe or "1d",
-                limit=request.limit,
-                fields=fields,
-                config=request.options,
-            )
-        except missing_api_key_error as exc:
-            raise AdapterRegistryError(str(exc)) from exc
+        entry = cache_entry_for_request(
+            adapter=request.adapter,
+            symbol=symbol,
+            timeframe=request.timeframe,
+            profile=request.profile,
+            options=request.options,
+            cache_root=request.options.get("cache_root"),
+        )
+        cached_metadata = load_cached_metadata(entry)
+        if cache_covers_request(
+            cached_metadata,
+            start=request.start,
+            end=request.end,
+        ):
+            cached = load_cached_bars(entry)
+            if cached is not None:
+                bars = cached
+            else:
+                bars = pd.DataFrame()
+        else:
+            bars = pd.DataFrame()
+
+        if bars.empty:
+            effective_limit = request.limit
+            if effective_limit is None or effective_limit < 5000:
+                effective_limit = 5000
+            try:
+                bars = fetch_bars(
+                    symbols=[symbol],
+                    start=request.start,
+                    end=request.end,
+                    timeframe=request.timeframe or "1d",
+                    limit=effective_limit,
+                    fields=fields,
+                    config=request.options,
+                )
+                write_cached_bars(entry, bars)
+            except missing_api_key_error as exc:
+                raise AdapterRegistryError(str(exc)) from exc
 
         if request.kind == "bars":
             return bars
