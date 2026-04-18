@@ -48,7 +48,9 @@ class StrategyEngine(ABC):
 
     def research_data_readiness(self) -> dict:
         """Return the injected edge-owned data-readiness report for discovery tickers."""
-        readiness = self.research_discovery().get("data_readiness")
+        readiness = (self.context or {}).get("readiness")
+        if not isinstance(readiness, dict):
+            readiness = self.research_discovery().get("data_readiness")
         return dict(readiness) if isinstance(readiness, dict) else {}
 
     def research_target_ticker(self) -> str | None:
