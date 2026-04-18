@@ -32,10 +32,24 @@ class StrategyEngine(ABC):
         research = (self.context or {}).get("_research")
         return dict(research) if isinstance(research, dict) else {}
 
+    def research_branch_spec(self) -> dict:
+        """Return the explicit branch specification injected by Abel-alpha."""
+        spec = (self.context or {}).get("branch_spec")
+        return dict(spec) if isinstance(spec, dict) else {}
+
+    def research_dependencies(self) -> dict:
+        """Return the prepared branch dependency payload when available."""
+        payload = (self.context or {}).get("dependencies")
+        return dict(payload) if isinstance(payload, dict) else {}
+
     def research_requested_window(self) -> dict:
         """Return the requested evaluation window for this research run."""
         requested = self.research_context().get("requested_window")
-        return dict(requested) if isinstance(requested, dict) else {"start": None, "end": None}
+        window = dict(requested) if isinstance(requested, dict) else {"start": None, "end": None}
+        branch_start = self.research_branch_spec().get("requested_start")
+        if branch_start:
+            window["start"] = str(branch_start)
+        return window
 
     def research_requested_start(self) -> str | None:
         """Return the requested research start date when present."""
@@ -55,6 +69,12 @@ class StrategyEngine(ABC):
 
     def research_target_ticker(self) -> str | None:
         """Return the normalized research target ticker."""
+        branch_spec = self.research_branch_spec()
+        ticker = branch_spec.get("target")
+        if ticker is not None:
+            normalized = str(ticker).strip().upper()
+            if normalized:
+                return normalized
         discovery = self.research_discovery()
         ticker = discovery.get("ticker") or (self.context or {}).get("ticker")
         if ticker is None:
@@ -75,6 +95,10 @@ class StrategyEngine(ABC):
         readiness_by_ticker = _readiness_by_ticker(self.research_data_readiness())
         allowed_roles = {str(role).strip().lower() for role in (roles or []) if str(role).strip()}
         candidates = _discovery_candidates(discovery)
+        explicit = _explicit_candidates(self.research_branch_spec())
+        explicit_selected = bool(explicit)
+        if explicit:
+            candidates = explicit
 
         merged: list[dict] = []
         for item in candidates:
@@ -88,10 +112,11 @@ class StrategyEngine(ABC):
             readiness = readiness_by_ticker.get(ticker, {})
             usable = bool(readiness.get("usable", False))
             covers_requested_start = bool(readiness.get("covers_requested_start", False))
-            if require_usable and not usable:
-                continue
-            if require_full_window and not covers_requested_start:
-                continue
+            if not explicit_selected:
+                if require_usable and not usable:
+                    continue
+                if require_full_window and not covers_requested_start:
+                    continue
 
             merged.append(
                 {
@@ -423,10 +448,13 @@ class StrategyEngine(ABC):
                 symbols.append(target)
         selected = driver_tickers
         if selected is None:
-            selected = self.research_driver_tickers(
-                require_usable=require_usable,
-                require_full_window=require_full_window,
-            )
+            explicit = self.research_branch_spec().get("selected_drivers") or []
+            selected = [str(item).strip().upper() for item in explicit if str(item).strip()]
+            if not selected:
+                selected = self.research_driver_tickers(
+                    require_usable=require_usable,
+                    require_full_window=require_full_window,
+                )
         for ticker in selected:
             normalized = _normalize_ticker(ticker)
             if normalized and normalized not in symbols:
@@ -481,6 +509,23 @@ def _discovery_candidates(discovery: dict) -> list[dict]:
         }
         for ticker, payload in sorted(combined.items())
     ]
+
+
+def _explicit_candidates(branch_spec: dict) -> list[dict]:
+    selected = branch_spec.get("selected_drivers") or []
+    candidates: list[dict] = []
+    for ticker in selected:
+        normalized = _normalize_ticker(ticker)
+        if not normalized:
+            continue
+        candidates.append(
+            {
+                "ticker": normalized,
+                "field": None,
+                "discovery_roles": ["selected"],
+            }
+        )
+    return candidates
 
 
 def _readiness_by_ticker(report: dict) -> dict[str, dict]:
