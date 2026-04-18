@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from causal_edge.engine.feed_contract import align_series_to_dates
-from causal_edge.engine.feed_loader import load_declared_feed
+from causal_edge.engine.feed_loader import load_declared_feed, load_feed_frame
 from causal_edge.engine.signal_contract import validate_signal_output
 
 
@@ -138,6 +138,46 @@ class StrategyEngine(ABC):
         """Return only the tickers for research driver candidates."""
         return [item["ticker"] for item in self.research_driver_candidates(**kwargs)]
 
+    def research_data_requirements(self) -> dict:
+        """Return the prepared branch data requirements when present."""
+        dependencies = self.research_dependencies()
+        requirements = dependencies.get("data_requirements")
+        if isinstance(requirements, dict):
+            return dict(requirements)
+        branch_spec = self.research_branch_spec()
+        requirements = branch_spec.get("data_requirements")
+        return dict(requirements) if isinstance(requirements, dict) else {}
+
+    def _research_feed_defaults(self) -> tuple[str, str, str, dict[str, object]]:
+        """Resolve adapter/timeframe/profile/cache defaults for research bars."""
+        dependencies = self.research_dependencies()
+        cache = dependencies.get("cache")
+        cache_payload = dict(cache) if isinstance(cache, dict) else {}
+        primary = (((self.context or {}).get("_feeds") or {}).get("primary")) or {}
+        requirements = self.research_data_requirements()
+
+        adapter = str(
+            cache_payload.get("adapter")
+            or primary.get("adapter")
+            or "abel"
+        ).strip().lower()
+        timeframe = str(
+            cache_payload.get("timeframe")
+            or requirements.get("timeframe")
+            or primary.get("timeframe")
+            or "1d"
+        ).strip().lower()
+        profile = str(
+            cache_payload.get("profile")
+            or primary.get("profile")
+            or "daily"
+        ).strip().lower()
+        options: dict[str, object] = {}
+        cache_root = cache_payload.get("cache_root")
+        if cache_root:
+            options["cache_root"] = cache_root
+        return adapter, timeframe, profile, options
+
     def load_research_bars(
         self,
         *,
@@ -162,14 +202,37 @@ class StrategyEngine(ABC):
             raise ValueError(
                 "No research symbols were selected. Include the target or choose at least one driver."
             )
-        return self.load_bars(
-            symbols=symbols,
-            start=self.research_requested_start() if start is None else start,
-            end=end,
-            timeframe=timeframe,
-            limit=limit,
-            fields=fields,
-        )
+        adapter, default_timeframe, profile, options = self._research_feed_defaults()
+        effective_start = self.research_requested_start() if start is None else start
+        effective_timeframe = timeframe or default_timeframe
+        frames: list[pd.DataFrame] = []
+        for symbol in symbols:
+            feed_cfg = {
+                "name": f"research:{symbol}",
+                "kind": "bars",
+                "adapter": adapter,
+                "symbol": symbol,
+                "timeframe": effective_timeframe,
+                "profile": profile,
+                **options,
+            }
+            frame = load_feed_frame(
+                feed_cfg,
+                strategy_id=(self.context or {}).get("id"),
+                start=effective_start,
+                end=end,
+                timeframe=effective_timeframe,
+                limit=limit,
+                fields=fields,
+            )
+            if not frame.empty:
+                frames.append(frame)
+        if not frames:
+            return pd.DataFrame(columns=["timestamp", "symbol", *(fields or [])])
+        bars = pd.concat(frames, ignore_index=True)
+        bars["timestamp"] = pd.to_datetime(bars["timestamp"], utc=True, errors="coerce")
+        bars = bars.dropna(subset=["timestamp"]).sort_values(["timestamp", "symbol"])
+        return bars.reset_index(drop=True)
 
     def research_close_frame(
         self,
