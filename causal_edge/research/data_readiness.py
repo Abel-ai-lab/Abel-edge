@@ -9,8 +9,8 @@ import pandas as pd
 
 from causal_edge.plugins.abel.prices import fetch_bars
 
-DEFAULT_PROBE_LIMIT = 500
-TARGET_CONFIRMATION_LIMITS = (1000, 2000)
+DEFAULT_PROBE_LIMIT = 5000
+BOUNDARY_CONFIRMATION_LIMITS = (10000, 20000)
 
 
 def run_data_verification(
@@ -37,22 +37,13 @@ def run_data_verification(
         roles = item["roles"]
         is_target = "target" in roles
         try:
-            if is_target:
-                bars, target_probe_meta = _probe_target_bars(
-                    ticker=ticker,
-                    requested_start=requested_start,
-                    end=end,
-                    limit=limit,
-                    env_path=env_path,
-                )
-            else:
-                bars = _fetch_probe_bars(
-                    ticker=ticker,
-                    start=requested_start,
-                    end=end,
-                    limit=limit,
-                    env_path=env_path,
-                )
+            bars, probe_meta = _probe_bars_with_boundary_confirm(
+                ticker=ticker,
+                requested_start=requested_start,
+                end=end,
+                limit=limit,
+                env_path=env_path,
+            )
         except Exception as exc:
             results.append(
                 _error_result(
@@ -68,15 +59,16 @@ def run_data_verification(
             roles=roles,
             bars=bars,
             requested_start=requested_start,
-            probe_limit=limit,
+            probe_meta=probe_meta,
             is_target=is_target,
         )
         results.append(result)
         if is_target:
+            target_probe_meta = probe_meta
             target_boundary = _target_boundary_from_result(
                 result=result,
                 requested_start=requested_start,
-                probe_meta=target_probe_meta or _default_probe_meta(limit),
+                probe_meta=probe_meta,
             )
 
     summary = _build_summary(results)
@@ -112,7 +104,11 @@ def render_data_verification_report(report: dict) -> str:
             f"{summary.get('no_data_count', 0)} no-data, "
             f"{summary.get('error_count', 0)} error"
         ),
-        f"Probe semantics: left_boundary={probe.get('left_boundary_confidence', 'unknown')}",
+        (
+            "Probe semantics: "
+            f"left_boundary={probe.get('left_boundary_confidence', 'unknown')}, "
+            f"confirmation_schedule={probe.get('confirmation_schedule', [])}"
+        ),
         "",
     ]
     target_boundary = report.get("target_boundary") or {}
@@ -165,7 +161,7 @@ def _fetch_probe_bars(
     )
 
 
-def _probe_target_bars(
+def _probe_bars_with_boundary_confirm(
     *,
     ticker: str,
     requested_start: str | None,
@@ -186,11 +182,17 @@ def _probe_target_bars(
     rows = len(bars)
     observed_first = _observed_first_timestamp(bars)
     if observed_first is None or observed_first <= requested_start or rows < limit:
-        return bars, _default_probe_meta(limit)
+        return bars, _probe_meta(
+            limit=limit,
+            final_limit=limit,
+            attempted=False,
+            bars=bars,
+            requested_start=requested_start,
+        )
 
     last_bars = bars
     last_limit = limit
-    for confirm_limit in TARGET_CONFIRMATION_LIMITS:
+    for confirm_limit in BOUNDARY_CONFIRMATION_LIMITS:
         if confirm_limit <= last_limit:
             continue
         candidate = _fetch_probe_bars(
@@ -208,17 +210,13 @@ def _probe_target_bars(
         if observed_first is None or observed_first <= requested_start or len(candidate) < confirm_limit:
             break
 
-    meta = {
-        "base_limit": limit,
-        "final_limit": last_limit,
-        "confirmation_attempted": last_limit != limit,
-        "left_boundary_confidence": _left_boundary_confidence(
-            rows=len(last_bars),
-            probe_limit=last_limit,
-            observed_first_timestamp=_observed_first_timestamp(last_bars),
-            requested_start=requested_start,
-        ),
-    }
+    meta = _probe_meta(
+        limit=limit,
+        final_limit=last_limit,
+        attempted=last_limit != limit,
+        bars=last_bars,
+        requested_start=requested_start,
+    )
     return last_bars, meta
 
 
@@ -228,7 +226,7 @@ def _result_from_bars(
     roles: list[str],
     bars: pd.DataFrame,
     requested_start: str | None,
-    probe_limit: int,
+    probe_meta: dict[str, object],
     is_target: bool,
 ) -> dict[str, object]:
     if bars.empty:
@@ -250,16 +248,11 @@ def _result_from_bars(
     observed_last = _observed_last_timestamp(bars)
     covers_requested_start = _covers_requested_start(observed_first, requested_start)
     status = "start_covered" if covers_requested_start else "partial_window"
-    left_boundary_confidence = _left_boundary_confidence(
-        rows=len(bars),
-        probe_limit=probe_limit,
-        observed_first_timestamp=observed_first,
-        requested_start=requested_start,
-    )
+    left_boundary_confidence = str(probe_meta.get("left_boundary_confidence") or "unknown")
     note = (
         "Ticker has bars covering the requested start."
         if covers_requested_start
-        else "Ticker has bars, but the observed history starts after the requested window."
+        else "Ticker has bars, but the currently observed history starts after the requested window."
     )
     if left_boundary_confidence != "confirmed" and not covers_requested_start:
         note += " Probe depth may still be truncating the left boundary."
@@ -274,6 +267,8 @@ def _result_from_bars(
         "observed_first_timestamp": observed_first,
         "observed_last_timestamp": observed_last,
         "left_boundary_confidence": left_boundary_confidence,
+        "final_probe_limit": int(probe_meta.get("final_limit", 0) or 0),
+        "confirmation_attempted": bool(probe_meta.get("confirmation_attempted", False)),
         "note": note,
     }
 
@@ -310,7 +305,7 @@ def _target_boundary_from_result(
             classification = "confirmed_before_requested_start"
         elif rows == 0:
             classification = "confirmed_after_requested_start"
-        elif rows < final_limit:
+        elif result.get("left_boundary_confidence") == "confirmed":
             classification = "confirmed_after_requested_start"
         else:
             classification = "unknown_probe_truncated"
@@ -347,9 +342,9 @@ def _coverage_hints(
 ) -> dict[str, object]:
     usable = [item for item in results if item.get("usable")]
     usable_starts = [
-        str(item.get("observed_first_timestamp"))
+        start
         for item in usable
-        if isinstance(item.get("observed_first_timestamp"), str) and item.get("observed_first_timestamp")
+        if (start := _confirmed_hint_start(item, requested_start=requested_start)) is not None
     ]
     target_safe_start = None
     if target_boundary:
@@ -357,7 +352,11 @@ def _coverage_hints(
         observed_first = target_boundary.get("observed_first_timestamp")
         if classification == "confirmed_before_requested_start":
             target_safe_start = requested_start
-        elif isinstance(observed_first, str) and observed_first:
+        elif (
+            classification == "confirmed_after_requested_start"
+            and isinstance(observed_first, str)
+            and observed_first
+        ):
             target_safe_start = observed_first
     dense_overlap_hint_start = max(usable_starts) if usable_starts else None
     return {
@@ -368,11 +367,12 @@ def _coverage_hints(
 def _probe_summary(limit: int, target_probe_meta: dict[str, object] | None) -> dict[str, object]:
     probe_meta = target_probe_meta or _default_probe_meta(limit)
     return {
-        "strategy": "target_boundary_confirm",
+        "strategy": "ticker_boundary_confirm",
         "limit": limit,
         "target_final_limit": int(probe_meta.get("final_limit", limit) or limit),
         "target_confirmation_attempted": bool(probe_meta.get("confirmation_attempted", False)),
         "left_boundary_confidence": probe_meta.get("left_boundary_confidence", "unknown"),
+        "confirmation_schedule": list(BOUNDARY_CONFIRMATION_LIMITS),
     }
 
 
@@ -382,6 +382,27 @@ def _default_probe_meta(limit: int) -> dict[str, object]:
         "final_limit": limit,
         "confirmation_attempted": False,
         "left_boundary_confidence": "unknown",
+    }
+
+
+def _probe_meta(
+    *,
+    limit: int,
+    final_limit: int,
+    attempted: bool,
+    bars: pd.DataFrame,
+    requested_start: str | None,
+) -> dict[str, object]:
+    return {
+        "base_limit": limit,
+        "final_limit": final_limit,
+        "confirmation_attempted": attempted,
+        "left_boundary_confidence": _left_boundary_confidence(
+            rows=len(bars),
+            probe_limit=final_limit,
+            observed_first_timestamp=_observed_first_timestamp(bars),
+            requested_start=requested_start,
+        ),
     }
 
 
@@ -415,6 +436,21 @@ def _left_boundary_confidence(
     if rows < probe_limit:
         return "confirmed"
     return "observed"
+
+
+def _confirmed_hint_start(
+    item: dict[str, object],
+    *,
+    requested_start: str | None,
+) -> str | None:
+    if item.get("left_boundary_confidence") != "confirmed":
+        return None
+    if item.get("covers_requested_start"):
+        return requested_start
+    observed_first = item.get("observed_first_timestamp")
+    if isinstance(observed_first, str) and observed_first:
+        return observed_first
+    return None
 
 
 def _load_discovery_payload(path: Path) -> dict:
