@@ -2,37 +2,52 @@
 
 ## I want to...
 
-### Start researching a new asset
+### Evaluate a research branch
 ```bash
-causal-edge research init SOLUSD
-cd research/solusd
-# Edit strategy.py → implement run_strategy()
-causal-edge research run -d "baseline"
+cd <branch-dir>
+causal-edge evaluate --workdir .
 ```
 
-### Run an experiment
+### Emit raw artifacts for upstream orchestration
 ```bash
-# Edit strategy.py with ONE change
-causal-edge research run --mode exploit -d "added xcorr overlay"
-# Result is auto-validated, auto-recorded to results.tsv
+causal-edge evaluate \
+  --workdir <branch-dir> \
+  --output-json edge-result.json \
+  --output-md edge-validation.md \
+  --output-handoff edge-handoff.json
 ```
 
-### Check progress
+### Check whether discovered drivers have usable data
 ```bash
-causal-edge research status
+causal-edge verify-data \
+  --discovery-json <session-or-branch>/discovery.json \
+  --start 2020-01-01
 ```
 
-## What the harness enforces (you cannot bypass)
+### Debug why a branch is dead or failing
+```bash
+causal-edge debug-evaluate --workdir <branch-dir>
+```
 
-- **K auto-computed** from strategy.py AST (tickers × lags)
-- **validate_strategy()** runs on every experiment
-- **KEEP requires PASS** — append_results_tsv refuses otherwise
-- **results.tsv schema** validated on append
-- **Look-ahead check** before execution
+### Validate a handoff
+```bash
+causal-edge validate-handoff path/to/edge-handoff.json
+```
 
-## What you decide (judgment calls)
+## What the research layer enforces
 
-- What to write in strategy.py
-- Explore vs exploit classification
-- When to declare honest failure
-- How to interpret validation failures
+- `engine.py` is required
+- the branch must define a module-owned `StrategyEngine` subclass
+- K is auto-computed from `engine.py` AST
+- static look-ahead checks run before evaluation
+- engine outputs are validated through the shared signal contract
+- validation artifacts come from the same `validate_strategy()` gate used elsewhere
+- `verify-data` reports which discovered tickers have full, partial, missing, or broken history
+- `debug-evaluate` surfaces runtime diagnostics such as flat signals, constant positions, and alignment collapse
+
+## What strategy authors decide
+
+- what to write in `engine.py`
+- which causal drivers and lags to test
+- how to classify explore vs exploit at the orchestration layer
+- how to interpret failures and iterate
