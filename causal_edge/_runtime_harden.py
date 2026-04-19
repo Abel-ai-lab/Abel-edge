@@ -68,6 +68,11 @@ _ENV_DEFAULTS: Final[dict[str, str]] = {
 }
 
 _TIMEOUT_EXIT_CODE: Final[int] = 124  # POSIX convention (same as /usr/bin/timeout)
+# signal.alarm() takes a C unsigned int. Cap well below 2**32 - 1 so the
+# alarm() call cannot OverflowError. One week is a deliberately generous
+# upper bound — far longer than any sensible CLI invocation, but small
+# enough to be a clearly bounded value.
+_MAX_TIMEOUT_SECONDS: Final[int] = 7 * 24 * 60 * 60
 
 _applied = False
 _trap_installed = False
@@ -96,9 +101,13 @@ def apply() -> None:
 
         # force=False so we do not override a prior explicit choice
         mp.set_start_method("forkserver", force=False)
-    except (RuntimeError, ImportError):
-        # RuntimeError: start method already set. That is acceptable — the
-        # prior setter had context we do not; honor it.
+    except (RuntimeError, ImportError, ValueError):
+        # RuntimeError: start method already set — honor the prior setter.
+        # ImportError: multiprocessing unavailable on this build.
+        # ValueError: this POSIX build does not ship the forkserver method
+        #   (rare embedded/stripped Python). Falling back to the default
+        #   start method is correct — better to lose Layer 2 than to crash
+        #   every CLI invocation at startup.
         pass
 
 
@@ -210,13 +219,23 @@ def install_global_timeout(seconds: int) -> None:
     """Install a wall-clock timeout. On expiry, kill tree and exit 124.
 
     Opt-in. Pass 0 (or negative) to disable. No-op on Windows (no SIGALRM).
+    Values above ``_MAX_TIMEOUT_SECONDS`` (one week) are clamped down with a
+    stderr warning — protects against ``signal.alarm()`` ``OverflowError``
+    on enormous inputs (CAUSAL_EDGE_TIMEOUT_SECONDS=99999999999999) which
+    would otherwise crash every CLI invocation at startup.
     """
     global _alarm_installed
     if _alarm_installed or seconds <= 0:
         return
     if not hasattr(signal, "SIGALRM"):
         return
-    _alarm_installed = True
+
+    if seconds > _MAX_TIMEOUT_SECONDS:
+        sys.stderr.write(
+            f"[runtime_harden] requested timeout {seconds}s exceeds cap "
+            f"{_MAX_TIMEOUT_SECONDS}s; clamping to cap\n"
+        )
+        seconds = _MAX_TIMEOUT_SECONDS
 
     def _handler(_signum: int, _frame) -> None:
         sys.stderr.write(f"[runtime_harden] TIMEOUT after {seconds}s — killing descendants\n")
@@ -224,8 +243,16 @@ def install_global_timeout(seconds: int) -> None:
         _kill_descendants()
         os._exit(_TIMEOUT_EXIT_CODE)
 
-    signal.signal(signal.SIGALRM, _handler)
-    signal.alarm(seconds)
+    try:
+        signal.signal(signal.SIGALRM, _handler)
+        signal.alarm(seconds)
+    except (OverflowError, OSError, ValueError) as exc:
+        # Belt-and-suspenders: cap above should prevent OverflowError, but if
+        # something else rejects the value (very small embedded systems, weird
+        # signal state), do not crash the CLI.
+        sys.stderr.write(f"[runtime_harden] could not install timeout: {exc}\n")
+        return
+    _alarm_installed = True
 
 
 def protect_cli_command(timeout_seconds: int = 0) -> None:

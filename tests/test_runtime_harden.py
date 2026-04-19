@@ -221,3 +221,67 @@ def test_install_from_env_ignores_non_integer(monkeypatch):
 
     assert rh._trap_installed
     assert not rh._alarm_installed
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="SIGALRM unavailable (Windows)")
+def test_install_global_timeout_clamps_oversized_value(monkeypatch, capsys):
+    """An enormous timeout value is clamped, not allowed to OverflowError signal.alarm.
+
+    Regression for the P2 review on PR #25: install_from_env() previously
+    forwarded any digit string to signal.alarm(int(raw)); a value of e.g.
+    99999999999999 raised OverflowError and crashed every CLI command at
+    startup. install_global_timeout now caps at _MAX_TIMEOUT_SECONDS and
+    catches OverflowError as belt-and-suspenders.
+    """
+    original = signal.getsignal(signal.SIGALRM)
+    monkeypatch.setattr(rh, "_alarm_installed", False)
+    try:
+        oversized = 99_999_999_999_999  # would overflow C unsigned int
+        rh.install_global_timeout(oversized)
+        # Must succeed without raising
+        assert rh._alarm_installed
+        captured = capsys.readouterr()
+        assert "exceeds cap" in captured.err
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, original)
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="SIGALRM unavailable (Windows)")
+def test_install_from_env_oversized_value_does_not_crash(monkeypatch):
+    """Setting CAUSAL_EDGE_TIMEOUT_SECONDS to a huge value must not crash CLI startup."""
+    monkeypatch.setenv("CAUSAL_EDGE_TIMEOUT_SECONDS", "99999999999999")
+    monkeypatch.setattr(rh, "_trap_installed", False)
+    monkeypatch.setattr(rh, "_alarm_installed", False)
+    original = signal.getsignal(signal.SIGALRM)
+    try:
+        # Must not raise OverflowError
+        rh.install_from_env()
+        assert rh._trap_installed
+        assert rh._alarm_installed  # clamped to cap and installed
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, original)
+
+
+def test_apply_handles_value_error_from_set_start_method(monkeypatch):
+    """apply() must not raise if forkserver is unavailable on this POSIX build.
+
+    Regression for the P1 review on PR #25: rare embedded Python builds
+    raise ValueError when set_start_method is called with an unsupported
+    method name. apply() previously caught only RuntimeError/ImportError,
+    so importing causal_edge.cli would crash every CLI invocation.
+    """
+    import multiprocessing as mp
+
+    def _raise_value_error(*_args, **_kwargs):
+        raise ValueError("forkserver is not available on this build")
+
+    monkeypatch.setattr(rh, "_applied", False)
+    monkeypatch.setattr(mp, "set_start_method", _raise_value_error)
+
+    # Must not raise — the test assertion is the absence of a propagated
+    # exception. apply() returns normally and Layer 1 (env vars) still works.
+    rh.apply()
+    assert rh._applied
+    assert os.environ.get("LOKY_MAX_CPU_COUNT") == "4"
