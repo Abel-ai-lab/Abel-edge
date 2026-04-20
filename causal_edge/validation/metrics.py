@@ -27,6 +27,21 @@ from causal_edge.validation.position_ic import compute_position_ic
 PROFILES_DIR = os.path.join(os.path.dirname(__file__), "profiles")
 
 
+def _lag1_autocorr(series: np.ndarray) -> float:
+    """Return lag-1 autocorrelation without emitting warnings on degenerate inputs."""
+    values = np.asarray(series, dtype=float)
+    if values.size < 2:
+        return 0.0
+    current = values[1:]
+    previous = values[:-1]
+    if np.std(current, ddof=1) <= 1e-12 or np.std(previous, ddof=1) <= 1e-12:
+        return 0.0
+    rho1 = pd.Series(values).autocorr(lag=1)
+    if np.isnan(rho1):
+        return 0.0
+    return float(rho1)
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Profile Loading
 # ═══════════════════════════════════════════════════════════════════
@@ -112,8 +127,7 @@ def compute_all_metrics(
     calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
-    rho1 = pd.Series(pnl).autocorr(lag=1)
-    rho1 = 0.0 if np.isnan(rho1) else float(rho1)
+    rho1 = _lag1_autocorr(pnl)
     cf = 1 + 2 * rho1 * (1 - 1 / periods_per_year)
     lo_adjusted = sharpe * np.sqrt(1 / cf) if cf > 0 else sharpe
 

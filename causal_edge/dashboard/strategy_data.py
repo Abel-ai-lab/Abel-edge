@@ -180,23 +180,26 @@ def _build_tracking_payload(
     )
     cum_return = np.cumprod(1.0 + pnl) - 1.0
 
-    price_overlay = fetch_price_overlay(
-        s_cfg, settings, bars_loader, start=dates[0], end=dates[-1]
-    )
-    if not has_asset_returns and price_overlay is not None:
-        has_asset_returns = True
-        asset_returns = price_overlay["returns"]
-        latest_close = float(price_overlay["close"][-1])
+    # Skip price_overlay when trade log already has asset_return — the fallback
+    # path calls compute_signals() (30+ min on DR family ML).
+    price_overlay = None
+    if not has_asset_returns:
+        price_overlay = fetch_price_overlay(
+            s_cfg, settings, bars_loader, start=dates[0], end=dates[-1]
+        )
+        if price_overlay is not None:
+            has_asset_returns = True
+            asset_returns = price_overlay["returns"]
+            latest_close = float(price_overlay["close"][-1])
 
     preview_price_overlay = None
-    if preview_df is not None and len(preview_df) > 0:
+    preview_has_returns = (
+        preview_df is not None and "asset_return" in preview_df.columns
+    )
+    if not preview_has_returns and preview_df is not None and len(preview_df) > 0:
         preview_dates = pd.DatetimeIndex(preview_df["date"])
         preview_price_overlay = fetch_price_overlay(
-            s_cfg,
-            settings,
-            bars_loader,
-            start=preview_dates[0],
-            end=preview_dates[-1],
+            s_cfg, settings, bars_loader, start=preview_dates[0], end=preview_dates[-1]
         )
 
     return {

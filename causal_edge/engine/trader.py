@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-import sys
-from pathlib import Path
-
 import click
 import numpy as np
 import pandas as pd
@@ -13,38 +9,14 @@ import pandas as pd
 from causal_edge.engine.backtest import BacktestSettings, run_backtest
 from causal_edge.engine.feed_contract import FeedContractError
 from causal_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
+from causal_edge.engine.loader import load_engine_from_import_path
 from causal_edge.engine.signal_contract import SignalContractError
 from causal_edge.engine.signal_contract import validate_signal_output
 
 
 def _load_engine(engine_path: str):
     """Import engine module and find the StrategyEngine subclass."""
-    if engine_path.startswith("strategies.") and (Path.cwd() / "strategies").exists():
-        cwd_str = str(Path.cwd())
-        if cwd_str not in sys.path:
-            sys.path.insert(0, cwd_str)
-        stale = [
-            name for name in sys.modules if name == "strategies" or name.startswith("strategies.")
-        ]
-        for name in stale:
-            sys.modules.pop(name, None)
-    importlib.invalidate_caches()
-    mod = importlib.import_module(engine_path)
-    from causal_edge.engine.base import StrategyEngine
-
-    for attr_name in dir(mod):
-        attr = getattr(mod, attr_name)
-        if (
-            isinstance(attr, type)
-            and issubclass(attr, StrategyEngine)
-            and attr is not StrategyEngine
-            and attr.__module__ == mod.__name__
-        ):
-            return attr
-    raise ImportError(
-        f"No StrategyEngine subclass found in '{engine_path}'. "
-        f"Fix: Ensure your engine.py defines its own StrategyEngine subclass instead of only importing one."
-    )
+    return load_engine_from_import_path(engine_path)
 
 
 def _compute_validated_signals(engine, strategy_cfg: dict):

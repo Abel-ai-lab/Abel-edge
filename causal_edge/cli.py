@@ -8,8 +8,11 @@ from pathlib import Path
 import click
 
 from causal_edge import __version__
+from causal_edge.cache_cli import warm_cache as warm_cache_command
 from causal_edge.cli_support import build_bars_loader
+from causal_edge.research.cli import debug_evaluate as debug_evaluate_command
 from causal_edge.research.cli import evaluate as evaluate_command
+from causal_edge.research.cli import verify_data as verify_data_command
 from causal_edge.research.cli import validate_handoff as validate_handoff_command
 
 CONFIG_OPTION_HELP = (
@@ -29,7 +32,10 @@ def main():
 
 
 main.add_command(evaluate_command)
+main.add_command(debug_evaluate_command)
+main.add_command(verify_data_command)
 main.add_command(validate_handoff_command)
+main.add_command(warm_cache_command)
 
 
 @main.command("version")
@@ -95,10 +101,12 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
 
     def _notify(message: str) -> None:
         click.echo(message, err=True)
+        click.get_text_stream("stderr").flush()
 
-    def _emit_handoff(payload: dict[str, object]) -> None:
-        if json_output:
-            click.echo(json.dumps(payload, sort_keys=True))
+    def _emit_json_event(payload: dict[str, object]) -> None:
+        stream = click.get_text_stream("stdout")
+        click.echo(json.dumps(payload, sort_keys=True), file=stream)
+        stream.flush()
 
     try:
         result = login_with_oauth(
@@ -107,7 +115,8 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
             timeout_seconds=timeout,
             force=force,
             notify=None if json_output else _notify,
-            on_handoff=_emit_handoff if json_output else None,
+            on_handoff=_emit_json_event if json_output else None,
+            on_pending=_emit_json_event if json_output else None,
         )
     except Exception as e:
         raise click.ClickException(str(e))
@@ -117,7 +126,7 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
         output.pop("api_key", None)
 
     if json_output:
-        click.echo(json.dumps(output, sort_keys=True))
+        _emit_json_event(output)
         return
 
     if result["status"] == "already_configured":
@@ -329,7 +338,12 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
 
 @main.command()
 @click.argument("ticker")
-@click.option("--mode", type=click.Choice(["parents", "mb"]), default="parents", show_default=True)
+@click.option(
+    "--mode",
+    type=click.Choice(["parents", "mb", "all"]),
+    default="parents",
+    show_default=True,
+)
 @click.option(
     "--limit",
     default=10,
@@ -337,13 +351,21 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
     type=int,
     help="Maximum nodes to return (hard cap 20)",
 )
-def discover(ticker, mode, limit):
+@click.option("--json", "json_output", is_flag=True, help="Emit structured JSON output")
+def discover(ticker, mode, limit, json_output):
     """Discover causal graph nodes for an asset via Abel API."""
     try:
-        from causal_edge.plugins.abel.discover import discover_graph_nodes
+        from causal_edge.plugins.abel.discover import (
+            discover_graph_nodes,
+            discover_graph_payload,
+        )
     except ImportError:
         raise click.ClickException("Abel plugin not installed. See: causal_edge/plugins/AGENTS.md")
     try:
+        if json_output:
+            output = discover_graph_payload(ticker, mode=mode, limit=limit)
+            click.echo(json.dumps(output, indent=2, sort_keys=True))
+            return
         output = discover_graph_nodes(ticker, mode=mode, limit=limit)
     except Exception as e:
         raise click.ClickException(str(e))
