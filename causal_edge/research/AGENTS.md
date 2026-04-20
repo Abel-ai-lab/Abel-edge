@@ -36,9 +36,9 @@ causal-edge validate-handoff path/to/edge-handoff.json
 
 ## What the research layer enforces
 
-- `engine.py` is required
+- `<branch-dir>/engine.py` is required
 - the branch must define a module-owned `StrategyEngine` subclass
-- K is auto-computed from `engine.py` AST
+- K is auto-computed from the branch's `<branch-dir>/engine.py` AST
 - static look-ahead checks run before evaluation
 - engine outputs are validated through the shared signal contract
 - validation artifacts come from the same `validate_strategy()` gate used elsewhere
@@ -47,7 +47,7 @@ causal-edge validate-handoff path/to/edge-handoff.json
 
 ## What strategy authors decide
 
-- what to write in `engine.py`
+- what to write in `<branch-dir>/engine.py`
 - which causal drivers and lags to test
 - how to classify explore vs exploit at the orchestration layer
 - how to interpret failures and iterate
