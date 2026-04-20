@@ -225,7 +225,7 @@ def signal_demo(config, strategy, output):
 @click.option("--strategy", required=True, help="Render a specific strategy tracking page")
 @click.option("--output", default="tracking.html", help="Output HTML path")
 def tracking(config, strategy, output):
-    """Generate tracking HTML for a specific strategy."""
+    """Generate a single-strategy dashboard focused on paper tracking."""
     from causal_edge.dashboard.generator import generate_tracking_page
     from causal_edge.config import load_config
 

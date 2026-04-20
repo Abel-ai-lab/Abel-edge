@@ -80,9 +80,11 @@ def compute_metrics(pnl: np.ndarray, *, periods_per_year: int = 252) -> dict:
     ann_ret = (equity[-1] ** (1 / yrs) - 1) if yrs > 0 and equity[-1] > 0 else 0
     calmar = float(ann_ret / max_dd) if max_dd > 0 else 0
     compounded = float(equity[-1] - 1) if len(equity) else 0.0
-    return dict(sharpe=round(sharpe, 2), cum_pnl=round(compounded, 4),
-                max_dd=round(max_dd, 4), win_rate=round(win_rate, 3),
-                n_trades=n_trades, n_days=len(pnl), calmar=round(calmar, 1))
+    total_return = round(compounded, 4)
+    return dict(sharpe=round(sharpe, 2), cum_pnl=total_return,
+                cum_return=total_return, max_dd=round(max_dd, 4),
+                win_rate=round(win_rate, 3), n_trades=n_trades,
+                n_days=len(pnl), calmar=round(calmar, 1))
 
 
 def yearly_metrics(dates, pnl) -> list[dict]:
@@ -135,7 +137,23 @@ def live_metrics(dates, pnl, positions, source, prices=None) -> dict | None:
 # ── Charts ──
 
 
-def equity_chart(dates, cum_pnl, name: str, color: str) -> str:
+def asset_index_from_returns(asset_returns) -> np.ndarray:
+    returns = np.array(asset_returns, dtype=float)
+    if len(returns) == 0:
+        return np.array([], dtype=float)
+    return np.cumprod(1.0 + returns) - 1.0
+
+
+def equity_chart(
+    dates,
+    cum_pnl,
+    name: str,
+    color: str,
+    *,
+    asset_index=None,
+    asset: str | None = None,
+    asset_dates=None,
+) -> str:
     """Equity curve. `cum_pnl` is the log-cumulative; plotted as compounded
     total-return % = (exp(cum_pnl) - 1) * 100."""
     fig = go.Figure()
@@ -146,8 +164,37 @@ def equity_chart(dates, cum_pnl, name: str, color: str) -> str:
         line=dict(color=color, width=2.5),
         fill="tozeroy", fillcolor=_hex_to_rgba(color, 0.08),
     ))
+    if asset_index is not None and len(asset_index) > 0:
+        overlay_dates = list(asset_dates) if asset_dates is not None else list(dates)
+        fig.add_trace(go.Scatter(
+            x=overlay_dates,
+            y=(np.array(asset_index, dtype=float) * 100.0).tolist(),
+            mode="lines",
+            name=f"Hold {asset or 'asset'}",
+            line=dict(color="#8E8E93", width=1.5, dash="dot"),
+        ))
     fig.update_layout(**_layout(f"{name} — Equity Curve", 360, yaxis_title="Cumulative %"))
     return _chart_to_json(fig)
+
+
+def asset_price_chart(dates, asset_returns, asset: str, color: str) -> str:
+    fig = go.Figure()
+    asset_curve = asset_index_from_returns(asset_returns) * 100.0
+    fig.add_trace(go.Scatter(
+        x=list(dates),
+        y=asset_curve.tolist(),
+        mode="lines",
+        name=asset,
+        line=dict(color=color, width=2.0),
+        fill="tozeroy",
+        fillcolor=_hex_to_rgba(color, 0.08),
+    ))
+    fig.update_layout(**_layout(f"Backtest vs {asset}", 320, yaxis_title="Cumulative %"))
+    return _chart_to_json(fig)
+
+
+def position_chart(dates, positions, name: str, color: str) -> str:
+    return _position_chart(dates, positions, name, color)
 
 
 def drawdown_chart(dates, cum_pnl, name: str) -> str:

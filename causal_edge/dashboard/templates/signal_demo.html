@@ -152,10 +152,10 @@
 
             <section class="section">
                 <div class="info-card">
-                    <div class="label">Live Rows</div>
+                    <div class="label">Latest 8 Live Rows</div>
                     {% if selected_strategy.tracking_rows %}
                     <div class="row-list">
-                        <div class="row-head"><span>Date</span><span>Close</span><span>Signal</span><span>Next</span><span>PnL</span></div>
+                        <div class="row-head"><span>Date</span><span>Close / Level</span><span>Signal</span><span>Next</span><span>PnL</span></div>
                         {% for row in selected_strategy.tracking_rows %}
                         <div class="row-item"><span>{{ row.date }}</span><span>{{ row.close }}</span><span>{{ row.signal }}</span><span>{{ row.next_position }}</span><span>{{ row.pnl }}</span></div>
                         {% endfor %}

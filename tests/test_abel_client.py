@@ -1,5 +1,6 @@
 """Tests for Abel client helpers and example integration."""
 
+import requests
 import pandas as pd
 
 from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
@@ -146,6 +147,40 @@ def test_fetch_bars_preserves_bearer_auth_header():
     assert "api-key" not in session.calls[0]["headers"]
 
 
+def test_fetch_bars_strips_runtime_only_fields_from_market_request():
+    class StubSession:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, json=None, headers=None, timeout=20):
+            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+            return StubResponse({"data": []})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    session = StubSession()
+    client = AbelClient(session=session)
+    client.fetch_bars(
+        symbols=["ETHUSD"],
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=10,
+        fields=["timestamp", "symbol", "close", "volume"],
+        api_key="abel_test",
+    )
+
+    assert session.calls[0]["json"]["fields"] == ["close", "volume"]
+
+
 def test_discover_uses_cap_prod_base_url(monkeypatch):
     monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
 
@@ -199,3 +234,82 @@ def test_discover_uses_custom_base_url():
     client.discover_parents(node_id="ETHUSD", limit=5, api_key="abel_test")
 
     assert session.calls[0]["url"] == "https://cap.custom.abel.ai/api/cap"
+
+
+def test_fetch_bars_falls_back_to_curl_on_windows_connection_reset(monkeypatch):
+    class FailingSession:
+        def post(self, url, json=None, headers=None, timeout=20):
+            raise requests.exceptions.ConnectionError(
+                "('Connection aborted.', ConnectionResetError(10054, 'reset', None, 10054, None))"
+            )
+
+    fallback_calls = []
+
+    monkeypatch.setattr("causal_edge.plugins.abel.client.sys.platform", "win32")
+    monkeypatch.setattr("causal_edge.plugins.abel.client.shutil.which", lambda name: "C:/Windows/System32/curl.exe")
+    monkeypatch.setattr(
+        "causal_edge.plugins.abel.client._post_with_curl",
+        lambda **kwargs: fallback_calls.append(kwargs) or {"data": [{"symbol": "ETHUSD"}]},
+    )
+
+    client = AbelClient(session=FailingSession())
+    rows = client.fetch_bars(
+        symbols=["ETHUSD"],
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=10,
+        fields=None,
+        api_key="abel_test",
+    )
+
+    assert len(rows) == 1
+    assert fallback_calls[0]["url"] == "https://cap.abel.ai/api/market/day_bar"
+
+
+def test_fetch_bars_retries_on_429(monkeypatch):
+    class RateLimitedResponse:
+        status_code = 429
+        headers = {"Retry-After": "0"}
+
+        def raise_for_status(self):
+            raise requests.exceptions.HTTPError("429 Too Many Requests")
+
+    class OkResponse:
+        status_code = 200
+        headers = {}
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"data": [{"symbol": "ETHUSD"}]}
+
+    class StubSession:
+        def __init__(self):
+            self.calls = 0
+
+        def post(self, url, json=None, headers=None, timeout=20):
+            self.calls += 1
+            if self.calls == 1:
+                return RateLimitedResponse()
+            return OkResponse()
+
+    slept = []
+    monkeypatch.setattr("causal_edge.plugins.abel.client.time.sleep", lambda seconds: slept.append(seconds))
+
+    session = StubSession()
+    client = AbelClient(session=session)
+    rows = client.fetch_bars(
+        symbols=["ETHUSD"],
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=10,
+        fields=None,
+        api_key="abel_test",
+    )
+
+    assert len(rows) == 1
+    assert session.calls == 2
+    assert slept == [1.0]

@@ -75,7 +75,7 @@
                 {% endif %}
             </div>
             <div class="chart">
-                <h3>Ticker Price Since Tracking Began</h3>
+                <h3>Tracked Path Since Tracking Began</h3>
                 {% if selected_strategy.has_tracking_asset_chart %}
                 <div id="tracking-asset"></div>
                 {% else %}
@@ -87,9 +87,10 @@
                 <div id="tracking-position"></div>
             </div>
             <div class="chart">
-                <h3>Live Rows</h3>
+                <h3>Latest 8 Live Rows</h3>
+                <p class="subtext">These rows are shown newest first. They are not the start of the tracking window.</p>
                 <div class="row-list">
-                    <div class="row-head"><span>Date</span><span>Close</span><span>Signal</span><span>Next</span><span>PnL</span></div>
+                    <div class="row-head"><span>Date</span><span>Close / Level</span><span>Signal</span><span>Next</span><span>PnL</span></div>
                     {% for row in selected_strategy.tracking_rows %}
                     <div class="row-item"><span>{{ row.date }}</span><span>{{ row.close }}</span><span>{{ row.signal }}</span><span>{{ row.next_position }}</span><span>{{ row.pnl }}</span></div>
                     {% endfor %}
