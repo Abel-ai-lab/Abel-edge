@@ -187,6 +187,9 @@ If your auth file lives outside those paths, point `causal-edge` at it with `ABE
 
 For agent-driven setups, `causal-edge login --json --no-browser` emits a JSON
 handoff event first, then a final JSON result after authorization completes.
+It also prints the authorization URL and periodic waiting updates to `stderr`
+so agent runtimes can surface the browser handoff immediately instead of
+appearing hung.
 
 When a strategy declares `paper_log`, backtests stay in `trade_log` and live paper rows
 append to `paper_log`. If `paper_log` is omitted, causal-edge falls back to the legacy

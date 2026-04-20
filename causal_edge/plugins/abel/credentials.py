@@ -91,6 +91,19 @@ def _resolve_token_from_values(values: dict[str, str]) -> str | None:
     return token or None
 
 
+def _api_key_record(
+    *,
+    token: str | None,
+    source: str,
+    path: str | None = None,
+) -> dict[str, str | None]:
+    return {
+        "api_key": token,
+        "source": source,
+        "path": path,
+    }
+
+
 def normalize_api_key(value: str | None) -> str:
     token = (value or "").strip()
     return token.removeprefix("Bearer ").strip()
@@ -104,6 +117,11 @@ def _format_env_value(value: str) -> str:
 
 
 def resolve_api_key(*, env_path: str | Path = ".env") -> str | None:
+    record = resolve_api_key_record(env_path=env_path)
+    return str(record["api_key"]) if record["api_key"] else None
+
+
+def resolve_api_key_record(*, env_path: str | Path = ".env") -> dict[str, str | None]:
     env_values = _read_env_file(env_path)
     token = normalize_api_key(
         os.getenv("ABEL_API_KEY")
@@ -112,18 +130,29 @@ def resolve_api_key(*, env_path: str | Path = ".env") -> str | None:
         or env_values.get("CAP_API_KEY")
     )
     if token:
-        return token
+        if os.getenv("ABEL_API_KEY") or os.getenv("CAP_API_KEY"):
+            return _api_key_record(token=token, source="env_var", path=None)
+        return _api_key_record(
+            token=token,
+            source="project_env",
+            path=str(_resolve_env_path(env_path)),
+        )
 
     for shared_auth_file in _candidate_shared_auth_files(env_path=env_path):
         shared_token = _resolve_token_from_values(_read_env_file(shared_auth_file))
         if shared_token:
-            return shared_token
+            return _api_key_record(
+                token=shared_token,
+                source="shared_auth_file",
+                path=str(shared_auth_file),
+            )
 
-    return None
+    return _api_key_record(token=None, source="missing", path=None)
 
 
 def require_api_key(*, env_path: str | Path = ".env") -> str:
-    token = resolve_api_key(env_path=env_path)
+    record = resolve_api_key_record(env_path=env_path)
+    token = str(record["api_key"]) if record["api_key"] else None
     if token:
         return token
     shared_auth_hint = (

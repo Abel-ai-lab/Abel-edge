@@ -9,6 +9,7 @@ from causal_edge.plugins.abel.credentials import (
     persist_env_value,
     require_api_key,
     resolve_api_key,
+    resolve_api_key_record,
     resolve_auth_base_url,
     resolve_cap_base_url,
 )
@@ -21,6 +22,18 @@ def test_resolve_api_key_prefers_env(monkeypatch, tmp_path):
     api_key = resolve_api_key(env_path=tmp_path / ".env")
 
     assert api_key == "abel_env"
+
+
+def test_resolve_api_key_record_reports_env_source(monkeypatch, tmp_path):
+    monkeypatch.setenv("ABEL_API_KEY", "Bearer abel_env")
+
+    record = resolve_api_key_record(env_path=tmp_path / ".env")
+
+    assert record == {
+        "api_key": "abel_env",
+        "source": "env_var",
+        "path": None,
+    }
 
 
 def test_resolve_api_key_reads_dotenv(monkeypatch, tmp_path):
@@ -44,6 +57,23 @@ def test_resolve_api_key_reads_explicit_auth_env_file(monkeypatch, tmp_path):
     api_key = resolve_api_key(env_path=tmp_path / ".env")
 
     assert api_key == "abel_shared"
+
+
+def test_resolve_api_key_record_reports_shared_auth_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    auth_env = tmp_path / "shared" / ".env.skill"
+    auth_env.parent.mkdir(parents=True)
+    auth_env.write_text("ABEL_API_KEY=abel_shared\n", encoding="utf-8")
+    monkeypatch.setenv("ABEL_AUTH_ENV_FILE", str(auth_env))
+
+    record = resolve_api_key_record(env_path=tmp_path / ".env")
+
+    assert record == {
+        "api_key": "abel_shared",
+        "source": "shared_auth_file",
+        "path": str(auth_env),
+    }
 
 
 def test_resolve_api_key_auto_discovers_causal_abel_skill_env(monkeypatch, tmp_path):
@@ -111,6 +141,24 @@ def test_resolve_api_key_prefers_project_dotenv_over_skill_env(monkeypatch, tmp_
     api_key = resolve_api_key(env_path=project_dir / ".env")
 
     assert api_key == "abel_project"
+
+
+def test_resolve_api_key_record_reports_project_env_source(monkeypatch, tmp_path):
+    monkeypatch.delenv("ABEL_API_KEY", raising=False)
+    monkeypatch.delenv("CAP_API_KEY", raising=False)
+    monkeypatch.delenv("ABEL_AUTH_ENV_FILE", raising=False)
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    env_path = project_dir / ".env"
+    env_path.write_text("ABEL_API_KEY=abel_project\n", encoding="utf-8")
+
+    record = resolve_api_key_record(env_path=env_path)
+
+    assert record == {
+        "api_key": "abel_project",
+        "source": "project_env",
+        "path": str(env_path.resolve()),
+    }
 
 
 def test_resolve_api_key_prefers_explicit_auth_env_file_over_global_skill(monkeypatch, tmp_path):
@@ -365,3 +413,5 @@ def test_login_with_oauth_returns_existing_key(monkeypatch, tmp_path):
 
     assert result["status"] == "already_configured"
     assert result["api_key"] == "abel_existing"
+    assert result["source"] == "env_var"
+    assert result["source_path"] is None

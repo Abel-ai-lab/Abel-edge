@@ -124,7 +124,7 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
             open_browser=not no_browser,
             timeout_seconds=timeout,
             force=force,
-            notify=None if json_output else _notify,
+            notify=_notify,
             on_handoff=_emit_json_event if json_output else None,
             on_pending=_emit_json_event if json_output else None,
         )
@@ -140,7 +140,16 @@ def login(env_path, no_browser, json_output, print_token, force, timeout):
         return
 
     if result["status"] == "already_configured":
-        click.echo("Abel API key already configured.")
+        source = str(result.get("source") or "").strip()
+        source_path = str(result.get("source_path") or "").strip()
+        if source == "shared_auth_file" and source_path:
+            click.echo(f"Reusing existing Abel auth from shared file: {source_path}")
+        elif source == "project_env" and source_path:
+            click.echo(f"Reusing existing Abel auth from project env: {source_path}")
+        elif source == "env_var":
+            click.echo("Reusing existing Abel auth from the current process environment.")
+        else:
+            click.echo("Abel API key already configured.")
         if print_token:
             click.echo(output["api_key"])
         return

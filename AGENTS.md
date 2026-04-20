@@ -39,6 +39,7 @@ Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loo
 2. If you do not already have a key, prefer installing `causal-abel` and completing OAuth there for agent-driven setups
 3. `causal-edge` reuses shared auth from project-local `.agents/skills/causal-abel`, known OpenCode/Codex global installs, or `ABEL_AUTH_ENV_FILE`
 4. Run `causal-edge login` only when you want the standalone fallback that stores `ABEL_API_KEY` directly for the project
+   When you do, surface the authorization URL immediately; `causal-edge login --json --no-browser` now prints it to `stderr` while also emitting JSON events on `stdout`
 5. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
 6. Run `causal-edge discover <TICKER>`
 
