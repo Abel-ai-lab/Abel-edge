@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
+import sys
+import time
 from typing import Any
 import uuid
 
@@ -12,6 +17,8 @@ from causal_edge.plugins.abel.credentials import resolve_cap_base_url
 CAP_VERSION = "0.2.2"
 DEFAULT_GRAPH_ID = "abel-main"
 DEFAULT_GRAPH_VERSION = "CausalNodeV3"
+DEFAULT_TIMEOUT_SECONDS = 60
+DEFAULT_RETRY_ATTEMPTS = 4
 
 CRYPTO_ALIASES = {"BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX"}
 SUPPORTED_FIELDS = {"price", "volume"}
@@ -88,6 +95,31 @@ class AbelClient:
         self.cap_base_url = (cap_base_url or resolve_cap_base_url()).rstrip("/")
         self.session = session or requests.Session()
 
+    def _post_json(self, *, url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+        last_exc = None
+        for attempt in range(1, DEFAULT_RETRY_ATTEMPTS + 1):
+            try:
+                response = self.session.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=DEFAULT_TIMEOUT_SECONDS,
+                )
+                status_code = getattr(response, "status_code", 200)
+                if status_code == 429 and attempt < DEFAULT_RETRY_ATTEMPTS:
+                    time.sleep(_retry_delay_seconds(response.headers.get("Retry-After"), attempt))
+                    continue
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.ConnectionError as exc:
+                last_exc = exc
+                if not _should_fallback_to_curl(exc):
+                    raise
+                return _post_with_curl(url=url, payload=payload, headers=headers)
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Abel CAP request exhausted retries without a response.")
+
     def discover_parents(self, *, node_id: str, limit: int, api_key: str) -> list[dict[str, Any]]:
         payload = self._post_cap(
             verb="traverse.parents",
@@ -143,9 +175,9 @@ class AbelClient:
             if api_key.lower().startswith("bearer ")
             else f"Bearer {api_key}",
         }
-        response = self.session.post(
-            f"{self.cap_base_url}/cap",
-            json={
+        return self._post_json(
+            url=f"{self.cap_base_url}/cap",
+            payload={
                 "cap_version": CAP_VERSION,
                 "request_id": str(uuid.uuid4()),
                 "verb": verb,
@@ -158,10 +190,7 @@ class AbelClient:
                 },
             },
             headers=headers,
-            timeout=20,
         )
-        response.raise_for_status()
-        return response.json()
 
     def _post_market(self, *, endpoint: str, body: dict[str, Any], api_key: str) -> dict[str, Any]:
         headers = {
@@ -171,14 +200,65 @@ class AbelClient:
             if api_key.lower().startswith("bearer ")
             else f"Bearer {api_key}",
         }
-        response = self.session.post(
-            f"{self.cap_base_url}/market/{endpoint}",
-            json=body,
+        return self._post_json(
+            url=f"{self.cap_base_url}/market/{endpoint}",
+            payload=body,
             headers=headers,
-            timeout=20,
         )
-        response.raise_for_status()
-        return response.json()
+
+
+def _should_fallback_to_curl(exc: requests.exceptions.ConnectionError) -> bool:
+    if sys.platform != "win32":
+        return False
+    if shutil.which("curl.exe") is None:
+        return False
+    message = str(exc).lower()
+    return "connectionreseterror" in message or "10054" in message or "connection aborted" in message
+
+
+def _retry_delay_seconds(retry_after: str | None, attempt: int) -> float:
+    if retry_after:
+        try:
+            return max(1.0, float(retry_after))
+        except ValueError:
+            pass
+    return float(min(2 ** (attempt - 1), 8))
+
+
+def _post_with_curl(*, url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    curl_path = shutil.which("curl.exe")
+    if curl_path is None:
+        raise RuntimeError("curl.exe is required for CAP fallback transport on Windows.")
+
+    command = [
+        curl_path,
+        "--silent",
+        "--show-error",
+        "--fail-with-body",
+        "-X",
+        "POST",
+        url,
+        "--connect-timeout",
+        str(DEFAULT_TIMEOUT_SECONDS),
+        "--max-time",
+        str(DEFAULT_TIMEOUT_SECONDS),
+        "--retry",
+        "3",
+        "--retry-all-errors",
+        "--retry-delay",
+        "1",
+        "--http1.1",
+        "--data-binary",
+        json.dumps(payload),
+    ]
+    for key, value in headers.items():
+        command.extend(["-H", f"{key}: {value}"])
+
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        stderr = (result.stderr or result.stdout or "curl fallback failed").strip()
+        raise RuntimeError(f"CAP curl fallback failed: {stderr}")
+    return json.loads(result.stdout)
 
 
 def _extract_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
