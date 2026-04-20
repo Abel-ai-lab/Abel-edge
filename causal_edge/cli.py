@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+# Hardening must run before numpy/joblib import (prevents fork/threads
+# deadlock — cron 2.4h 2026-04-17, CLI 5h 2026-04-18). E402 is intentional.
+from causal_edge._runtime_harden import apply as _apply_runtime_harden
 
-import click
+_apply_runtime_harden()
+import json  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from causal_edge import __version__
-from causal_edge.cache_cli import warm_cache as warm_cache_command
-from causal_edge.cli_support import build_bars_loader
-from causal_edge.research.cli import debug_evaluate as debug_evaluate_command
-from causal_edge.research.cli import evaluate as evaluate_command
-from causal_edge.research.cli import verify_data as verify_data_command
-from causal_edge.research.cli import validate_handoff as validate_handoff_command
+import click  # noqa: E402
+
+from causal_edge import __version__  # noqa: E402
+from causal_edge.cache_cli import warm_cache as warm_cache_command  # noqa: E402
+from causal_edge.cli_support import build_bars_loader  # noqa: E402
+from causal_edge.research.cli import debug_evaluate as debug_evaluate_command  # noqa: E402
+from causal_edge.research.cli import evaluate as evaluate_command  # noqa: E402
+from causal_edge.research.cli import verify_data as verify_data_command  # noqa: E402
+from causal_edge.research.cli import validate_handoff as validate_handoff_command  # noqa: E402
 
 CONFIG_OPTION_HELP = (
     "Config file path (defaults to strategies.local.yaml if present, else strategies.yaml)"
@@ -29,6 +34,11 @@ def _get_version() -> str:
 @click.version_option(version=_get_version(), prog_name="causal-edge")
 def main():
     """causal-edge: Agent-native quant framework."""
+    # Tree-kill trap + opt-in wall-clock timeout from env.
+    # No-op for help/version (click short-circuits before this runs).
+    from causal_edge._runtime_harden import install_from_env
+
+    install_from_env()
 
 
 main.add_command(evaluate_command)
@@ -56,18 +66,18 @@ def init(name):
         raise click.ClickException(str(e))
 
     click.echo(f"Created {root}/")
-    click.echo(f"  strategies.yaml          (3 demo strategies)")
-    click.echo(f"  strategies/sma_crossover (simple SMA)")
-    click.echo(f"  strategies/momentum_ml   (walk-forward GBDT)")
-    click.echo(f"  strategies/causal_demo   (Abel causal graph voting)")
-    click.echo(f"  CLAUDE.md + AGENTS.md    (agent harness)")
-    click.echo(f"  .env.example             (Abel API key, optional)")
-    click.echo(f"")
-    click.echo(f"Next:")
+    click.echo("  strategies.yaml          (3 demo strategies)")
+    click.echo("  strategies/sma_crossover (simple SMA)")
+    click.echo("  strategies/momentum_ml   (walk-forward GBDT)")
+    click.echo("  strategies/causal_demo   (Abel causal graph voting)")
+    click.echo("  CLAUDE.md + AGENTS.md    (agent harness)")
+    click.echo("  .env.example             (Abel API key, optional)")
+    click.echo("")
+    click.echo("Next:")
     click.echo(f"  cd {name}")
-    click.echo(f"  causal-edge run")
-    click.echo(f"  causal-edge dashboard")
-    click.echo(f"  causal-edge validate")
+    click.echo("  causal-edge run")
+    click.echo("  causal-edge dashboard")
+    click.echo("  causal-edge validate")
 
 
 @main.command()
@@ -321,7 +331,7 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
                         if key in m:
                             print(f"    {key:20s} {m[key]:.4f}")
                     if "yearly_sharpes" in m:
-                        print(f"    yearly_sharpes:")
+                        print("    yearly_sharpes:")
                         for yr, sh in sorted(m["yearly_sharpes"].items()):
                             print(f"      {yr}: {sh:.2f}")
     finally:
