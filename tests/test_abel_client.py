@@ -146,6 +146,40 @@ def test_fetch_bars_preserves_bearer_auth_header():
     assert "api-key" not in session.calls[0]["headers"]
 
 
+def test_fetch_bars_strips_runtime_only_fields_from_market_request():
+    class StubSession:
+        def __init__(self):
+            self.calls = []
+
+        def post(self, url, json=None, headers=None, timeout=20):
+            self.calls.append({"url": url, "json": json, "headers": headers, "timeout": timeout})
+            return StubResponse({"data": []})
+
+    class StubResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    session = StubSession()
+    client = AbelClient(session=session)
+    client.fetch_bars(
+        symbols=["ETHUSD"],
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=10,
+        fields=["timestamp", "symbol", "close", "volume"],
+        api_key="abel_test",
+    )
+
+    assert session.calls[0]["json"]["fields"] == ["close", "volume"]
+
+
 def test_discover_uses_cap_prod_base_url(monkeypatch):
     monkeypatch.delenv("ABEL_CAP_BASE_URL", raising=False)
 

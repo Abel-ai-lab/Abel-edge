@@ -15,6 +15,7 @@ DEFAULT_GRAPH_VERSION = "CausalNodeV3"
 
 CRYPTO_ALIASES = {"BTC", "ETH", "SOL", "XRP", "DOGE", "ADA", "AVAX"}
 SUPPORTED_FIELDS = {"price", "volume"}
+SUPPORTED_MARKET_FIELDS = {"open", "high", "low", "close", "volume"}
 
 
 def normalize_public_node_id(value: str, *, default_field: str = "price") -> str:
@@ -57,6 +58,24 @@ def _serialize_timestamp(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return str(value)
+
+
+def _normalize_market_fields(fields: list[str] | None) -> list[str]:
+    requested = fields or ["open", "high", "low", "close", "volume"]
+    normalized = []
+    seen = set()
+    for field in requested:
+        name = str(field).strip().lower()
+        if name in {"timestamp", "symbol", "date"}:
+            continue
+        if name not in SUPPORTED_MARKET_FIELDS:
+            continue
+        if name not in seen:
+            seen.add(name)
+            normalized.append(name)
+    if not normalized:
+        return ["open", "high", "low", "close", "volume"]
+    return normalized
 
 
 class AbelClient:
@@ -107,7 +126,7 @@ class AbelClient:
                 "end": _serialize_timestamp(end),
                 "timeframe": timeframe,
                 "limit": limit,
-                "fields": fields or ["open", "high", "low", "close", "volume"],
+                "fields": _normalize_market_fields(fields),
             },
             api_key=api_key,
         )
