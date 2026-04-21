@@ -173,16 +173,22 @@ to check whether the installed skill actually has a key.
 from causal_edge.engine.base import StrategyEngine
 
 class MyEngine(StrategyEngine):
-    def compute_signals(self):
-        # RULE: positions[t] decided using only data through t-1
-        # RULE: all rolling().mean() followed by .shift(1)
-        # Returns: (positions, dates, prices)
-        ...
-    def get_latest_signal(self):
-        return {"position": float(positions[-1])}
+    def compute_decisions(self, ctx):
+        close = ctx.target.series("close")
+        slow_mean = close.rolling(40, min_periods=15).mean()
+        next_position = (close > slow_mean).astype(float).fillna(0.0)
+        return ctx.decisions(next_position)
 ```
 
-Register in `strategies.yaml` → `causal-edge run` → `causal-edge validate`.
+Authoring rules:
+
+- read the target through `ctx.target.series(...)`
+- read auxiliary feeds through `ctx.feed(name)...`
+- return `ctx.decisions(next_position)`
+- use `causal-edge debug-evaluate --workdir ...` when you need semantic timing or visibility feedback
+
+Register in `strategies.yaml` with explicit `price_data` and any auxiliary
+`feeds`, then run `causal-edge run` and `causal-edge validate`.
 
 For `crypto_daily` and `equity_daily` strategy generation, default synthetic or
 illustrative backtest date ranges to start at `2020-01-01` unless the asset does
@@ -200,7 +206,7 @@ python -m venv .venv
 # bash/zsh: source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
-causal-edge init my-portfolio   # 3 synthetic demos: SMA, ML, Causal
+causal-edge init my-portfolio   # 3 local sample-data demos: SMA, ML, Feed Overlay
 cd my-portfolio
 causal-edge login               # only needed for live Abel discovery
 causal-edge run                 # run all strategies
@@ -208,10 +214,10 @@ causal-edge dashboard           # dark-theme Plotly dashboard
 causal-edge validate            # audited validation report card
 ```
 
-The scaffold created by `causal-edge init` is a standalone demo project. Use it
-to learn the framework surface or wire a standalone strategy project. For
-Abel-alpha branch research, stay on the alpha-managed
-`init-session -> init-branch -> prepare-branch` path instead.
+The scaffold created by `causal-edge init` is a standalone demo project with
+local sample CSV data. Use it to learn the `DecisionContext` surface or wire a
+standalone strategy project. For Abel-alpha branch research, stay on the
+alpha-managed `init-session -> init-branch -> prepare-branch` path instead.
 
 If install via `git+https` fails in your current network environment, fall back to:
 

@@ -1,3 +1,11 @@
+# Superseded
+
+This plan describes the legacy `compute_signals() -> (positions, dates, prices)`
+contract and is kept only as historical context.
+
+For the active authoring/runtime model, see the agent-first rollout documents
+in the mono workspace and the current `DecisionContext` runtime in `causal-edge`.
+
 # Backtest Kernel Minimal Plan
 
 ## Goal

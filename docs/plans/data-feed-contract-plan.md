@@ -1,3 +1,11 @@
+# Superseded
+
+This plan describes the older raw-feed plus `compute_signals()` contract and is
+kept only as historical context.
+
+For the active branch-default model, strategies author against
+`compute_decisions(self, ctx)` and `DecisionContext`.
+
 # Data Feed Contract Plan
 
 ## Goal

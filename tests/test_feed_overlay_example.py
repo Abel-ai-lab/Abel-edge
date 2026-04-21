@@ -95,7 +95,7 @@ strategies:
             result = runner.invoke(main, ["run", "--strategy", "feed_overlay_demo"])
             assert result.exit_code == 0, result.output
             trade_df = read_trade_log("data/trade_log_feed_overlay_demo.csv")
-            assert list(trade_df["position"].round(2)) == [0.0, 0.0, 0.6, 0.8]
+            assert list(trade_df["position"].round(2)) == [0.0, 0.0, 0.4, 0.6]
         finally:
             sys.path.pop(0)
             _reset_strategy_modules()

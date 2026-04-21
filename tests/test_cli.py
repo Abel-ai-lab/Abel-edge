@@ -62,13 +62,15 @@ def test_init_creates_project(tmp_path):
     with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(main, ["init", "myproject"])
         assert result.exit_code == 0, result.output
-        assert "synthetic demo strategies" in result.output
+        assert "local sample-data demo strategies" in result.output
         root = Path("myproject")
         assert root.is_dir()
         assert (root / "strategies.yaml").exists()
         assert (root / "strategies" / "sma_crossover" / "engine.py").exists()
         assert (root / "strategies" / "sma_crossover" / "__init__.py").exists()
+        assert (root / "strategies" / "feed_overlay_demo" / "engine.py").exists()
         assert (root / "data").is_dir()
+        assert (root / "data" / "demo_target.csv").exists()
         assert (root / ".env.example").exists()
         assert (root / "CLAUDE.md").exists()
         assert (root / "AGENTS.md").exists()

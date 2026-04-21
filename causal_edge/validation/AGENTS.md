@@ -1,50 +1,52 @@
 # Validation Subsystem — Abel Proof Gate
 
 Three leverage-invariant dimensions:
+
 - **Ratio**: Lo-adjusted Sharpe
 - **Rank**: Position-Return IC
 - **Shape**: Omega
 
 ## I want to...
+
 ### Validate a strategy
     causal-edge validate --strategy <ID> --verbose
 
 ### Understand the live contract
-- Denominators are applicability-based, not legacy `20/21` style scores.
-- Typical base denominator is `5`, then add slots only when `Omega`, `LossYrs`, `position_ic`, or `position_ic_stability` are applicable.
-- DSR accepts optional declared exploration counts through `dsr_trials`.
-- Deferred gates and removed profile keys live in `deferred_registry.yaml`.
-- Audit timing and comparability notes live in `docs/validation-audit-matrix.md`.
 
-### Check for look-ahead
-- Static source checks: `T2-T5`
-- Runtime leak diagnostics: `R1-R2`
-- Semantic repair checklist: `look_ahead_rules.md`
+- denominators are applicability-based, not legacy `20/21` style scores
+- DSR accepts optional declared exploration counts through `dsr_trials`
+- deferred gates and removed profile keys live in `deferred_registry.yaml`
+- audit timing and comparability notes live in `docs/validation-audit-matrix.md`
+
+### Understand timing or legality first
+
+- semantic preflight lives in `causal-edge debug-evaluate --workdir ...`
+- validation assumes the runtime contract has already produced a legal executed series
+- static look-ahead checks remain optional diagnostics, not the main safety story
 
 ### Understand why it failed
+
 | Code | Fix |
 |------|-----|
-| T6 DSR | Reduce search breadth, declare realistic `dsr_trials` |
+| T6 DSR | Reduce search breadth or declare realistic `dsr_trials` |
 | T14 LossYrs | Split regimes or reduce exposure in unstable years |
-| T15-Lo | Add persistence penalty to repeated holds |
-| T15-Omega | Stop clipping PnL; clip features only |
+| T15-Lo | Reduce persistence or serially correlated exposure patterns |
+| T15-Omega | Stop clipping PnL; clip features or position intent instead |
 | T15-MaxDD | Reduce sizing or cap position |
 
-### Common snippets
-```python
-# Trend filter
-sma = prices.rolling(50).mean().shift(1)
-positions[prices.shift(1) < sma] = 0.0
+## Mental model
 
-# Persistence penalty
-hold = (positions > 0).astype(int)
-hold_days = hold.groupby((hold != hold.shift()).cumsum()).cumcount()
-positions *= np.maximum(0.3, 1.0 - 0.1 * hold_days)
-```
+Validation does not decide what the strategy was allowed to see. The runtime
+contract and semantic preflight do that first.
+
+Validation answers a different question:
+
+- given the executed output, does it pass the audited quality gate?
 
 ## Key Files
+
 - `gate.py` — CSV/path in, PASS/FAIL payload out
-- `metrics.py` — metric computation + KEEP/DISCARD logic
-- `look_ahead.py` — static/runtime leakage checks
-- `look_ahead_rules.md` — semantic review checklist
+- `metrics.py` — metric computation plus KEEP/DISCARD logic
+- `look_ahead.py` — static/runtime leakage diagnostics
+- `look_ahead_rules.md` — lower-level diagnostic checklist
 - `profiles/` — profile thresholds

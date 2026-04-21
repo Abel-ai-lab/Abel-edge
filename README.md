@@ -105,16 +105,19 @@ Verified across 38 controlled experiments.
 
 ## Demo Strategies
 
-| Strategy | What it is | Validation note | What it proves |
-|----------|-----------|-----------------|----------------|
-| `sma_crossover` | Synthetic moving-average demo | Uses the audited live `validate` contract (score denominator depends on applicable gates) | Random signals fail completely |
-| `momentum_ml` | Synthetic walk-forward GBDT demo | Uses the audited live `validate` contract (score denominator depends on applicable gates) | ML on noise is still noise |
-| `causal_demo` | Synthetic Abel graph voting demo | Uses the audited live `validate` contract (score denominator depends on applicable gates) | Causal structure can be expressed through the framework surface |
+| Strategy | What it is | Validation note | What it teaches |
+|----------|-----------|-----------------|-----------------|
+| `sma_crossover` | DecisionContext crossover on local sample bars | Uses the audited live `validate` contract | primary target reads plus next-position intent |
+| `momentum_ml` | DecisionContext walk-forward GBDT demo | Uses the audited live `validate` contract | vectorized features and walk-forward training on the target feed |
+| `feed_overlay_demo` | Target plus declared auxiliary feeds | Uses the audited live `validate` contract | `ctx.feed(name)` and as-of feed reads |
+
+The repo also includes `examples/causal_demo/` as an optional graph-shaped
+example for named driver feeds.
 
 ## Commands
 
 ```bash
-causal-edge init <name>              # scaffold standalone project with 3 synthetic demo strategies
+causal-edge init <name>              # scaffold standalone project with 3 local sample-data demo strategies
 causal-edge login                    # run explicit Abel OAuth and persist ABEL_API_KEY
 causal-edge run [--strategy ID]      # run strategies, write backtest trade logs
 causal-edge paper [--strategy ID]    # append latest live paper-trading rows
@@ -143,15 +146,18 @@ The bundled `init` scaffold is a standalone demo project, not an Abel-alpha
 branch workspace. For real-data branch research inside an Abel-alpha workspace,
 stay on the `abel-alpha init-session -> init-branch -> prepare-branch` path.
 
+New strategies should author against `compute_decisions(self, ctx)` and
+`DecisionContext`, not against the legacy tuple-return signal contract.
+
 Real-price strategies default to Abel price APIs. Override per strategy with
 `price_data.adapter: csv` for local bar files, or register a project-local
 adapter via `settings.data_adapters.imports` when your project owns a custom
-data backend. The framework still normalizes timestamps, enforces alignment,
-and validates signal outputs after adapter loading. Configure Abel access with
-`ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`. If you do not already have
-an API key, install `causal-abel` and complete its OAuth flow before running
-`causal-edge discover <TICKER>` or any workflow that triggers live Abel
-discovery:
+data backend. The framework still normalizes timestamps, enforces feed/runtime
+contracts, and compiles next-position intent after adapter loading. Configure
+Abel access with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`. If you do
+not already have an API key, install `causal-abel` and complete its OAuth flow
+before running `causal-edge discover <TICKER>` or any workflow that triggers
+live Abel discovery:
 
 ```bash
 npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y

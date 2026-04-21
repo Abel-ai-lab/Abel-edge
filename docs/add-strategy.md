@@ -2,99 +2,94 @@
 
 ## Fastest Path: Validate an Existing Backtest
 
-Already have a CSV with `date` and simple-return `pnl` columns? Skip everything — just validate:
+Already have a CSV with `date` and simple-return `pnl` columns? Skip engine
+authoring and validate directly:
 
 ```bash
 causal-edge validate --csv my_backtest.csv
 ```
 
-That's it. You'll get an audited validation report card in 2 seconds. No engine, no YAML, no setup.
+Add `position` and `asset_return` columns when you want Position-Return IC
+analysis too.
 
-Add `position` and `asset_return` columns for Position-Return IC analysis.
+## Choose A Starting Point
 
-Read `docs/validation-audit-matrix.md` for the long-lived timing and validation contract.
+| Path | Copy from | What it teaches |
+|------|-----------|-----------------|
+| Simple | `examples/sma_crossover/` | `compute_decisions(self, ctx)` on the primary target feed |
+| ML | `examples/momentum_ml/` | vectorized `DecisionContext` features plus walk-forward training |
+| Feed Path | `examples/feed_overlay_demo/` | declared auxiliary feeds through `ctx.feed(name)` |
+| Causal | `examples/causal_demo/` | graph-shaped voting over named driver feeds |
 
-## Build a Strategy Engine
+`causal-edge init` scaffolds the first three paths by default with local sample
+CSV data. `causal_demo` remains an optional repo example when you want a
+graph-shaped pattern.
 
-### Three starting points
+## Quick Path
 
-| Path | Copy from | What you get |
-|------|-----------|-------------|
-| Simple | `examples/sma_crossover/` | Synthetic minimal engine |
-| ML | `examples/momentum_ml/` | Synthetic walk-forward GBDT demo |
-| Causal | `examples/causal_demo/` | Synthetic Abel graph voting demo + causal_graph.json |
-| Feed Path | `examples/feed_overlay_demo/` | Declared `bars` + `series` feed example |
+1. Copy an example into `strategies/my_strategy/`.
+2. Declare primary `price_data` and any auxiliary `feeds` in `strategies.yaml`.
+3. Implement `compute_decisions(self, ctx)`.
+4. Run `causal-edge run --strategy my_strategy`.
+5. Run `causal-edge validate --strategy my_strategy`.
 
-### Quick Path
-
-1. Copy the example:
-
-```bash
-cp -r examples/sma_crossover/ strategies/my_strategy/
-# or: cp -r examples/causal_demo/ strategies/my_strategy/
-# or: cp -r examples/feed_overlay_demo/ strategies/my_strategy/
-```
-
-2. Edit `strategies/my_strategy/engine.py` — implement your signal logic
-
-The bundled `sma_crossover`, `momentum_ml`, and `causal_demo` examples are
-synthetic demos. They are useful for learning the framework surface and signal
-contract, but they are not intended to serve as real-data research baselines.
-
-3. Add to `strategies.yaml`:
-
-```yaml
-strategies:
-  - id: my_strategy
-    name: "My Strategy"
-    asset: ETH
-    color: "#FF2D55"
-    engine: strategies.my_strategy.engine
-    trade_log: "data/trade_log_my_strategy.csv"
-    paper_log: "data/paper_log_my_strategy.csv"
-    # Optional: default live price adapter is Abel. Override with CSV or a
-    # project-local adapter if needed.
-    # price_data:
-    #   adapter: csv
-    #   path: data/prices.csv
-```
-
-4. Verify:
+If you are iterating on one strategy workspace directly, use semantic
+preflight:
 
 ```bash
-make test                              # structural tests pass
-causal-edge run --strategy my_strategy # generates trade log
-causal-edge validate --strategy my_strategy  # Abel Proof gate
+causal-edge debug-evaluate --workdir strategies/my_strategy
 ```
 
 ## Engine Interface
 
-Your engine must implement `StrategyEngine` from `causal_edge/engine/base.py`:
+New strategies should implement the branch-default decision contract:
 
 ```python
-class MyEngine(StrategyEngine):
-    def compute_signals(self):
-        # Primary bars: self.load_bars(...)
-        # Declared auxiliary feeds: self.load_feed(...) / self.feed_series(...)
-        # Returns: (positions, dates, prices)
-        # positions: np.ndarray of daily position sizes (0=flat, 1=long)
-        # dates: pd.DatetimeIndex
-        # prices: np.ndarray of daily closing prices
-        ...
+from causal_edge.engine.base import StrategyEngine
 
-    def get_latest_signal(self):
-        # Returns: dict with at least 'position' key
-        ...
+
+class MyEngine(StrategyEngine):
+    def compute_decisions(self, ctx):
+        close = ctx.target.series("close")
+        driver = ctx.feed("btc_ref").asof_series("close")
+        next_position = (close > driver).astype(float).fillna(0.0)
+        return ctx.decisions(next_position)
 ```
 
-Define that engine class in the target module itself. Do not rely on `engine.py`
-only re-exporting or importing a `StrategyEngine` subclass from somewhere else.
+That contract means:
+
+- the runtime owns the decision index
+- the strategy reads market data through `DecisionContext`
+- the strategy emits `next_position` intent
+- the backtest kernel compiles intent into effective exposure
+
+Legacy `compute_signals()` engines still exist internally during the rollout,
+but they are not the authoring surface new strategies should learn from.
+
+## DecisionContext Surface
+
+Use these runtime-owned reads inside `compute_decisions(self, ctx)`:
+
+- `ctx.target.series("close")`
+- `ctx.feed(name).native_series("close")`
+- `ctx.feed(name).asof_series("close")`
+- `ctx.points()`
+- `ctx.trace_point(date)`
+- `ctx.decisions(next_position)`
+
+Choose the surface that matches the mechanism:
+
+- batch/vectorized reads for feature engineering and ML
+- point reads for explainability, interval reasoning, and debugging
+
+Do not call raw frame loaders or ad hoc alignment helpers from inside
+`compute_decisions()`. If the data you need is not representable through
+`DecisionContext`, that is a framework or contract issue to fix explicitly.
 
 ## External Data Contract
 
-Primary price data remains implicit and is loaded through `self.load_bars()`.
-Every non-primary external input should be declared under `feeds:` in
-`strategies.yaml` and loaded through framework helpers.
+Primary price data is declared through `price_data`. Every non-primary external
+input is declared through `feeds`.
 
 Example:
 
@@ -109,6 +104,7 @@ strategies:
     price_data:
       adapter: csv
       path: data/ethusd.csv
+      symbol: ETHUSD
     feeds:
       btc_ref:
         kind: bars
@@ -123,107 +119,38 @@ strategies:
 ```
 
 File-backed CSV feeds on the supported daily path may use either
-`2026-01-01T00:00:00Z` or a naive date like `2026-01-01`. When the framework
-loads a file-backed feed, naive timestamps are interpreted as UTC and
-standardized into the runtime contract. Inside strategy runtime, timestamps are
-always expected to be UTC-aware after loading.
+`2026-01-01T00:00:00Z` or a naive date like `2026-01-01`. The framework
+normalizes file-backed timestamps into the runtime daily contract during load.
 
-## Project-Local Adapters
+## Timing And Semantics
 
-If your project already owns a data backend, register a local adapter module
-instead of forcing every strategy to pre-convert data into CSV files.
+The strategy decides the next exposure from the current decision-time world:
 
-```yaml
-settings:
-  price_data:
-    default_adapter: internal_market_data
-    default_timeframe: 1d
-  data_adapters:
-    imports:
-      - lib.edge_adapters
-
-strategies:
-  - id: my_strategy
-    name: "My Strategy"
-    asset: AAPL
-    color: "#FF2D55"
-    engine: strategies.my_strategy.engine
-    trade_log: data/trade_log_my_strategy.csv
-    price_data:
-      adapter: internal_market_data
-      backend: fmp
-      adjusted: false
-      symbol: AAPL
+```text
+decision-time data at t -> next_position[t]
+kernel applies execution delay -> effective position
+effective position * asset_return -> pnl
 ```
 
-The same pattern applies to declared auxiliary feeds under `feeds:`. Adapter
-modules only own external-data access. The framework still owns timestamp
-normalization, daily-profile checks, alignment, and signal-output validation.
-
-Use the helpers inside `compute_signals()`:
-
-```python
-bars = self.load_bars(limit=200)
-target = bars[bars["symbol"] == self.context["asset"]].sort_values("timestamp")
-dates = pd.DatetimeIndex(target["timestamp"])
-prices = target["close"].astype(float).to_numpy()
-
-btc_close = self.feed_series(
-    "btc_ref",
-    field="close",
-    align_to=dates,
-    method="ffill",
-    allow_gaps=False,
-)
-scale = self.feed_series(
-    "risk_scale",
-    align_to=dates,
-    method="ffill",
-    allow_gaps=False,
-)
-positions = (scale * (btc_close > 0).astype(float)).to_numpy()
-return self.finalize_signals(positions, dates, prices)
-```
-
-Recommended helper boundaries:
-
-- `self.load_bars()` for the primary tradeable asset
-- `self.load_feed(name)` for declared multi-column auxiliary feeds
-- `self.feed_series(name, ...)` for declared single-series inputs or extracted
-  fields
-- `self.align_series(series, dates, ...)` only when a raw research series must
-  be aligned before use
-- `self.finalize_signals(...)` before returning from `compute_signals()`
+That is why the strategy should return `ctx.decisions(next_position)` instead
+of hand-compiling an already-effective position series.
 
 ## Rules
 
-- All features must use `shift(1)` — zero look-ahead tolerance
-- `rolling().mean()` must be followed by `.shift(1)` before use in decisions
-- Clip returns for training features only, use unclipped for PnL
-- strategies/ must not import causal_edge/ internals (except base.py)
-- do not hand-roll external data loading for production strategies when the data
-  can be declared as a framework feed
-- do not directly `reindex(...)` raw auxiliary series against strategy dates;
-  use `feed_series(..., align_to=...)` or `align_series(...)`
-- `self.load_bars()` and declared feeds normalize file-backed timestamps into
-  the framework daily UTC contract; once inside strategy runtime, naive
-  datetimes are outside the supported path
+- implement `compute_decisions(self, ctx)` for new strategies
+- read market data only through `DecisionContext`
+- return `ctx.decisions(next_position)`
+- declare primary `price_data` and all auxiliary `feeds` explicitly
+- let runtime profile and execution constraints stay system-owned
+- use `debug-evaluate` when you need semantic feedback about visibility or timing
+- treat static look-ahead heuristics as optional diagnostics, not the primary safety story
 
-## Timing Contract
+## Standalone Vs Abel-alpha Branches
 
-Validation assumes this bar-by-bar relationship:
+`causal-edge init` gives you a standalone project with local sample data and a
+few runnable examples.
 
-```text
-price[t-1], price[t] -> asset_return[t]
-information through t-1 -> position[t]
-position[t] * asset_return[t] -> pnl[t]
-cumprod(1 + pnl[:t]) - 1 -> cum_return[t]
-```
-
-## Audit Checklist
-
-- Every feature used to determine `position[t]` must be lagged by at least one bar.
-- No decision path may use `price[t]` or `asset_return[t]` when setting `position[t]`.
-- No alignment step may propagate future observations backward into earlier timestamps.
-- The emitted trade log must preserve `pnl[t] = position[t] * asset_return[t]`.
-- If you enable paper trading, keep live paper rows in `paper_log` so validation and backtests stay isolated.
+Inside an Abel-alpha branch workspace, the upstream branch flow should prepare
+runtime inputs first, then the engine should be authored against the injected
+`DecisionContext` world. The strategy contract stays the same; the orchestration
+layer changes.

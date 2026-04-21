@@ -8,6 +8,11 @@ cd <branch-dir>
 causal-edge evaluate --workdir .
 ```
 
+### Run semantic preflight before metrics
+```bash
+causal-edge debug-evaluate --workdir <branch-dir>
+```
+
 ### Emit raw artifacts for upstream orchestration
 ```bash
 causal-edge evaluate \
@@ -24,11 +29,6 @@ causal-edge verify-data \
   --start 2020-01-01
 ```
 
-### Debug why a branch is dead or failing
-```bash
-causal-edge debug-evaluate --workdir <branch-dir>
-```
-
 ### Validate a handoff
 ```bash
 causal-edge validate-handoff path/to/edge-handoff.json
@@ -38,16 +38,16 @@ causal-edge validate-handoff path/to/edge-handoff.json
 
 - `<branch-dir>/engine.py` is required
 - the branch must define a module-owned `StrategyEngine` subclass
-- K is auto-computed from the branch's `<branch-dir>/engine.py` AST
-- static look-ahead checks run before evaluation
-- engine outputs are validated through the shared signal contract
+- branch-default strategies should author against `DecisionContext`
+- semantic preflight runs before metric validation
+- the backtest kernel interprets `next_position` intent centrally
+- static look-ahead checks are warning diagnostics, not the primary safety contract
+- `debug-evaluate` surfaces sampled reads, output-shape issues, and semantic blockers
 - validation artifacts come from the same `validate_strategy()` gate used elsewhere
-- `verify-data` reports which discovered tickers have full, partial, missing, or broken history
-- `debug-evaluate` surfaces runtime diagnostics such as flat signals, constant positions, and alignment collapse
 
 ## What strategy authors decide
 
-- what to write in `<branch-dir>/engine.py`
-- which causal drivers and lags to test
+- what mechanism to encode in `compute_decisions(self, ctx)`
+- which feeds and driver relationships to test
+- how to interpret semantic warnings versus metric failures
 - how to classify explore vs exploit at the orchestration layer
-- how to interpret failures and iterate

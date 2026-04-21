@@ -1,10 +1,4 @@
-"""Walk-forward momentum ML strategy — demo implementation.
-
-Educational demo showing:
-- Feature engineering with shift(1) (zero look-ahead)
-- Walk-forward GBDT with rolling train window
-- Decision threshold tuning on validation set
-"""
+"""DecisionContext walk-forward momentum ML example."""
 
 from __future__ import annotations
 
@@ -16,60 +10,47 @@ from causal_edge.engine.base import StrategyEngine
 
 
 class MomentumMLEngine(StrategyEngine):
-    """Walk-forward GBDT on momentum features. Long/Flat only."""
+    """Walk-forward GBDT on target-close features. Long/Flat only."""
 
-    def __init__(self, context: dict | None = None, n_days: int = 750) -> None:
+    def __init__(self, context: dict | None = None) -> None:
         super().__init__(context=context)
-        self.n_days = n_days
         self.train_window = 126  # ~6 months rolling
         self.retrain_every = 5  # retrain every 5 days (weekly)
 
-    def compute_signals(self):
-        """Generate synthetic prices and compute walk-forward ML signals."""
-        rng = np.random.default_rng(123)
-        # Synthetic trending price with momentum
-        raw_ret = rng.normal(0.0003, 0.015, self.n_days)
-        # Add slight autocorrelation to make momentum features useful
-        for i in range(1, len(raw_ret)):
-            raw_ret[i] += 0.05 * raw_ret[i - 1]
-        prices = 100.0 * np.cumprod(1.0 + raw_ret)
-        dates = pd.date_range(end="2026-01-01", periods=self.n_days, freq="B", tz="UTC")
-        returns = np.zeros_like(prices)
-        returns[1:] = prices[1:] / prices[:-1] - 1.0
-
-        # Features — ALL shifted by 1 to prevent look-ahead
-        s = pd.Series(returns)
+    def compute_decisions(self, ctx):
+        close = ctx.target.series("close").astype(float)
+        returns = close.pct_change().fillna(0.0)
         features = pd.DataFrame(
             {
-                "ret_1d": s.shift(1),  # yesterday's return
-                "ret_5d": s.rolling(5).sum().shift(1),  # 5-day momentum
-                "ret_20d": s.rolling(20).sum().shift(1),  # 20-day momentum
-                "vol_20d": s.rolling(20).std().shift(1),  # 20-day volatility
-                "rsi_14": _rsi(s, 14).shift(1),  # RSI(14)
-            }
+                "ret_1d": returns,
+                "ret_5d": returns.rolling(5, min_periods=5).sum(),
+                "ret_20d": returns.rolling(20, min_periods=20).sum(),
+                "vol_20d": returns.rolling(20, min_periods=20).std(),
+                "sma_gap_10": close / close.rolling(10, min_periods=10).mean() - 1.0,
+                "rsi_14": _rsi(returns, 14),
+            },
+            index=close.index,
         )
+        target = (returns.shift(-1) > 0).astype(int)
 
-        # Target: next-day direction (1=up, 0=down)
-        target = (s > 0).astype(int)
-
-        # Walk-forward prediction
-        positions = np.zeros(self.n_days)
-        start = self.train_window + 20  # enough warmup for features + train
+        next_position = pd.Series(0.0, index=close.index, dtype=float)
+        start = max(self.train_window, 25)
 
         last_model = None
         last_train_day = 0
 
-        for t in range(start, self.n_days):
-            # Retrain periodically
+        for t in range(start, len(close)):
             if last_model is None or (t - last_train_day) >= self.retrain_every:
                 train_start = max(0, t - self.train_window)
-                X_train = features.iloc[train_start:t].values
-                y_train = target.iloc[train_start:t].values
-                # Drop rows with NaN from feature warmup
-                valid = ~np.isnan(X_train).any(axis=1)
-                X_train, y_train = X_train[valid], y_train[valid]
+                train_slice = features.iloc[train_start:t]
+                target_slice = target.iloc[train_start:t]
+                valid = (~train_slice.isna().any(axis=1)) & target_slice.notna()
+                if int(valid.sum()) < 30:
+                    continue
+                X_train = train_slice.loc[valid].to_numpy()
+                y_train = target_slice.loc[valid].to_numpy()
 
-                if len(X_train) < 30:
+                if len(np.unique(y_train)) < 2:
                     continue
 
                 model = GradientBoostingClassifier(
@@ -82,26 +63,14 @@ class MomentumMLEngine(StrategyEngine):
                 last_model = model
                 last_train_day = t
 
-            # Predict using features available at time t (already shifted)
-            x_t = features.iloc[t].values.reshape(1, -1)
+            x_t = features.iloc[t].to_numpy(dtype=float).reshape(1, -1)
             if np.isnan(x_t).any():
-                positions[t] = 0.0
                 continue
 
             prob = last_model.predict_proba(x_t)[0]
-            # Long if P(up) > 0.55 (conservative threshold)
-            positions[t] = 1.0 if prob[1] > 0.55 else 0.0
+            next_position.iloc[t] = 1.0 if prob[1] > 0.55 else 0.0
 
-        return self.finalize_signals(positions, dates, prices)
-
-    def get_latest_signal(self):
-        """Return latest position from walk-forward model."""
-        positions, dates, prices = self.compute_signals()
-        return {
-            "position": float(positions[-1]),
-            "date": str(dates[-1].date()),
-            "price": float(prices[-1]),
-        }
+        return ctx.decisions(next_position)
 
 
 def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
