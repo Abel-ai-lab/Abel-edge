@@ -4,6 +4,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
+from causal_edge import __version__
 from causal_edge.cli import main
 
 
@@ -16,7 +17,7 @@ def test_help():
 def test_version():
     result = CliRunner().invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.5.0" in result.output
+    assert __version__ in result.output
 
 
 def test_status_empty():
@@ -61,6 +62,7 @@ def test_init_creates_project(tmp_path):
     with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(main, ["init", "myproject"])
         assert result.exit_code == 0, result.output
+        assert "synthetic demo strategies" in result.output
         root = Path("myproject")
         assert root.is_dir()
         assert (root / "strategies.yaml").exists()

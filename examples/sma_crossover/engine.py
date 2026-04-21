@@ -22,14 +22,19 @@ class SMAEngine(StrategyEngine):
         rng = np.random.default_rng(42)
         returns = rng.normal(0.0005, 0.02, self.n_days)
         prices = 100.0 * np.cumprod(1.0 + returns)
-        dates = pd.bdate_range(end=pd.Timestamp.today(), periods=self.n_days)
+        dates = pd.date_range(
+            end=pd.Timestamp.now(tz="UTC").normalize(),
+            periods=self.n_days,
+            freq="B",
+            tz="UTC",
+        )
 
         fast_ma = pd.Series(prices).rolling(self.fast).mean().shift(1).values
         slow_ma = pd.Series(prices).rolling(self.slow).mean().shift(1).values
         positions = np.where(fast_ma > slow_ma, 1.0, 0.0)
         positions[: self.slow + 1] = 0.0  # +1 for shift; no signal until slow MA warms up
 
-        return positions, dates, prices
+        return self.finalize_signals(positions, dates, prices)
 
     def get_latest_signal(self):
         """Return latest position from the crossover."""

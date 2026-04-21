@@ -33,7 +33,7 @@ class MomentumMLEngine(StrategyEngine):
         for i in range(1, len(raw_ret)):
             raw_ret[i] += 0.05 * raw_ret[i - 1]
         prices = 100.0 * np.cumprod(1.0 + raw_ret)
-        dates = pd.bdate_range(end="2026-01-01", periods=self.n_days)
+        dates = pd.date_range(end="2026-01-01", periods=self.n_days, freq="B", tz="UTC")
         returns = np.zeros_like(prices)
         returns[1:] = prices[1:] / prices[:-1] - 1.0
 
@@ -92,7 +92,7 @@ class MomentumMLEngine(StrategyEngine):
             # Long if P(up) > 0.55 (conservative threshold)
             positions[t] = 1.0 if prob[1] > 0.55 else 0.0
 
-        return positions, dates, prices
+        return self.finalize_signals(positions, dates, prices)
 
     def get_latest_signal(self):
         """Return latest position from walk-forward model."""

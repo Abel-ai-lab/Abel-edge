@@ -81,6 +81,7 @@ def scaffold_project(name: str) -> Path:
 
 _STRATEGIES_YAML = """\
 # causal-edge project configuration
+# Standalone causal-edge project with synthetic demo strategies.
 # Run: causal-edge run && causal-edge dashboard && causal-edge validate
 
 settings:
@@ -150,6 +151,9 @@ causal-edge status      # show strategy summary
 _AGENTS_MD = """\
 # Project — Agent Entry Point
 
+This is a standalone `causal-edge` project scaffold with synthetic demo
+strategies. It is not an Abel-alpha branch workspace.
+
 ## I want to...
 
 ### Run everything
@@ -189,12 +193,17 @@ class SMAEngine(StrategyEngine):
         rng = np.random.default_rng(42)
         returns = rng.normal(0.0005, 0.02, self.n_days)
         prices = 100.0 * np.cumprod(1.0 + returns)
-        dates = pd.bdate_range(end=pd.Timestamp.today(), periods=self.n_days)
+        dates = pd.date_range(
+            end=pd.Timestamp.now(tz="UTC").normalize(),
+            periods=self.n_days,
+            freq="B",
+            tz="UTC",
+        )
         fast_ma = pd.Series(prices).rolling(self.fast).mean().shift(1).values
         slow_ma = pd.Series(prices).rolling(self.slow).mean().shift(1).values
         positions = np.where(fast_ma > slow_ma, 1.0, 0.0)
         positions[:self.slow + 1] = 0.0
-        return positions, dates, prices
+        return self.finalize_signals(positions, dates, prices)
 
     def get_latest_signal(self):
         positions, dates, prices = self.compute_signals()

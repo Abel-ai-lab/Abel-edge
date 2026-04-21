@@ -107,14 +107,14 @@ Verified across 38 controlled experiments.
 
 | Strategy | What it is | Validation note | What it proves |
 |----------|-----------|-----------------|----------------|
-| `sma_crossover` | Simple moving average | Uses the audited live `validate` contract (score denominator depends on applicable gates) | Random signals fail completely |
-| `momentum_ml` | Walk-forward GBDT | Uses the audited live `validate` contract (score denominator depends on applicable gates) | ML on noise is still noise |
-| `causal_demo` | Abel causal graph voting | Uses the audited live `validate` contract (score denominator depends on applicable gates) | Causal structure produces real edge |
+| `sma_crossover` | Synthetic moving-average demo | Uses the audited live `validate` contract (score denominator depends on applicable gates) | Random signals fail completely |
+| `momentum_ml` | Synthetic walk-forward GBDT demo | Uses the audited live `validate` contract (score denominator depends on applicable gates) | ML on noise is still noise |
+| `causal_demo` | Synthetic Abel graph voting demo | Uses the audited live `validate` contract (score denominator depends on applicable gates) | Causal structure can be expressed through the framework surface |
 
 ## Commands
 
 ```bash
-causal-edge init <name>              # scaffold project with 3 demo strategies
+causal-edge init <name>              # scaffold standalone project with 3 synthetic demo strategies
 causal-edge login                    # run explicit Abel OAuth and persist ABEL_API_KEY
 causal-edge run [--strategy ID]      # run strategies, write backtest trade logs
 causal-edge paper [--strategy ID]    # append latest live paper-trading rows
@@ -138,6 +138,10 @@ causal-edge validate --csv file.csv  # validate any backtest CSV directly
 causal-edge validate --export r.txt  # export report for sharing
 causal-edge discover <TICKER>        # find causal parents (Abel API key)
 ```
+
+The bundled `init` scaffold is a standalone demo project, not an Abel-alpha
+branch workspace. For real-data branch research inside an Abel-alpha workspace,
+stay on the `abel-alpha init-session -> init-branch -> prepare-branch` path.
 
 Real-price strategies default to Abel price APIs. Override per strategy with
 `price_data.adapter: csv` for local bar files, or register a project-local

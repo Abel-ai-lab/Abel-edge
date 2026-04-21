@@ -17,6 +17,10 @@ as `strategies/ethusd_causal/engine.py` implementing `StrategyEngine` from
 ### Use the SMA example as template
     cp -r examples/sma_crossover/ strategies/my_strategy/
 
+Bundled examples are synthetic demos that show framework wiring and contract
+usage. Treat them as starting patterns, not as research-ready real-data
+baselines.
+
 ### Rules
 - Engine wrappers should be < 100 lines
 - strategies/ must NOT import from `causal_edge/` (except `causal_edge/engine/base.py`)

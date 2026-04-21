@@ -5,6 +5,8 @@ Two modes: **use** this as a tool, or **develop** on this repo.
 ## Use as a Tool (validate backtests, fix strategies)
 
 Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loop.
+If you use `causal-edge init`, treat it as a standalone project scaffold with
+synthetic demos, not as an Abel-alpha branch workspace.
 
     python -m venv .venv
     # PowerShell: .venv\Scripts\Activate.ps1
@@ -20,9 +22,10 @@ Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loo
 #### Add a strategy
 1. Read `strategies/AGENTS.md`
 2. Copy `examples/sma_crossover/` → `strategies/my_strategy/`
-3. Edit `strategies.yaml` — add entry (see schema comments in file)
-4. `make test` — structural tests verify registration
-5. `causal-edge validate` — Abel Proof audited live gate contract
+3. Treat bundled examples as synthetic demos for framework exploration, not as research-ready real-data baselines
+4. Edit `strategies.yaml` — add entry (see schema comments in file)
+5. `make test` — structural tests verify registration
+6. `causal-edge validate` — Abel Proof audited live gate contract
 
 #### Fix a failing validation
 1. `causal-edge validate --verbose`

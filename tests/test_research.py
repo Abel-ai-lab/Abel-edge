@@ -124,6 +124,32 @@ def _write_alignment_failure_engine(path: Path) -> None:
     )
 
 
+def _write_naive_dates_engine(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "import numpy as np",
+                "import pandas as pd",
+                "",
+                "from causal_edge.engine.base import StrategyEngine",
+                "",
+                "",
+                "class BranchEngine(StrategyEngine):",
+                "    def compute_signals(self):",
+                "        dates = pd.bdate_range('2024-01-01', periods=40)",
+                "        prices = np.linspace(100.0, 120.0, len(dates))",
+                "        positions = np.zeros(len(dates), dtype=float)",
+                "        return positions, dates, prices",
+                "",
+                "    def get_latest_signal(self):",
+                "        return {'position': 0.0}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _write_feed_loader_engine(path: Path) -> None:
     path.write_text(
         "\n".join(
@@ -298,6 +324,16 @@ class TestRunEvaluation:
         assert diagnostics["failure_signature"] == "alignment_collapse"
         assert diagnostics["runtime_stage"] == "compute_signals"
 
+    def test_reports_datetime_contract_violation_for_naive_dates(self, tmp_path):
+        _write_naive_dates_engine(tmp_path / "engine.py")
+        result = run_evaluation(tmp_path)
+
+        diagnostics = result["diagnostics"]
+        assert result["verdict"] == "ERROR"
+        assert diagnostics["failure_signature"] == "datetime_contract_violation"
+        assert diagnostics["runtime_stage"] == "compute_signals"
+        assert "UTC-aware" in result["failures"][0]
+
     def test_rejects_engine_that_only_reexports_imported_class(self, tmp_path):
         helper = tmp_path / "helper_engine.py"
         helper.write_text(
@@ -340,6 +376,21 @@ class TestRunEvaluation:
 
         assert context["_feeds"]["primary"]["symbol"] == "SONY"
         assert context["_feeds"]["primary"]["adapter"] == "abel"
+
+    @pytest.mark.parametrize(
+        "example_dir",
+        [
+            "sma_crossover",
+            "momentum_ml",
+            "causal_demo",
+        ],
+    )
+    def test_shipped_examples_do_not_fail_datetime_contract(self, example_dir):
+        root = Path(__file__).resolve().parents[1]
+        result = run_evaluation(root / "examples" / example_dir)
+
+        assert result["diagnostics"]["failure_signature"] != "datetime_contract_violation"
+        assert not any("UTC-aware" in failure for failure in result["failures"])
 
 
 class TestResearchHelpers:
