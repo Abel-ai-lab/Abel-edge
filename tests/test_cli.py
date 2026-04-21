@@ -1,11 +1,13 @@
 """CLI entry point tests."""
 
+import os
 from pathlib import Path
 
 from click.testing import CliRunner
 
 from causal_edge import __version__
 from causal_edge.cli import main
+from causal_edge.engine.ledger import read_trade_log
 
 
 def test_help():
@@ -74,6 +76,30 @@ def test_init_creates_project(tmp_path):
         assert (root / ".env.example").exists()
         assert (root / "CLAUDE.md").exists()
         assert (root / "AGENTS.md").exists()
+
+
+def test_init_project_runs_sample_data_workflow(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        result = runner.invoke(main, ["init", "myproject"])
+        assert result.exit_code == 0, result.output
+
+        root = Path("myproject")
+        original_cwd = Path.cwd()
+        try:
+            os.chdir(root)
+
+            result = runner.invoke(main, ["run"])
+            assert result.exit_code == 0, result.output
+            assert len(read_trade_log("data/trade_log_sma_crossover.csv")) > 0
+            assert len(read_trade_log("data/trade_log_momentum_ml.csv")) > 0
+            assert len(read_trade_log("data/trade_log_feed_overlay_demo.csv")) > 0
+
+            result = runner.invoke(main, ["dashboard"])
+            assert result.exit_code == 0, result.output
+            assert Path("dashboard.html").exists()
+        finally:
+            os.chdir(original_cwd)
 
 
 def test_init_fails_if_dir_exists(tmp_path):
