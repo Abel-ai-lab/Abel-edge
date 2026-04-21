@@ -15,7 +15,8 @@ import pandas as pd
 from causal_edge.engine.backtest import run_backtest
 from causal_edge.engine.feed_contract import FeedContractError
 from causal_edge.engine.loader import load_engine_from_file
-from causal_edge.engine.signal_contract import SignalContractError, validate_signal_output
+from causal_edge.engine.runtime_contract import DecisionContractError
+from causal_edge.engine.signal_contract import SignalContractError
 from causal_edge.research.handoff import build_strategy_handoff, write_strategy_handoff
 from causal_edge.validation.gate import validate_strategy
 
@@ -110,21 +111,21 @@ def run_evaluation(
     try:
         engine_cls = load_engine_from_file(engine_path)
         engine = engine_cls(context=research_context)
-        positions, dates, prices = validate_signal_output(
-            *engine.compute_signals(),
-            profile="daily",
-        )
-    except (FeedContractError, SignalContractError, ImportError, ValueError) as exc:
+        compiled = engine.compute_runtime_output(start=start)
+        positions = compiled.positions
+        dates = compiled.decision_index
+        prices = compiled.close_prices
+    except (DecisionContractError, FeedContractError, SignalContractError, ImportError, TypeError, ValueError) as exc:
         return _error(
             f"engine evaluation failed: {exc}",
             implementation_contract="engine",
-            runtime_stage="compute_signals",
+            runtime_stage="compute_strategy",
         )
     except Exception as exc:  # pragma: no cover - defensive catch for user engines
         return _error(
             f"engine evaluation failed: {exc}",
             implementation_contract="engine",
-            runtime_stage="compute_signals",
+            runtime_stage="compute_strategy",
         )
 
     if len(positions) < 30:
@@ -159,7 +160,7 @@ def run_evaluation(
     result["requested_window"] = {"start": start, "end": None}
     result["effective_window"] = _effective_window(frame)
     result["context_path"] = str(context_json.resolve()) if context_json is not None else None
-    result["implementation_contract"] = "engine"
+    result["implementation_contract"] = compiled.output_mode
     result["active_days"] = int((frame["position"].abs() > 0.01).sum())
     result["total_days"] = int(len(frame))
     result["K_detail"] = {
@@ -169,6 +170,13 @@ def run_evaluation(
         "n_lags": len(lags),
     }
     result["diagnostics"] = _build_runtime_diagnostics(result, frame)
+    if compiled.output_mode == "decision_context":
+        result["decision_trace"] = engine.latest_decision_trace()
+        result["decision_preview"] = (
+            engine._last_decision_context.preview(limit=5)
+            if engine._last_decision_context is not None
+            else []
+        )
     return result
 
 
@@ -278,14 +286,25 @@ def _build_research_context(
         data_contract = {}
     data_contract["profile"] = "daily"
     research_context["_data_contract"] = data_contract
+    ticker = (
+        research_context.get("ticker")
+        or (research_context.get("discovery") or {}).get("ticker")
+        or ((research_context.get("branch_spec") or {}).get("target"))
+    )
+    research_context["_runtime_profile"] = {
+        "profile": "daily",
+        "target": str(ticker or "").strip().upper() or None,
+        "decision_event": "bar_close",
+        "execution_delay_bars": 1,
+        "return_basis": "close_to_close",
+    }
+    research_context["_execution_constraints"] = {
+        "long_only": False,
+    }
     feeds = research_context.get("_feeds")
     if not isinstance(feeds, dict):
         feeds = {}
     if "primary" not in feeds:
-        ticker = (
-            research_context.get("ticker")
-            or (research_context.get("discovery") or {}).get("ticker")
-        )
         feeds["primary"] = {
             "name": "primary",
             "kind": "bars",
@@ -408,7 +427,7 @@ def _classify_error_message(message: str) -> tuple[str, list[str]]:
             "datetime_contract_violation",
             [
                 "The engine emitted dates outside the supported daily UTC runtime contract.",
-                "Return UTC-aware midnight timestamps and prefer `self.finalize_signals(...)` before exiting compute_signals().",
+                "For decision-context engines, build outputs with `ctx.decisions(...)`; for legacy engines, prefer `self.finalize_signals(...)`.",
             ],
         )
     if "aligned to strategy dates without gaps" in text or "unsupported alignment method" in text:
@@ -440,6 +459,14 @@ def _classify_error_message(message: str) -> tuple[str, list[str]]:
             "look_ahead_violation",
             [
                 "Static look-ahead checks found a forward-looking pattern in engine.py.",
+            ],
+        )
+    if "not available inside compute_decisions" in text:
+        return (
+            "decision_context_escape_hatch",
+            [
+                "The branch tried to bypass DecisionContext with a raw data helper.",
+                "Read target and driver data through ctx.target / ctx.feed / ctx.points instead.",
             ],
         )
     if "api key" in text or "oauth" in text:

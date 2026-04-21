@@ -11,14 +11,11 @@ from causal_edge.plugins.abel.credentials import resolve_api_key
 
 ENGINE_TEMPLATE = '''"""Research engine for {ticker} - experiment baseline.
 
-Fill in BranchEngine.compute_signals(). Everything else is handled by causal-edge.
+Fill in BranchEngine.compute_decisions(ctx). Everything else is handled by causal-edge.
 Run: python -m causal_edge.research.evaluate --workdir .
 """
 
 from __future__ import annotations
-
-import numpy as np
-import pandas as pd
 
 from causal_edge.engine.base import StrategyEngine
 
@@ -26,17 +23,13 @@ from causal_edge.engine.base import StrategyEngine
 class BranchEngine(StrategyEngine):
     """Branch-local research engine."""
 
-    def compute_signals(self):
-        requested = ((self.context or {{}}).get("_research") or {{}}).get("requested_window") or {{}}
-        start = requested.get("start") or "2024-01-01"
-        dates = pd.date_range(start, periods=120, freq="D", tz="UTC")
-        prices = np.full(len(dates), 100.0, dtype=float)
-        positions = np.zeros(len(dates), dtype=float)
-        return positions, dates, prices
-
-    def get_latest_signal(self):
-        positions, dates, _ = self.compute_signals()
-        return {{"position": float(positions[-1]), "date": str(dates[-1].date())}}
+    def compute_decisions(self, ctx):
+        close = ctx.target.series("close")
+        slow_mean = close.rolling(window=40, min_periods=15).mean()
+        next_position = (close > slow_mean).astype(float).fillna(0.0)
+        if len(next_position) > 0:
+            next_position.iloc[0] = 0.0
+        return ctx.decisions(next_position)
 '''
 
 MEMORY_TEMPLATE = """# {ticker} Research Memory

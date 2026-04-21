@@ -9,8 +9,8 @@ import pandas as pd
 
 from causal_edge.plugins.abel.prices import fetch_bars
 
-DEFAULT_PROBE_LIMIT = 5000
-BOUNDARY_CONFIRMATION_LIMITS = (10000, 20000)
+DEFAULT_PROBE_LIMIT = 500
+BOUNDARY_CONFIRMATION_LIMITS = (1000, 2000)
 
 
 def run_data_verification(
@@ -352,11 +352,9 @@ def _coverage_hints(
         observed_first = target_boundary.get("observed_first_timestamp")
         if classification == "confirmed_before_requested_start":
             target_safe_start = requested_start
-        elif (
-            classification == "confirmed_after_requested_start"
-            and isinstance(observed_first, str)
-            and observed_first
-        ):
+        elif classification in {"confirmed_after_requested_start", "unknown_probe_truncated"} and isinstance(
+            observed_first, str
+        ) and observed_first:
             target_safe_start = observed_first
     dense_overlap_hint_start = max(usable_starts) if usable_starts else None
     return {
@@ -367,7 +365,7 @@ def _coverage_hints(
 def _probe_summary(limit: int, target_probe_meta: dict[str, object] | None) -> dict[str, object]:
     probe_meta = target_probe_meta or _default_probe_meta(limit)
     return {
-        "strategy": "ticker_boundary_confirm",
+        "strategy": "target_boundary_confirm",
         "limit": limit,
         "target_final_limit": int(probe_meta.get("final_limit", limit) or limit),
         "target_confirmation_attempted": bool(probe_meta.get("confirmation_attempted", False)),

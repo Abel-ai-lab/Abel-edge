@@ -10,8 +10,8 @@ from causal_edge.engine.backtest import BacktestSettings, run_backtest
 from causal_edge.engine.feed_contract import FeedContractError
 from causal_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
 from causal_edge.engine.loader import load_engine_from_import_path
+from causal_edge.engine.runtime_contract import DecisionContractError
 from causal_edge.engine.signal_contract import SignalContractError
-from causal_edge.engine.signal_contract import validate_signal_output
 
 
 def _load_engine(engine_path: str):
@@ -19,12 +19,10 @@ def _load_engine(engine_path: str):
     return load_engine_from_import_path(engine_path)
 
 
-def _compute_validated_signals(engine, strategy_cfg: dict):
-    profile = ((strategy_cfg.get("_data_contract") or {}).get("profile", "daily"))
+def _compute_runtime_output(engine, strategy_cfg: dict):
     try:
-        raw_output = engine.compute_signals()
-        return validate_signal_output(*raw_output, profile=profile)
-    except (FeedContractError, SignalContractError) as exc:
+        return engine.compute_runtime_output()
+    except (DecisionContractError, FeedContractError, SignalContractError, TypeError, ValueError) as exc:
         raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
 
 
@@ -45,7 +43,10 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
     engine_cls = _load_engine(engine_path)
     engine = engine_cls(context=strategy_cfg)
 
-    positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
+    compiled = _compute_runtime_output(engine, strategy_cfg)
+    positions = compiled.positions
+    dates = compiled.decision_index
+    prices = compiled.close_prices
 
     execution_cfg = (settings or {}).get("execution") or {}
     result = run_backtest(
@@ -64,6 +65,7 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
         result["positions"],
         trade_log_path,
         close_prices=prices,
+        next_positions=compiled.next_position,
         gross_pnl=result["gross_pnl"],
         turnover=result["turnover"],
         execution_cost=result["execution_cost"],
@@ -134,7 +136,10 @@ def paper_run_one(
     engine_cls = _load_engine(engine_path)
     engine = engine_cls(context=strategy_cfg)
 
-    positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
+    compiled = _compute_runtime_output(engine, strategy_cfg)
+    positions = compiled.positions
+    dates = compiled.decision_index
+    prices = compiled.close_prices
     if as_of is not None:
         cutoff = pd.to_datetime(as_of, utc=True)
         mask = dates <= cutoff
