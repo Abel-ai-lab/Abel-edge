@@ -60,6 +60,25 @@ class DecisionContext:
     def feed(self, name: str):
         return _DecisionFeedView(self, name)
 
+    def available_feeds(self) -> list[str]:
+        feeds = (self.engine.context or {}).get("_feeds") or {}
+        return sorted(str(name) for name in feeds.keys())
+
+    def inspect_feed(self, name: str) -> dict[str, Any]:
+        field = self._default_feed_field(name)
+        frame = self._load_feed_frame(name, field)
+        fields = [column for column in frame.columns if column not in {"timestamp", "symbol"}]
+        first = pd.to_datetime(frame["timestamp"], utc=True).min() if not frame.empty else None
+        last = pd.to_datetime(frame["timestamp"], utc=True).max() if not frame.empty else None
+        return {
+            "name": name,
+            "field": field,
+            "rows": int(len(frame)),
+            "fields": fields,
+            "first_timestamp": _to_trace_value(first),
+            "last_timestamp": _to_trace_value(last),
+        }
+
     def points(self) -> Iterator["DecisionPoint"]:
         index = self.decision_index()
         for idx, ts in enumerate(index):
@@ -105,6 +124,15 @@ class DecisionContext:
             anchors = sorted({0, len(points) // 2, len(points) - 1})
             selected = [points[idx] for idx in anchors[:limit]]
         return [point.to_dict() for point in selected]
+
+    def trace_point(self, date) -> dict[str, Any]:
+        target_date = _as_utc_timestamp(date)
+        for point in self.points():
+            if point.decision_time() == target_date:
+                return point.to_dict()
+        raise DecisionContractError(
+            f"DecisionContext has no decision point at {target_date.isoformat()}."
+        )
 
     def _load_target_frame(self, *fields: str) -> pd.DataFrame:
         requested_fields = tuple(sorted(set(fields or ("close",))))
@@ -169,6 +197,12 @@ class DecisionContext:
                 aligned_to_decision_index=aligned_to_decision_index,
             )
         )
+
+    def _default_feed_field(self, name: str) -> str:
+        feed_cfg = ((self.engine.context or {}).get("_feeds") or {}).get(name) or {}
+        if str(feed_cfg.get("kind") or "").strip().lower() == "series":
+            return "value"
+        return "close"
 
 
 class _DecisionTargetView:
