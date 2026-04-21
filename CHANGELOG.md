@@ -10,6 +10,7 @@
 - **Loss-year contract redesign**: `T14 LossYrs` now counts only full calendar years with negative total PnL, and partial-year backtests no longer activate the gate.
 - **Mathematical corrections**: no-loss `omega` now becomes an applicability case instead of a live gate failure, zero-drawdown `calmar` now normalizes to `0.0` instead of sentinel `999`, and constant-series `skew` now normalizes to `0.0` instead of `NaN`.
 - **Applicability semantics**: Position-Return IC behavior is now explicit via `position_ic_*_applicable` flags rather than inferred from zero-valued IC metrics.
+- **Demo-surface hardening**: bundled examples now label themselves as synthetic demos more consistently, and public guidance more clearly separates standalone `causal-edge init` scaffolds from Abel-alpha branch research.
 
 ### Removed / Deferred
 - **Unsupported live gate removed**: `T12 OOS/IS` and its split-Sharpe payload family (`oos_is`, `is_sharpe`, `oos_sharpe`) were removed because a final PnL path does not carry defensible IS/OOS provenance.

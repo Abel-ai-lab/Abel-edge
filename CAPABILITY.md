@@ -200,13 +200,18 @@ python -m venv .venv
 # bash/zsh: source .venv/bin/activate
 python -m pip install --upgrade pip
 pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
-causal-edge init my-portfolio   # 3 demos: SMA, ML, Causal
+causal-edge init my-portfolio   # 3 synthetic demos: SMA, ML, Causal
 cd my-portfolio
 causal-edge login               # only needed for live Abel discovery
 causal-edge run                 # run all strategies
 causal-edge dashboard           # dark-theme Plotly dashboard
 causal-edge validate            # audited validation report card
 ```
+
+The scaffold created by `causal-edge init` is a standalone demo project. Use it
+to learn the framework surface or wire a standalone strategy project. For
+Abel-alpha branch research, stay on the alpha-managed
+`init-session -> init-branch -> prepare-branch` path instead.
 
 If install via `git+https` fails in your current network environment, fall back to:
 
