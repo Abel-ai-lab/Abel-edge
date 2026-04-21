@@ -40,7 +40,9 @@ def evaluate(workdir, start, context_json, output_json, output_md, output_csv, o
         handoff_path=Path(output_handoff) if output_handoff else None,
     )
 
+    semantic = result.get("semantic") or {}
     click.echo(f"Verdict: {result.get('verdict', 'ERROR')}")
+    click.echo(f"Semantic: {semantic.get('verdict', 'unknown')}")
     click.echo(f"Score:   {result.get('score', '?/?')}")
     click.echo(f"K:       {result.get('K', '?')}")
     if output_json:
