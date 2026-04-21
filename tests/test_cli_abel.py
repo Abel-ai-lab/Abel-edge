@@ -11,6 +11,7 @@ def test_login_json_output(monkeypatch):
     from causal_edge.plugins.abel import auth as auth_module
 
     def _login_with_oauth(**kwargs):
+        kwargs["notify"]("Open this URL to authorize Abel access:\nhttps://example.com/auth")
         kwargs["on_handoff"](
             {
                 "status": "awaiting_authorization",
@@ -45,10 +46,12 @@ def test_login_json_output(monkeypatch):
 
     assert result.exit_code == 0, result.output
     lines = result.output.strip().splitlines()
-    assert '"status": "awaiting_authorization"' in lines[0]
-    assert '"status": "waiting_for_authorization"' in lines[1]
+    assert any('"status": "awaiting_authorization"' in line for line in lines)
+    assert any('"status": "waiting_for_authorization"' in line for line in lines)
     assert '"status": "authorized"' in lines[-1]
     assert "abel_login" not in result.output
+    assert "Open this URL to authorize Abel access:" in result.output
+    assert "https://example.com/auth" in result.output
 
 
 def test_login_print_token_for_existing_key(monkeypatch):
@@ -64,13 +67,38 @@ def test_login_print_token_for_existing_key(monkeypatch):
             "auth_url": None,
             "opened_browser": False,
             "stored": False,
+            "source": "env_var",
+            "source_path": None,
         },
     )
     result = CliRunner().invoke(main, ["login", "--print-token"])
 
     assert result.exit_code == 0, result.output
-    assert "Abel API key already configured." in result.output
+    assert "Reusing existing Abel auth from the current process environment." in result.output
     assert "abel_existing" in result.output
+
+
+def test_login_reports_shared_auth_reuse(monkeypatch):
+    from causal_edge.plugins.abel import auth as auth_module
+
+    monkeypatch.setattr(
+        auth_module,
+        "login_with_oauth",
+        lambda **kwargs: {
+            "status": "already_configured",
+            "api_key": "abel_existing",
+            "env_path": ".env",
+            "auth_url": None,
+            "opened_browser": False,
+            "stored": False,
+            "source": "shared_auth_file",
+            "source_path": "/tmp/shared/.env.skill",
+        },
+    )
+    result = CliRunner().invoke(main, ["login"])
+
+    assert result.exit_code == 0, result.output
+    assert "Reusing existing Abel auth from shared file: /tmp/shared/.env.skill" in result.output
 
 
 def test_discover_ethusd_parents(monkeypatch, tmp_path):

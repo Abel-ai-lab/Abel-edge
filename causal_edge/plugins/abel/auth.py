@@ -11,13 +11,14 @@ import requests
 from causal_edge.plugins.abel.credentials import (
     normalize_api_key,
     persist_env_value,
-    resolve_api_key,
+    resolve_api_key_record,
     resolve_auth_base_url,
 )
 
 Notifier = Callable[[str], None]
 HandoffCallback = Callable[[dict[str, Any]], None]
 PendingCallback = Callable[[dict[str, Any]], None]
+PENDING_NOTIFICATION_EVERY_POLLS = 5
 
 
 class AbelLoginTimeoutError(RuntimeError):
@@ -91,7 +92,7 @@ class AbelAuthClient:
                         "timeout_seconds": timeout_seconds,
                     }
                 )
-            elif on_pending is not None and polls % 15 == 0:
+            elif on_pending is not None and polls % PENDING_NOTIFICATION_EVERY_POLLS == 0:
                 on_pending(
                     {
                         "status": "waiting_for_authorization",
@@ -100,8 +101,13 @@ class AbelAuthClient:
                         "timeout_seconds": timeout_seconds,
                     }
                 )
-            if notify is not None and polls % 15 == 0:
-                notify("Still waiting for browser authorization... (Ctrl+C to cancel)")
+            if notify is not None and (
+                polls == 1 or polls % PENDING_NOTIFICATION_EVERY_POLLS == 0
+            ):
+                notify(
+                    "Still waiting for browser authorization... "
+                    f"({polls} poll{'s' if polls != 1 else ''}, Ctrl+C to cancel)"
+                )
             time.sleep(poll_interval)
 
 
@@ -117,15 +123,17 @@ def login_with_oauth(
     on_pending: PendingCallback | None = None,
     session: requests.Session | None = None,
 ) -> dict[str, Any]:
-    existing_api_key = None if force else resolve_api_key(env_path=env_path)
-    if existing_api_key:
+    existing_auth = None if force else resolve_api_key_record(env_path=env_path)
+    if existing_auth and existing_auth.get("api_key"):
         return {
             "status": "already_configured",
-            "api_key": existing_api_key,
+            "api_key": existing_auth["api_key"],
             "env_path": env_path,
             "auth_url": None,
             "opened_browser": False,
             "stored": False,
+            "source": existing_auth.get("source"),
+            "source_path": existing_auth.get("path"),
         }
 
     auth = AbelAuthClient(session=session, auth_base_url=resolve_auth_base_url(env_path=env_path))

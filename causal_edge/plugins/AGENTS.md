@@ -11,7 +11,7 @@ Optional integrations. Removing this entire directory must not break anything.
 3. Reuse the same `causal-abel` OAuth instead of reauthorizing in `causal-edge` when possible
 4. Standalone fallback: run `causal-edge login`
    Agent-friendly form: `causal-edge login --json --no-browser`
-   This emits a JSON handoff event before polling for completion.
+   This emits a JSON handoff event before polling for completion and prints the authorization URL to `stderr` immediately.
 5. Otherwise set `ABEL_API_KEY` or `CAP_API_KEY` in your environment or `.env`
 6. Run: `causal-edge discover <TICKER>`
 7. Use `--mode parents` or `--mode mb` depending on the discovery need
