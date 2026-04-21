@@ -61,6 +61,7 @@ def test_init_creates_project(tmp_path):
     with runner.isolated_filesystem(temp_dir=tmp_path):
         result = runner.invoke(main, ["init", "myproject"])
         assert result.exit_code == 0, result.output
+        assert "synthetic demo strategies" in result.output
         root = Path("myproject")
         assert root.is_dir()
         assert (root / "strategies.yaml").exists()

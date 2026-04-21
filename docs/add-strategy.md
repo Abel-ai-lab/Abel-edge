@@ -20,9 +20,9 @@ Read `docs/validation-audit-matrix.md` for the long-lived timing and validation 
 
 | Path | Copy from | What you get |
 |------|-----------|-------------|
-| Simple | `examples/sma_crossover/` | 30-line minimal engine |
-| ML | `examples/momentum_ml/` | Walk-forward GBDT with shift(1) |
-| Causal | `examples/causal_demo/` | Abel graph voting + causal_graph.json |
+| Simple | `examples/sma_crossover/` | Synthetic minimal engine |
+| ML | `examples/momentum_ml/` | Synthetic walk-forward GBDT demo |
+| Causal | `examples/causal_demo/` | Synthetic Abel graph voting demo + causal_graph.json |
 | Feed Path | `examples/feed_overlay_demo/` | Declared `bars` + `series` feed example |
 
 ### Quick Path
@@ -36,6 +36,10 @@ cp -r examples/sma_crossover/ strategies/my_strategy/
 ```
 
 2. Edit `strategies/my_strategy/engine.py` — implement your signal logic
+
+The bundled `sma_crossover`, `momentum_ml`, and `causal_demo` examples are
+synthetic demos. They are useful for learning the framework surface and signal
+contract, but they are not intended to serve as real-data research baselines.
 
 3. Add to `strategies.yaml`:
 

@@ -43,7 +43,7 @@ class CausalDemoEngine(StrategyEngine):
         # Synthetic target (TON-like crypto volatility)
         target_ret = rng.normal(0.0004, 0.025, self.n_days)
         target_prices = 5.0 * np.cumprod(1.0 + target_ret)
-        dates = pd.bdate_range(end="2026-01-01", periods=self.n_days)
+        dates = pd.date_range(end="2026-01-01", periods=self.n_days, freq="B", tz="UTC")
 
         # Generate correlated parent/child prices with realistic causal lags
         component_returns = {}
@@ -111,7 +111,7 @@ class CausalDemoEngine(StrategyEngine):
         # Long-only (no short in demo)
         positions = np.maximum(positions, 0.0)
 
-        return positions, dates, target_prices
+        return self.finalize_signals(positions, dates, target_prices)
 
     def get_latest_signal(self):
         """Return latest causal voting signal."""

@@ -403,6 +403,14 @@ def _build_error_diagnostics(
 
 def _classify_error_message(message: str) -> tuple[str, list[str]]:
     text = str(message or "").lower()
+    if "must be utc-aware" in text or "must be normalized to midnight utc" in text:
+        return (
+            "datetime_contract_violation",
+            [
+                "The engine emitted dates outside the supported daily UTC runtime contract.",
+                "Return UTC-aware midnight timestamps and prefer `self.finalize_signals(...)` before exiting compute_signals().",
+            ],
+        )
     if "aligned to strategy dates without gaps" in text or "unsupported alignment method" in text:
         return (
             "alignment_collapse",
