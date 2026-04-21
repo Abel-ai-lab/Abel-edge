@@ -44,18 +44,23 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
     engine = engine_cls(context=strategy_cfg)
 
     compiled = _compute_runtime_output(engine, strategy_cfg)
-    positions = compiled.positions
     dates = compiled.decision_index
     prices = compiled.close_prices
 
     execution_cfg = (settings or {}).get("execution") or {}
+    input_semantics = (
+        "next_position" if compiled.output_mode == "decision_context" else "effective_position"
+    )
     result = run_backtest(
-        positions,
+        compiled.next_position if input_semantics == "next_position" else compiled.positions,
         prices,
+        dates=dates,
         settings=BacktestSettings(
             cost_bps=float(execution_cfg.get("cost_bps", 0.0) or 0.0),
             max_abs_position=execution_cfg.get("max_abs_position"),
         ),
+        input_semantics=input_semantics,
+        execution_delay_bars=compiled.runtime_profile.execution_delay_bars,
     )
 
     write_trade_log(
@@ -64,8 +69,10 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
         result["pnl"],
         result["positions"],
         trade_log_path,
+        decision_times=result.get("decision_time"),
+        effective_times=result.get("effective_time"),
         close_prices=prices,
-        next_positions=compiled.next_position,
+        next_positions=result.get("next_position"),
         gross_pnl=result["gross_pnl"],
         turnover=result["turnover"],
         execution_cost=result["execution_cost"],
@@ -137,9 +144,9 @@ def paper_run_one(
     engine = engine_cls(context=strategy_cfg)
 
     compiled = _compute_runtime_output(engine, strategy_cfg)
-    positions = compiled.positions
     dates = compiled.decision_index
     prices = compiled.close_prices
+    positions = compiled.positions
     if as_of is not None:
         cutoff = pd.to_datetime(as_of, utc=True)
         mask = dates <= cutoff
@@ -181,6 +188,8 @@ def paper_run_one(
         rows.append(
             {
                 "date": ts,
+                "decision_time": ts,
+                "effective_time": ts,
                 "close": float(prices[idx]),
                 "asset_return": float(returns[idx]),
                 "position": carry_position,

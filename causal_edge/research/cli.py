@@ -69,9 +69,9 @@ def debug_evaluate(workdir, start, context_json, output_json):
     """Run evaluation with a diagnostics-first UX for research debugging."""
     import json
 
-    from causal_edge.research.evaluate import run_evaluation
+    from causal_edge.research.evaluate import run_preflight
 
-    result = run_evaluation(
+    result = run_preflight(
         workdir,
         start=start,
         context_json=Path(context_json) if context_json else None,
@@ -82,9 +82,12 @@ def debug_evaluate(workdir, start, context_json, output_json):
         output_path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     diagnostics = result.get("diagnostics") or {}
     signal = diagnostics.get("signal") or {}
+    semantic = result.get("semantic") or {}
     click.echo(f"Verdict: {result.get('verdict', 'ERROR')}")
+    click.echo(f"Semantic verdict: {semantic.get('verdict', 'unknown')}")
     click.echo(f"Failure signature: {diagnostics.get('failure_signature', 'unknown')}")
     click.echo(f"Runtime stage: {diagnostics.get('runtime_stage', 'unknown')}")
+    click.echo(f"Read count: {semantic.get('read_count', 0)}")
     click.echo(
         "Signal activity: "
         f"{signal.get('active_days', 0)} / {signal.get('total_days', 0)} active days"

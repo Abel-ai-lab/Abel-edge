@@ -70,6 +70,55 @@ def check_look_ahead(source_path: Path) -> list[str]:
     return check_static_file(source_path)
 
 
+def run_preflight(
+    workdir: Path | str | None = None,
+    *,
+    start: str | None = None,
+    context_json: Path | None = None,
+) -> dict:
+    try:
+        prepared = _prepare_engine_runtime(
+            workdir=workdir,
+            start=start,
+            context_json=context_json,
+        )
+    except _PreparedRuntimeError as exc:
+        return exc.payload
+
+    semantic = _build_semantic_result(
+        compiled=prepared["compiled"],
+        engine=prepared["engine"],
+        static_violations=prepared["static_violations"],
+    )
+    result = {
+        "verdict": semantic["verdict"],
+        "score": "semantic",
+        "failures": list(semantic["failures"]),
+        "warnings": list(semantic["warnings"]),
+        "metrics": {},
+        "triangle": {"ratio": 0, "rank": 0, "shape": 0},
+        "K": prepared["k_value"],
+        "requested_window": {"start": start, "end": None},
+        "effective_window": _effective_window(
+            pd.DataFrame({"date": prepared["compiled"].decision_index})
+        ),
+        "context_path": str(context_json.resolve()) if context_json is not None else None,
+        "implementation_contract": prepared["compiled"].output_mode,
+        "active_days": semantic["signal"]["active_days"],
+        "total_days": semantic["signal"]["total_days"],
+        "K_detail": {
+            "tickers": prepared["tickers"],
+            "lags": prepared["lags"],
+            "n_tickers": len(prepared["tickers"]),
+            "n_lags": len(prepared["lags"]),
+        },
+        "diagnostics": _build_preflight_diagnostics(semantic),
+        "semantic": semantic,
+    }
+    _attach_semantic_artifacts(result, semantic=semantic, engine=prepared["engine"])
+    return result
+
+
 def run_evaluation(
     workdir: Path | str | None = None,
     *,
@@ -77,66 +126,47 @@ def run_evaluation(
     context_json: Path | None = None,
     output_csv: Path | None = None,
 ) -> dict:
-    workspace = Path(workdir or ".")
-    engine_path = workspace / "engine.py"
-    if not engine_path.exists():
-        return _error(
-            "engine.py not found; research branches must define a module-owned StrategyEngine subclass.",
-            implementation_contract="unknown",
-            runtime_stage="load_engine",
-        )
-
-    violations = check_look_ahead(engine_path)
-    if violations:
-        return _error(
-            f"Look-ahead violations: {violations}",
-            implementation_contract="engine",
-            runtime_stage="static_checks",
-        )
-
-    k_value, tickers, lags = compute_k(engine_path)
     try:
-        research_context = _build_research_context(
-            workspace=workspace,
+        prepared = _prepare_engine_runtime(
+            workdir=workdir,
             start=start,
             context_json=context_json,
         )
-    except ValueError as exc:
-        return _error(
-            str(exc),
-            implementation_contract="engine",
-            runtime_stage="context_build",
-        )
+    except _PreparedRuntimeError as exc:
+        return exc.payload
 
-    try:
-        engine_cls = load_engine_from_file(engine_path)
-        engine = engine_cls(context=research_context)
-        compiled = engine.compute_runtime_output(start=start)
-        positions = compiled.positions
-        dates = compiled.decision_index
-        prices = compiled.close_prices
-    except (DecisionContractError, FeedContractError, SignalContractError, ImportError, TypeError, ValueError) as exc:
-        return _error(
-            f"engine evaluation failed: {exc}",
-            implementation_contract="engine",
-            runtime_stage="compute_strategy",
+    compiled = prepared["compiled"]
+    engine = prepared["engine"]
+    positions = compiled.positions
+    dates = compiled.decision_index
+    prices = compiled.close_prices
+    semantic = _build_semantic_result(
+        compiled=compiled,
+        engine=engine,
+        static_violations=prepared["static_violations"],
+    )
+    if semantic["verdict"] == "ERROR":
+        result = _error(
+            semantic["failures"][0] if semantic["failures"] else "Semantic preflight failed.",
+            implementation_contract=compiled.output_mode,
+            runtime_stage="semantic_preflight",
+            signal=semantic["signal"],
         )
-    except Exception as exc:  # pragma: no cover - defensive catch for user engines
-        return _error(
-            f"engine evaluation failed: {exc}",
-            implementation_contract="engine",
-            runtime_stage="compute_strategy",
-        )
+        result["warnings"] = list(semantic["warnings"])
+        result["semantic"] = semantic
+        _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
+        return result
 
-    if len(positions) < 30:
-        return _error(
-            f"Insufficient data: {len(positions)} days (need 30+)",
-            implementation_contract="engine",
-            runtime_stage="signal_contract",
-            signal=_signal_summary(positions),
-        )
-
-    backtest = run_backtest(positions, prices)
+    input_semantics = (
+        "next_position" if compiled.output_mode == "decision_context" else "effective_position"
+    )
+    backtest = run_backtest(
+        compiled.next_position if input_semantics == "next_position" else positions,
+        prices,
+        dates=dates,
+        input_semantics=input_semantics,
+        execution_delay_bars=compiled.runtime_profile.execution_delay_bars,
+    )
     frame = _metric_input_frame(dates, backtest)
     if output_csv is not None:
         output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +176,7 @@ def run_evaluation(
         csv_path = Path(handle.name)
 
     try:
-        result = validate_strategy(csv_path, dsr_trials=k_value)
+        result = validate_strategy(csv_path, dsr_trials=prepared["k_value"])
     except Exception as exc:
         csv_path.unlink(missing_ok=True)
         return _error(
@@ -156,7 +186,7 @@ def run_evaluation(
         )
 
     csv_path.unlink(missing_ok=True)
-    result["K"] = k_value
+    result["K"] = prepared["k_value"]
     result["requested_window"] = {"start": start, "end": None}
     result["effective_window"] = _effective_window(frame)
     result["context_path"] = str(context_json.resolve()) if context_json is not None else None
@@ -164,19 +194,14 @@ def run_evaluation(
     result["active_days"] = int((frame["position"].abs() > 0.01).sum())
     result["total_days"] = int(len(frame))
     result["K_detail"] = {
-        "tickers": tickers,
-        "lags": lags,
-        "n_tickers": len(tickers),
-        "n_lags": len(lags),
+        "tickers": prepared["tickers"],
+        "lags": prepared["lags"],
+        "n_tickers": len(prepared["tickers"]),
+        "n_lags": len(prepared["lags"]),
     }
     result["diagnostics"] = _build_runtime_diagnostics(result, frame)
-    if compiled.output_mode == "decision_context":
-        result["decision_trace"] = engine.latest_decision_trace()
-        result["decision_preview"] = (
-            engine._last_decision_context.preview(limit=5)
-            if engine._last_decision_context is not None
-            else []
-        )
+    result["semantic"] = semantic
+    _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
     return result
 
 
@@ -185,6 +210,7 @@ def render_validation_markdown(result: dict) -> str:
     triangle = result.get("triangle", {})
     requested_window = result.get("requested_window", {})
     effective_window = result.get("effective_window", {})
+    semantic = result.get("semantic") or {}
     return f"""# Evaluation Summary
 
 ## Verdict
@@ -196,6 +222,17 @@ def render_validation_markdown(result: dict) -> str:
 - requested_start: `{requested_window.get("start", "none")}`
 - effective_window: `{effective_window.get("start", "unknown")} -> {effective_window.get("end", "unknown")}`
 - active_days: `{result.get("active_days", 0)} / {result.get("total_days", 0)}`
+
+## Semantic
+
+- semantic_verdict: `{semantic.get("verdict", "unknown")}`
+- decision_count: `{semantic.get("decision_count", 0)}`
+- read_count: `{semantic.get("read_count", 0)}`
+- output_shape: `{(semantic.get("output_shape") or {}).get("label", "unknown")}`
+
+### Semantic Warnings
+
+{_format_failures(semantic.get("warnings", []))}
 
 ## Triangle
 
@@ -227,6 +264,144 @@ def render_validation_markdown(result: dict) -> str:
 
 {_format_failures(result.get("failures", []))}
 """
+
+
+class _PreparedRuntimeError(Exception):
+    def __init__(self, payload: dict) -> None:
+        super().__init__(payload.get("failures", ["runtime preparation failed"])[0])
+        self.payload = payload
+
+
+def _prepare_engine_runtime(
+    *,
+    workdir: Path | str | None,
+    start: str | None,
+    context_json: Path | None,
+) -> dict:
+    workspace = Path(workdir or ".")
+    engine_path = workspace / "engine.py"
+    if not engine_path.exists():
+        raise _PreparedRuntimeError(
+            _error(
+                "engine.py not found; research branches must define a module-owned StrategyEngine subclass.",
+                implementation_contract="unknown",
+                runtime_stage="load_engine",
+            )
+        )
+
+    static_violations = check_look_ahead(engine_path)
+    k_value, tickers, lags = compute_k(engine_path)
+    try:
+        research_context = _build_research_context(
+            workspace=workspace,
+            start=start,
+            context_json=context_json,
+        )
+    except ValueError as exc:
+        raise _PreparedRuntimeError(
+            _error(
+                str(exc),
+                implementation_contract="engine",
+                runtime_stage="context_build",
+            )
+        ) from exc
+
+    try:
+        engine_cls = load_engine_from_file(engine_path)
+        engine = engine_cls(context=research_context)
+        compiled = engine.compute_runtime_output(start=start)
+    except (DecisionContractError, FeedContractError, SignalContractError, ImportError, TypeError, ValueError) as exc:
+        raise _PreparedRuntimeError(
+            _error(
+                f"engine evaluation failed: {exc}",
+                implementation_contract="engine",
+                runtime_stage="compute_strategy",
+            )
+        ) from exc
+    except Exception as exc:  # pragma: no cover - defensive catch for user engines
+        raise _PreparedRuntimeError(
+            _error(
+                f"engine evaluation failed: {exc}",
+                implementation_contract="engine",
+                runtime_stage="compute_strategy",
+            )
+        ) from exc
+
+    return {
+        "workspace": workspace,
+        "engine_path": engine_path,
+        "engine": engine,
+        "compiled": compiled,
+        "k_value": k_value,
+        "tickers": tickers,
+        "lags": lags,
+        "static_violations": static_violations,
+    }
+
+
+def _build_semantic_result(*, compiled, engine, static_violations: list[str]) -> dict:
+    signal = _signal_summary(compiled.positions)
+    failures: list[str] = []
+    warnings: list[str] = []
+    if len(compiled.positions) < 30:
+        failures.append(f"Insufficient data: {len(compiled.positions)} days (need 30+)")
+    if static_violations:
+        warnings.append(
+            "Static look-ahead heuristics found suspicious patterns. Treat these as review hints, not a blocking verdict."
+        )
+        warnings.extend(static_violations[:5])
+    if signal["active_days"] == 0:
+        warnings.append("Signal is flat across the sampled runtime output.")
+    elif signal["unique_position_count"] <= 1 or signal["position_switches"] == 0:
+        warnings.append("Signal stayed at one position level during preflight.")
+
+    output_shape = "dynamic_signal"
+    if signal["total_days"] == 0:
+        output_shape = "empty_output"
+    elif signal["active_days"] == 0:
+        output_shape = "all_flat"
+    elif signal["unique_position_count"] <= 1:
+        output_shape = "constant_position"
+
+    return {
+        "verdict": "ERROR" if failures else "PASS",
+        "failures": failures,
+        "warnings": warnings,
+        "decision_count": int(len(compiled.decision_index)),
+        "read_count": int(len(engine.latest_decision_trace())),
+        "signal": signal,
+        "output_shape": {
+            "label": output_shape,
+            "unique_position_count": signal["unique_position_count"],
+        },
+    }
+
+
+def _attach_semantic_artifacts(result: dict, *, semantic: dict, engine) -> None:
+    result["decision_trace"] = engine.latest_decision_trace()
+    ctx = engine._last_decision_context
+    result["decision_preview"] = ctx.preview(limit=5) if ctx is not None else []
+    result["sample_points"] = ctx.sample_points(limit=3) if ctx is not None else []
+    semantic["trace_excerpt"] = result["decision_trace"][:8]
+    semantic["decision_preview"] = result["decision_preview"]
+    semantic["sample_points"] = result["sample_points"]
+
+
+def _build_preflight_diagnostics(semantic: dict) -> dict:
+    signal = semantic.get("signal") or _signal_summary(np.array([], dtype=float))
+    failure_signature = "semantic_ready"
+    if semantic.get("verdict") == "ERROR":
+        failure_signature = "semantic_preflight_failed"
+    elif signal["active_days"] == 0:
+        failure_signature = "signal_always_flat"
+    elif signal["unique_position_count"] <= 1 or signal["position_switches"] == 0:
+        failure_signature = "constant_position"
+    return {
+        "failure_signature": failure_signature,
+        "runtime_stage": "semantic_preflight",
+        "signal": signal,
+        "hints": list(semantic.get("warnings", [])),
+    }
 
 
 def write_evaluation_outputs(
@@ -318,7 +493,7 @@ def _build_research_context(
 
 
 def _metric_input_frame(dates, backtest: dict) -> pd.DataFrame:
-    return pd.DataFrame(
+    frame = pd.DataFrame(
         {
             "date": dates,
             "pnl": backtest["pnl"],
@@ -329,6 +504,13 @@ def _metric_input_frame(dates, backtest: dict) -> pd.DataFrame:
             "execution_cost": backtest["execution_cost"],
         }
     )
+    if backtest.get("next_position") is not None:
+        frame["next_position"] = backtest["next_position"]
+    if backtest.get("decision_time") is not None:
+        frame["decision_time"] = backtest["decision_time"]
+    if backtest.get("effective_time") is not None:
+        frame["effective_time"] = backtest["effective_time"]
+    return frame
 
 
 def _effective_window(frame: pd.DataFrame) -> dict[str, str | None]:

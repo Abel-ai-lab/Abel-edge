@@ -16,6 +16,7 @@ from causal_edge.research.evaluate import (
     compute_k,
     render_validation_markdown,
     run_evaluation,
+    run_preflight,
 )
 from causal_edge.research.data_readiness import run_data_verification
 from causal_edge.research.workspace import init_workspace
@@ -391,6 +392,7 @@ class TestRunEvaluation:
         assert result["implementation_contract"] == "decision_context"
         assert result["decision_trace"]
         assert result["decision_preview"]
+        assert result["semantic"]["verdict"] == "PASS"
 
     def test_start_aware_engine_records_requested_and_effective_window(self, tmp_path):
         _write_start_aware_engine(tmp_path / "engine.py")
@@ -510,6 +512,35 @@ class TestRunEvaluation:
         assert context["_feeds"]["primary"]["adapter"] == "abel"
         assert context["_runtime_profile"]["target"] == "SONY"
         assert context["_execution_constraints"]["long_only"] is False
+
+    def test_preflight_keeps_static_checks_as_warnings(self, tmp_path):
+        engine = tmp_path / "engine.py"
+        engine.write_text(
+            "\n".join(
+                [
+                    "import numpy as np",
+                    "import pandas as pd",
+                    "",
+                    "from causal_edge.engine.base import StrategyEngine",
+                    "",
+                    "",
+                    "class BranchEngine(StrategyEngine):",
+                    "    def compute_signals(self):",
+                    "        dates = pd.date_range('2024-01-01', periods=40, freq='D', tz='UTC')",
+                    "        prices = np.linspace(100.0, 130.0, len(dates))",
+                    "        rolling = pd.Series(prices).rolling(5).mean()",
+                    "        positions = (rolling > 110).fillna(0.0).to_numpy(dtype=float)",
+                    "        return positions, dates, prices",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = run_preflight(tmp_path)
+
+        assert result["verdict"] == "PASS"
+        assert any("Static look-ahead heuristics" in warning for warning in result["semantic"]["warnings"])
 
     @pytest.mark.parametrize(
         "example_dir",

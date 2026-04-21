@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from causal_edge.engine.backtest import compile_effective_positions
 from causal_edge.engine.feed_contract import FeedContractError, validate_datetime_index
 
 
@@ -144,12 +145,12 @@ def compile_decision_draft(
     if execution_constraints.long_only:
         next_position = np.maximum(next_position, 0.0)
 
-    positions = np.zeros_like(next_position)
-    delay = int(runtime_profile.execution_delay_bars)
-    if delay == 0:
-        positions = next_position.copy()
-    elif len(positions) > delay:
-        positions[delay:] = next_position[:-delay]
+    max_abs_position = None if np.isinf([abs(lower), abs(upper)]).all() else float(max(abs(lower), abs(upper)))
+    positions, next_position = compile_effective_positions(
+        next_position,
+        execution_delay_bars=runtime_profile.execution_delay_bars,
+        max_abs_position=max_abs_position,
+    )
 
     return CompiledDecisionOutput(
         decision_index=draft.decision_index,

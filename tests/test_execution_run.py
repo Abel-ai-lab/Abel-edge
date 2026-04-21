@@ -108,6 +108,8 @@ def test_run_writes_execution_columns_and_clipped_positions(tmp_path):
         assert result.exit_code == 0, result.output
         trade_df = read_trade_log("data/trade_log_execution_demo.csv")
         assert list(trade_df["position"].round(2)) == [0.0, 0.5, -0.5]
+        assert "decision_time" in trade_df.columns
+        assert "effective_time" in trade_df.columns
         assert list(trade_df["turnover"].round(2)) == [0.0, 0.5, 1.0]
         assert list(trade_df["execution_cost"].round(3)) == [0.0, 0.005, 0.01]
         assert list(trade_df["gross_pnl"].round(3)) == [0.0, 0.05, 0.05]
@@ -145,4 +147,6 @@ def test_run_supports_decision_context_engines(tmp_path):
         trade_df = read_trade_log("data/trade_log_execution_demo.csv")
         assert list(trade_df["next_position"].round(2)) == [0.0, 1.0, 0.0]
         assert list(trade_df["position"].round(2)) == [0.0, 0.0, 1.0]
+        assert "decision_time" in trade_df.columns
+        assert "effective_time" in trade_df.columns
         sys.path.pop(0)
