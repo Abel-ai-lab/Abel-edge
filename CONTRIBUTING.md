@@ -35,6 +35,9 @@ These are enforced by structural tests — PRs that violate them will fail CI:
 ## Adding a Strategy
 
 See [docs/add-strategy.md](docs/add-strategy.md).
+If you start from a bundled example, treat it as a synthetic demo and adapt it
+to your real data path rather than assuming it is already a research-ready
+baseline.
 
 ## Code Style
 

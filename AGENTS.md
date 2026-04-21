@@ -5,6 +5,8 @@ Two modes: **use** this as a tool, or **develop** on this repo.
 ## Use as a Tool (validate backtests, fix strategies)
 
 Read `CAPABILITY.md` — it has everything: install, validate, diagnose, fix loop.
+If you use `causal-edge init`, treat it as a standalone project scaffold with
+synthetic demos, not as an Abel-alpha branch workspace.
 
     python -m venv .venv
     # PowerShell: .venv\Scripts\Activate.ps1
