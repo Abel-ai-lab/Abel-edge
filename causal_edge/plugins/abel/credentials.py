@@ -50,6 +50,10 @@ def _dedupe_paths(paths: list[Path]) -> list[Path]:
     return unique
 
 
+def _source_env_path() -> Path:
+    return Path(__file__).resolve().parents[3] / ".env"
+
+
 def _resolve_env_path(path: str | Path) -> Path:
     env_path = Path(path).expanduser()
     if env_path.is_absolute():
@@ -57,12 +61,21 @@ def _resolve_env_path(path: str | Path) -> Path:
     return (Path.cwd() / env_path).resolve()
 
 
+def _candidate_env_files(*, env_path: str | Path = ".env") -> list[Path]:
+    provided = _resolve_env_path(env_path)
+    source_env = _source_env_path()
+    if str(env_path).strip() == ".env":
+        return _dedupe_paths([source_env, provided])
+    return _dedupe_paths([provided, source_env])
+
+
 def _find_causal_abel_skill_dir(*, env_path: str | Path = ".env") -> Path | None:
-    start_dir = _resolve_env_path(env_path).parent
-    for directory in (start_dir, *start_dir.parents):
-        skill_dir = directory / ".agents" / "skills" / "causal-abel"
-        if skill_dir.is_dir():
-            return skill_dir
+    for env_file in _candidate_env_files(env_path=env_path):
+        start_dir = env_file.parent
+        for directory in (start_dir, *start_dir.parents):
+            skill_dir = directory / ".agents" / "skills" / "causal-abel"
+            if skill_dir.is_dir():
+                return skill_dir
     return None
 
 
@@ -122,21 +135,21 @@ def resolve_api_key(*, env_path: str | Path = ".env") -> str | None:
 
 
 def resolve_api_key_record(*, env_path: str | Path = ".env") -> dict[str, str | None]:
-    env_values = _read_env_file(env_path)
     token = normalize_api_key(
         os.getenv("ABEL_API_KEY")
         or os.getenv("CAP_API_KEY")
-        or env_values.get("ABEL_API_KEY")
-        or env_values.get("CAP_API_KEY")
     )
     if token:
-        if os.getenv("ABEL_API_KEY") or os.getenv("CAP_API_KEY"):
-            return _api_key_record(token=token, source="env_var", path=None)
-        return _api_key_record(
-            token=token,
-            source="project_env",
-            path=str(_resolve_env_path(env_path)),
-        )
+        return _api_key_record(token=token, source="env_var", path=None)
+
+    for candidate_env in _candidate_env_files(env_path=env_path):
+        candidate_token = _resolve_token_from_values(_read_env_file(candidate_env))
+        if candidate_token:
+            return _api_key_record(
+                token=candidate_token,
+                source="project_env",
+                path=str(candidate_env),
+            )
 
     for shared_auth_file in _candidate_shared_auth_files(env_path=env_path):
         shared_token = _resolve_token_from_values(_read_env_file(shared_auth_file))
@@ -176,18 +189,22 @@ def require_api_key(*, env_path: str | Path = ".env") -> str:
 
 
 def resolve_cap_base_url(*, env_path: str | Path = ".env") -> str:
-    env_values = _read_env_file(env_path)
-    configured = (
-        os.getenv("ABEL_CAP_BASE_URL") or env_values.get("ABEL_CAP_BASE_URL") or ""
-    ).strip()
+    configured = (os.getenv("ABEL_CAP_BASE_URL") or "").strip()
+    if not configured:
+        for candidate_env in _candidate_env_files(env_path=env_path):
+            configured = (_read_env_file(candidate_env).get("ABEL_CAP_BASE_URL") or "").strip()
+            if configured:
+                break
     return (configured or DEFAULT_CAP_BASE_URL).rstrip("/")
 
 
 def resolve_auth_base_url(*, env_path: str | Path = ".env") -> str:
-    env_values = _read_env_file(env_path)
-    configured = (
-        os.getenv("ABEL_AUTH_BASE_URL") or env_values.get("ABEL_AUTH_BASE_URL") or ""
-    ).strip()
+    configured = (os.getenv("ABEL_AUTH_BASE_URL") or "").strip()
+    if not configured:
+        for candidate_env in _candidate_env_files(env_path=env_path):
+            configured = (_read_env_file(candidate_env).get("ABEL_AUTH_BASE_URL") or "").strip()
+            if configured:
+                break
     return (configured or DEFAULT_AUTH_BASE_URL).rstrip("/")
 
 

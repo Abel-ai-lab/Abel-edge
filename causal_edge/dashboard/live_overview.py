@@ -36,6 +36,12 @@ def _signal_position(row: pd.Series) -> float:
     return float(row.get("position", 0.0))
 
 
+def _match_timestamp_timezone(ts: pd.Timestamp, series: pd.Series) -> pd.Timestamp:
+    if getattr(series.dt, "tz", None) is not None:
+        return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    return ts.tz_localize(None) if ts.tzinfo is not None else ts
+
+
 def _sparkline(values: list[float], width: int = 7) -> str:
     blocks = " ▁▂▃▄▅▆▇█"
     if not values or all(abs(v) < 1e-12 for v in values):
@@ -43,8 +49,7 @@ def _sparkline(values: list[float], width: int = 7) -> str:
     minimum, maximum = min(values), max(values)
     scale = maximum - minimum if maximum > minimum else 1.0
     return "".join(
-        blocks[min(8, max(1, int((value - minimum) / scale * 7) + 1))]
-        for value in values[-width:]
+        blocks[min(8, max(1, int((value - minimum) / scale * 7) + 1))] for value in values[-width:]
     )
 
 
@@ -78,7 +83,8 @@ def build_live_overview(
         if live_df is None:
             continue
         if since_ts is not None:
-            live_df = live_df[live_df["date"] >= since_ts].copy()
+            cutoff = _match_timestamp_timezone(since_ts, live_df["date"])
+            live_df = live_df[live_df["date"] >= cutoff].copy()
             if len(live_df) == 0:
                 continue
         live_df["signal_position"] = live_df.apply(_signal_position, axis=1)
@@ -112,7 +118,7 @@ def build_live_overview(
     live_perf: list[dict[str, object]] = []
     ledger_rows: list[dict[str, object]] = []
 
-    now = pd.Timestamp(datetime.now())
+    now = pd.Timestamp.now(tz="UTC")
     current_month = now.month
     current_year = now.year
 
@@ -120,9 +126,7 @@ def build_live_overview(
         strategy = item["strategy"]
         live_df = item["df"].copy()
         latest = live_df.iloc[-1]
-        previous_signal = (
-            float(live_df.iloc[-2]["signal_position"]) if len(live_df) > 1 else 0.0
-        )
+        previous_signal = float(live_df.iloc[-2]["signal_position"]) if len(live_df) > 1 else 0.0
         current_signal = float(latest["signal_position"])
         today_pnl += float(latest["pnl"])
         total_pnl += float(live_df["pnl"].sum())
@@ -211,20 +215,34 @@ def build_live_overview(
             )
 
     most_recent = max(latest_dates)
+    if most_recent.tzinfo is None:
+        now = now.tz_localize(None)
     stale_hours = max((now - most_recent).total_seconds() / 3600, 0.0)
     live_since = since_label or min(earliest_dates).date().isoformat()
 
     return {
         "has_live_data": True,
         "live_cards": [
-            {"label": "Live Return", "value": f"{total_pnl:+.2%}", "subtext": f"Since {live_since}"},
-            {"label": "Latest Day", "value": f"{today_pnl:+.2%}", "subtext": most_recent.date().isoformat()},
+            {
+                "label": "Live Return",
+                "value": f"{total_pnl:+.2%}",
+                "subtext": f"Since {live_since}",
+            },
+            {
+                "label": "Latest Day",
+                "value": f"{today_pnl:+.2%}",
+                "subtext": most_recent.date().isoformat(),
+            },
             {
                 "label": "Active Signals",
                 "value": f"{len(signals_active)}/{len(tracked)}",
                 "subtext": "Using current live signal size",
             },
-            {"label": "Updated", "value": most_recent.date().isoformat(), "subtext": f"{stale_hours:.0f}h old"},
+            {
+                "label": "Updated",
+                "value": most_recent.date().isoformat(),
+                "subtext": f"{stale_hours:.0f}h old",
+            },
         ],
         "recent_days": recent_days,
         "live_perf": live_perf,

@@ -268,12 +268,17 @@ def _build_tracking_payload(
                 "label": "Tracked Return",
                 "value": fmt_pnl_pct(tracking_metrics.get("cum_return", 0.0)),
             },
+            {"label": "Sharpe", "value": f"{tracking_metrics.get('sharpe', 0.0):.2f}"},
+            {
+                "label": "Max Drawdown",
+                "value": fmt_pnl_pct(-1.0 * tracking_metrics.get("max_dd", 0.0)),
+            },
+            {
+                "label": "Win Rate",
+                "value": f"{tracking_metrics.get('win_rate', 0.0) * 100:.0f}%",
+            },
             {"label": "Days Tracked", "value": str(tracking_metrics.get("n_days", 0))},
             {"label": "Next Position", "value": f"{live_signal_position:.2f}"},
-            {
-                "label": "Latest Close",
-                "value": "N/A" if pd.isna(latest_close) else f"{float(latest_close):.2f}",
-            },
         ],
         "display_signal_label": _signal_label(live_signal_position),
         "display_signal_source": "Live",

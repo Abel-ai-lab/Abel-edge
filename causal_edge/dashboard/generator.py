@@ -23,8 +23,18 @@ from causal_edge.dashboard.components import (
     daily_pnl_chart,
     monthly_heatmap,
 )
+from causal_edge.dashboard.strategy_data import prepare_strategy, tracked_ticker_item
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _build_env(*, autoescape: bool = False) -> Environment:
+    env = Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=autoescape,
+    )
+    env.globals["fmt_pnl_pct"] = fmt_pnl_pct
+    env.globals["fmt_dollar"] = fmt_dollar
+    return env
 
 
 def _load_trade_log(path: str) -> pd.DataFrame | None:
@@ -361,17 +371,87 @@ def generate(config_path: str, output_path: str, *, bars_loader=None) -> None:
 
     portfolio = _build_portfolio(strategies, cfg.get("settings", {}))
 
-    env = Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False,
-    )
-    env.globals["fmt_pnl_pct"] = fmt_pnl_pct
-    env.globals["fmt_dollar"] = fmt_dollar
-
+    env = _build_env(autoescape=False)
     template = env.get_template("base.html")
     html = template.render(
         strategies=strategies,
         portfolio=portfolio,
         settings=cfg.get("settings", {}),
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        initial_strategy_id=None,
+        initial_section="backtest",
     )
-    Path(output_path).write_text(html)
+    Path(output_path).write_text(html, encoding="utf-8")
+
+
+def generate_strategy_dashboard(
+    config_path: str | None,
+    output_path: str,
+    strategy_id: str,
+    *,
+    bars_loader=None,
+    initial_section: str = "paper",
+) -> None:
+    """Generate the standard dashboard surface focused on one strategy."""
+    cfg = load_config(config_path)
+    strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
+    if not strategies_cfg:
+        available = ", ".join(s["id"] for s in cfg["strategies"]) or "none"
+        raise ValueError(
+            f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
+        )
+
+    strategies = [
+        prepare_strategy(strategies_cfg[0], settings=cfg["settings"], bars_loader=bars_loader)
+    ]
+    env = _build_env(autoescape=False)
+    template = env.get_template("tracking.html")
+    html = template.render(
+        selected_strategy=strategies[0],
+        settings=cfg["settings"],
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+    )
+    Path(output_path).write_text(html, encoding="utf-8")
+
+
+def generate_signal_demo(
+    config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
+) -> None:
+    """Generate a single-strategy Signal Demo page."""
+    cfg = load_config(config_path)
+    strategies_cfg = [s for s in cfg["strategies"] if s["id"] == strategy_id]
+    if not strategies_cfg:
+        available = ", ".join(s["id"] for s in cfg["strategies"]) or "none"
+        raise ValueError(
+            f"Strategy '{strategy_id}' not found in strategies.yaml. Available: {available}"
+        )
+
+    selected_strategy = prepare_strategy(
+        strategies_cfg[0], settings=cfg["settings"], bars_loader=bars_loader
+    )
+    tracked_tickers = [
+        tracked_ticker_item(s, settings=cfg["settings"], bars_loader=bars_loader)
+        for s in cfg["strategies"]
+    ]
+    env = _build_env(autoescape=False)
+    template = env.get_template("signal_demo.html")
+    html = template.render(
+        selected_strategy=selected_strategy,
+        tracked_tickers=tracked_tickers,
+        settings=cfg["settings"],
+        generated_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
+    )
+    Path(output_path).write_text(html, encoding="utf-8")
+
+
+def generate_tracking_page(
+    config_path: str | None, output_path: str, strategy_id: str, *, bars_loader=None
+) -> None:
+    """Generate a single-strategy paper-tracking page."""
+    generate_strategy_dashboard(
+        config_path,
+        output_path,
+        strategy_id,
+        bars_loader=bars_loader,
+        initial_section="paper",
+    )
