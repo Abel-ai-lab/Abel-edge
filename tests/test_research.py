@@ -223,6 +223,26 @@ def _write_decision_context_escape_engine(path: Path) -> None:
     )
 
 
+def _write_decision_context_input_engine(path: Path) -> None:
+    path.write_text(
+        "\n".join(
+            [
+                "from causal_edge.engine.base import StrategyEngine",
+                "",
+                "",
+                "class BranchEngine(StrategyEngine):",
+                "    def compute_decisions(self, ctx):",
+                "        driver = ctx.input('driver').asof_series('close').astype(float)",
+                "        baseline = driver.rolling(window=2, min_periods=1).mean()",
+                "        next_position = (driver > baseline).astype(float).fillna(0.0)",
+                "        return ctx.decisions(next_position)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def _write_csv_context(tmp_path: Path) -> Path:
     bars_path = tmp_path / "target.csv"
     bars_path.write_text(
@@ -286,6 +306,47 @@ def _write_csv_context(tmp_path: Path) -> Path:
         ),
         encoding="utf-8",
     )
+    return context_path
+
+
+def _write_prepared_input_context(tmp_path: Path) -> Path:
+    context_path = _write_csv_context(tmp_path)
+    payload = json.loads(context_path.read_text(encoding="utf-8"))
+    driver_path = tmp_path / "driver.csv"
+    driver_path.write_text(
+        "timestamp,close\n"
+        "2024-01-20T00:00:00Z,50\n"
+        "2024-01-21T00:00:00Z,51\n"
+        "2024-01-22T00:00:00Z,52\n"
+        "2024-01-23T00:00:00Z,53\n"
+        "2024-01-24T00:00:00Z,54\n"
+        "2024-01-25T00:00:00Z,55\n"
+        "2024-01-26T00:00:00Z,56\n"
+        "2024-01-27T00:00:00Z,57\n"
+        "2024-01-28T00:00:00Z,58\n",
+        encoding="utf-8",
+    )
+    payload["_feeds"]["driver"] = {
+        "name": "driver",
+        "kind": "bars",
+        "adapter": "csv",
+        "timeframe": "1d",
+        "symbol": "PEER",
+        "profile": "daily",
+        "path": str(driver_path),
+    }
+    payload["data_manifest"] = {"selected_inputs": [{"node_id": "driver"}]}
+    payload["window_availability"] = {
+        "requested_start": "2024-01-01",
+        "effective_window": {
+            "start": "2024-01-20T00:00:00+00:00",
+            "end": "2024-01-28T00:00:00+00:00",
+        },
+        "per_input_coverage": [
+            {"node_id": "driver", "status": "partial_target_overlap"},
+        ],
+    }
+    context_path.write_text(json.dumps(payload), encoding="utf-8")
     return context_path
 
 
@@ -543,6 +604,23 @@ class TestRunEvaluation:
 
         assert result["verdict"] == "PASS"
         assert any("Static look-ahead heuristics" in warning for warning in result["semantic"]["warnings"])
+
+    def test_preflight_surfaces_prepared_input_window_issues(self, tmp_path):
+        _write_decision_context_input_engine(tmp_path / "engine.py")
+        context_path = _write_prepared_input_context(tmp_path)
+
+        result = run_preflight(tmp_path, context_json=context_path)
+
+        assert result["verdict"] == "PASS"
+        assert result["diagnostics"]["failure_signature"] == "effective_window_collapse"
+        assert "driver" in result["semantic"]["prepared_inputs"]["traced_inputs"]
+        issue_kinds = [item["kind"] for item in result["semantic"]["prepared_inputs"]["issues"]]
+        assert "effective_window_collapse" in issue_kinds
+        assert "stale_input_tail" in issue_kinds
+        assert any(
+            "Prepared input availability starts after" in warning
+            for warning in result["semantic"]["warnings"]
+        )
 
     @pytest.mark.parametrize(
         "example_dir",
@@ -804,6 +882,7 @@ class TestValidationMarkdown:
         report = render_validation_markdown(result)
         assert "# Evaluation Summary" in report
         assert "## Verdict" in report
+        assert "## Prepared Inputs" in report
         assert result["verdict"] in report
         assert "implementation_contract" in report
 

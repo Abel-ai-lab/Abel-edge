@@ -211,6 +211,7 @@ def render_validation_markdown(result: dict) -> str:
     requested_window = result.get("requested_window", {})
     effective_window = result.get("effective_window", {})
     semantic = result.get("semantic") or {}
+    prepared_inputs = semantic.get("prepared_inputs") or {}
     return f"""# Evaluation Summary
 
 ## Verdict
@@ -233,6 +234,13 @@ def render_validation_markdown(result: dict) -> str:
 ### Semantic Warnings
 
 {_format_failures(semantic.get("warnings", []))}
+
+## Prepared Inputs
+
+- selected_inputs: `{len(prepared_inputs.get("selected_inputs") or [])}`
+- traced_inputs: `{', '.join(prepared_inputs.get('traced_inputs') or []) or 'none'}`
+- prepared_effective_window: `{((prepared_inputs.get('effective_window') or {}).get('start') or 'unknown')} -> {((prepared_inputs.get('effective_window') or {}).get('end') or 'unknown')}`
+- prepared_issues: `{', '.join(item.get('kind', 'unknown') for item in (prepared_inputs.get('issues') or [])) or 'none'}`
 
 ## Triangle
 
@@ -354,6 +362,9 @@ def _build_semantic_result(*, compiled, engine, static_violations: list[str]) ->
         warnings.append("Signal is flat across the sampled runtime output.")
     elif signal["unique_position_count"] <= 1 or signal["position_switches"] == 0:
         warnings.append("Signal stayed at one position level during preflight.")
+    prepared_feedback = _prepared_input_feedback(compiled=compiled, engine=engine)
+    failures.extend(prepared_feedback["failures"])
+    warnings.extend(prepared_feedback["warnings"])
 
     output_shape = "dynamic_signal"
     if signal["total_days"] == 0:
@@ -374,6 +385,7 @@ def _build_semantic_result(*, compiled, engine, static_violations: list[str]) ->
             "label": output_shape,
             "unique_position_count": signal["unique_position_count"],
         },
+        "prepared_inputs": prepared_feedback["summary"],
     }
 
 
@@ -390,8 +402,14 @@ def _attach_semantic_artifacts(result: dict, *, semantic: dict, engine) -> None:
 def _build_preflight_diagnostics(semantic: dict) -> dict:
     signal = semantic.get("signal") or _signal_summary(np.array([], dtype=float))
     failure_signature = "semantic_ready"
+    prepared = semantic.get("prepared_inputs") or {}
+    issue_kinds = [str(item.get("kind") or "") for item in (prepared.get("issues") or [])]
     if semantic.get("verdict") == "ERROR":
         failure_signature = "semantic_preflight_failed"
+    elif "effective_window_collapse" in issue_kinds:
+        failure_signature = "effective_window_collapse"
+    elif "stale_input_tail" in issue_kinds:
+        failure_signature = "stale_input_tail"
     elif signal["active_days"] == 0:
         failure_signature = "signal_always_flat"
     elif signal["unique_position_count"] <= 1 or signal["position_switches"] == 0:
@@ -525,6 +543,16 @@ def _effective_window(frame: pd.DataFrame) -> dict[str, str | None]:
     }
 
 
+def _coerce_timestamp(value) -> pd.Timestamp | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    ts = pd.Timestamp(text)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    return ts.tz_convert("UTC")
+
+
 def _error(
     message: str,
     *,
@@ -560,11 +588,20 @@ def _format_failures(failures: list[str]) -> str:
 def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
     signal = _signal_summary(frame["position"].to_numpy(dtype=float))
     metrics = result.get("metrics") or {}
+    semantic = result.get("semantic") or {}
+    prepared = semantic.get("prepared_inputs") or {}
+    issue_kinds = [str(item.get("kind") or "") for item in (prepared.get("issues") or [])]
     failure_signature = "healthy_signal"
     hints: list[str] = []
     if signal["total_days"] == 0:
         failure_signature = "no_usable_data"
         hints.append("No usable bars survived the requested evaluation window.")
+    elif "effective_window_collapse" in issue_kinds:
+        failure_signature = "effective_window_collapse"
+        hints.append("Prepared inputs only become usable after the requested evaluation start.")
+    elif "stale_input_tail" in issue_kinds:
+        failure_signature = "stale_input_tail"
+        hints.append("Prepared inputs stop before the evaluated decision tail, so late bars rely on stale auxiliary data.")
     elif signal["active_days"] == 0:
         failure_signature = "signal_always_flat"
         hints.append("Positions never left zero. Check data readiness and threshold logic.")
@@ -583,7 +620,90 @@ def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
         "failure_signature": failure_signature,
         "runtime_stage": "validation",
         "signal": signal,
-        "hints": hints,
+        "hints": hints + [item.get("message", "") for item in (prepared.get("issues") or []) if item.get("message")],
+    }
+
+
+def _prepared_input_feedback(*, compiled, engine) -> dict:
+    context = engine.context or {}
+    window = context.get("window_availability")
+    data_manifest = context.get("data_manifest")
+    trace = engine.latest_decision_trace()
+    if not isinstance(window, dict):
+        window = {}
+    if not isinstance(data_manifest, dict):
+        data_manifest = {}
+
+    selected_inputs = [
+        str(item.get("node_id") or "")
+        for item in (data_manifest.get("selected_inputs") or [])
+        if isinstance(item, dict) and str(item.get("node_id") or "").strip()
+    ]
+    traced_inputs = sorted(
+        {
+            str(item.get("feed") or "")
+            for item in trace
+            if str(item.get("feed") or "").strip()
+            and str(item.get("feed")) not in {"primary", "target", str(compiled.runtime_profile.target or "")}
+        }
+    )
+    warnings: list[str] = []
+    failures: list[str] = []
+    issues: list[dict[str, object]] = []
+
+    effective_window = (window.get("effective_window") or {}) if isinstance(window, dict) else {}
+    decision_start = compiled.decision_index[0] if len(compiled.decision_index) else None
+    decision_end = compiled.decision_index[-1] if len(compiled.decision_index) else None
+    effective_start = _coerce_timestamp(effective_window.get("start"))
+    effective_end = _coerce_timestamp(effective_window.get("end"))
+    if effective_start is not None and decision_start is not None and effective_start > decision_start:
+        message = (
+            "Prepared input availability starts after the first evaluated decision bar "
+            f"({effective_start.date().isoformat()} > {pd.Timestamp(decision_start).date().isoformat()})."
+        )
+        warnings.append(message)
+        issues.append({"kind": "effective_window_collapse", "severity": "warning", "message": message})
+    if effective_end is not None and decision_end is not None and effective_end < decision_end:
+        message = (
+            "Prepared input availability ends before the last evaluated decision bar "
+            f"({effective_end.date().isoformat()} < {pd.Timestamp(decision_end).date().isoformat()})."
+        )
+        warnings.append(message)
+        issues.append({"kind": "stale_input_tail", "severity": "warning", "message": message})
+
+    coverage = {
+        str(item.get("node_id") or ""): item
+        for item in (window.get("per_input_coverage") or [])
+        if isinstance(item, dict) and str(item.get("node_id") or "").strip()
+    }
+    for node_id in traced_inputs:
+        item = coverage.get(node_id)
+        if not item:
+            continue
+        status = str(item.get("status") or "unknown")
+        if status in {"error", "no_data", "no_target_overlap"}:
+            message = f"Prepared input `{node_id}` was read at runtime but its prepared coverage status is `{status}`."
+            failures.append(message)
+            issues.append({"kind": "input_coverage_error", "severity": "error", "message": message})
+        elif status in {"partial_target_overlap", "target_unavailable"}:
+            message = f"Prepared input `{node_id}` only partially covers the target decision window."
+            warnings.append(message)
+            issues.append({"kind": "input_partial_coverage", "severity": "warning", "message": message})
+
+    if selected_inputs and not traced_inputs:
+        message = "Prepared auxiliary inputs were selected, but the strategy never read any non-primary prepared input."
+        warnings.append(message)
+        issues.append({"kind": "unused_prepared_inputs", "severity": "warning", "message": message})
+
+    return {
+        "failures": failures,
+        "warnings": warnings,
+        "summary": {
+            "selected_inputs": selected_inputs,
+            "traced_inputs": traced_inputs,
+            "effective_window": effective_window,
+            "issues": issues,
+        },
     }
 
 
