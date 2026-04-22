@@ -6,6 +6,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from causal_edge.graph_nodes import coerce_graph_node_ref
 from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
 from causal_edge.plugins.abel.credentials import resolve_api_key
 
@@ -72,6 +73,7 @@ def _try_abel_discovery(ticker: str) -> dict:
     if not api_key:
         return {
             "ticker": ticker,
+            "target_node": normalize_public_node_id(ticker),
             "source": "template (no ABEL_API_KEY)",
             "parents": [],
             "blanket_new": [],
@@ -100,20 +102,27 @@ def _try_abel_discovery(ticker: str) -> dict:
         parents = [_pick_node_id(item) for item in parents_future.result()]
         parents = [node for node in parents if node]
         blanket_nodes = [_pick_node_id(item) for item in blanket_future.result()]
-        blanket_new = sorted(node for node in blanket_nodes if node and node not in parents)
-        k_discovery = len(set(parents + blanket_new))
+        parent_refs = _normalize_discovery_nodes(parents, role="parent")
+        parent_node_ids = {item["node_id"] for item in parent_refs}
+        blanket_refs = _normalize_discovery_nodes(blanket_nodes, role="neighbor")
+        blanket_new = [
+            item for item in blanket_refs if item["node_id"] not in parent_node_ids
+        ]
+        k_discovery = len({item["node_id"] for item in parent_refs + blanket_new})
         return {
             "ticker": ticker,
+            "target_node": node_id,
             "source": "Abel CAP (live)",
-            "parents": parents,
+            "parents": parent_refs,
             "blanket_new": blanket_new,
             "children": [],
             "K_discovery": k_discovery,
-            "note": f"K={k_discovery} tickers from Abel. Scan K = K x n_lags.",
+            "note": f"K={k_discovery} graph nodes from Abel. Scan K = K x n_lags.",
         }
     except Exception as exc:
         return {
             "ticker": ticker,
+            "target_node": normalize_public_node_id(ticker),
             "source": f"abel_error: {exc}",
             "parents": [],
             "blanket_new": [],
@@ -146,6 +155,18 @@ def _pick_node_id(item: dict) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _normalize_discovery_nodes(node_ids: list[str], *, role: str) -> list[dict]:
+    normalized: list[dict] = []
+    for node_id in node_ids:
+        ref = coerce_graph_node_ref(node_id, extra_roles=[role])
+        if ref is None:
+            continue
+        payload = ref.to_payload()
+        payload["ticker"] = ref.asset
+        normalized.append(payload)
+    return normalized
 
 
 def _write_if_missing(path: Path, content: str) -> None:

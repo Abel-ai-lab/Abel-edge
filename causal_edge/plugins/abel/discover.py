@@ -10,7 +10,7 @@ from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError, require
 
 
 def discover_graph_nodes(
-    ticker: str,
+    node_id: str,
     *,
     mode: str = "parents",
     limit: int = 10,
@@ -18,7 +18,7 @@ def discover_graph_nodes(
     client: AbelClient | None = None,
 ) -> str:
     payload = discover_graph_payload(
-        ticker,
+        node_id,
         mode=mode,
         limit=limit,
         env_path=env_path,
@@ -28,7 +28,7 @@ def discover_graph_nodes(
 
 
 def discover_graph_payload(
-    ticker: str,
+    node_id: str,
     *,
     mode: str = "all",
     limit: int = 10,
@@ -46,31 +46,39 @@ def discover_graph_payload(
 
     if mode == "all":
         parents = _discover_mode_items(
-            ticker=ticker,
+            node_id=node_id,
             mode="parents",
             limit=limit,
             api_key=api_key,
             client=abel,
         )
         blanket_items = _discover_mode_items(
-            ticker=ticker,
+            node_id=node_id,
             mode="mb",
             limit=limit,
             api_key=api_key,
             client=abel,
         )
-        return _build_discovery_payload(ticker, parents=parents, blanket_items=blanket_items)
+        return _build_discovery_payload(
+            node_id,
+            parents=parents,
+            blanket_items=blanket_items,
+        )
 
     items = _discover_mode_items(
-        ticker=ticker,
+        node_id=node_id,
         mode=mode,
         limit=limit,
         api_key=api_key,
         client=abel,
     )
+    target_asset, target_field = split_public_node_id(node_id)
+    target_node = f"{target_asset}.{target_field}"
     if mode == "parents":
         return {
-            "ticker": ticker.upper(),
+            "ticker": target_asset,
+            "target_asset": target_asset,
+            "target_node": target_node,
             "source": "abel_live",
             "mode": mode,
             "parents": items,
@@ -80,7 +88,7 @@ def discover_graph_payload(
             "created_at": _now(),
         }
     if mode == "mb":
-        payload = _build_discovery_payload(ticker, parents=[], blanket_items=items)
+        payload = _build_discovery_payload(node_id, parents=[], blanket_items=items)
         payload["mode"] = mode
         payload["K_discovery"] = 0
         return payload
@@ -142,6 +150,7 @@ def _render_markov_blanket(
 def _render_combined(payload: dict[str, Any]) -> str:
     parts = [
         f"ticker: {payload.get('ticker', '')}",
+        f"target_node: {payload.get('target_node', '')}",
         f"source: {payload.get('source', '')}",
         f"K_discovery: {payload.get('K_discovery', 0)}",
         _render_parents(payload.get("parents", [])),
@@ -155,44 +164,53 @@ def _render_combined(payload: dict[str, Any]) -> str:
 
 def _discover_mode_items(
     *,
-    ticker: str,
+    node_id: str,
     mode: str,
     limit: int,
     api_key: str,
     client: AbelClient,
 ) -> list[dict[str, Any]]:
     if mode == "parents":
-        raw_items = client.discover_parents(node_id=ticker, limit=limit, api_key=api_key)
+        raw_items = client.discover_parents(node_id=node_id, limit=limit, api_key=api_key)
         return _normalize_items(raw_items)
     if mode == "mb":
-        raw_items = client.markov_blanket(node_id=ticker, limit=limit, api_key=api_key)
+        raw_items = client.markov_blanket(node_id=node_id, limit=limit, api_key=api_key)
         return _normalize_items(raw_items)
     raise ValueError(f"Unsupported mode '{mode}'.")
 
 
 def _build_discovery_payload(
-    ticker: str,
+    node_id: str,
     *,
     parents: list[dict[str, Any]],
     blanket_items: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    parent_keys = {(item["ticker"], item["field"]) for item in parents}
+    target_asset, target_field = split_public_node_id(node_id)
+    target_node = f"{target_asset}.{target_field}"
+    parent_keys = {item["node_id"] for item in parents}
     children: list[dict[str, Any]] = []
     blanket_new: list[dict[str, Any]] = []
-    seen_children: set[tuple[str, str]] = set()
-    seen_blanket: set[tuple[str, str]] = set()
+    seen_children: set[str] = set()
+    seen_blanket: set[str] = set()
 
     for item in blanket_items:
-        key = (item["ticker"], item["field"])
+        key = item["node_id"]
         roles = [str(role).strip() for role in item.get("roles", []) if str(role).strip()]
         if "child" in roles and key not in seen_children:
-            children.append({"ticker": item["ticker"], "field": item["field"]})
+            children.append(
+                {
+                    "node_id": item["node_id"],
+                    "ticker": item["ticker"],
+                    "field": item["field"],
+                }
+            )
             seen_children.add(key)
             continue
         if key in parent_keys or key in seen_blanket:
             continue
         blanket_new.append(
             {
+                "node_id": item["node_id"],
                 "ticker": item["ticker"],
                 "field": item["field"],
                 "roles": roles or ["neighbor"],
@@ -201,7 +219,9 @@ def _build_discovery_payload(
         seen_blanket.add(key)
 
     return {
-        "ticker": ticker.upper(),
+        "ticker": target_asset,
+        "target_asset": target_asset,
+        "target_node": target_node,
         "source": "abel_live",
         "parents": parents,
         "blanket_new": blanket_new,
@@ -220,6 +240,7 @@ def _normalize_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ticker, field = split_public_node_id(node_id)
         normalized.append(
             {
+                "node_id": f"{ticker}.{field}",
                 "ticker": ticker,
                 "field": field,
                 "roles": _pick_roles(item),

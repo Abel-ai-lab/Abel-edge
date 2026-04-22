@@ -60,9 +60,52 @@ class DecisionContext:
     def feed(self, name: str):
         return _DecisionFeedView(self, name)
 
+    def input(self, name: str):
+        return self.feed(name)
+
     def available_feeds(self) -> list[str]:
         feeds = (self.engine.context or {}).get("_feeds") or {}
         return sorted(str(name) for name in feeds.keys())
+
+    def available_inputs(self) -> list[str]:
+        return [name for name in self.available_feeds() if name != "primary"]
+
+    def input_specs(self) -> list[dict[str, Any]]:
+        feeds = (self.engine.context or {}).get("_feeds") or {}
+        specs: list[dict[str, Any]] = []
+        for name in self.available_inputs():
+            cfg = dict(feeds.get(name) or {})
+            cfg.setdefault("name", name)
+            cfg.setdefault("default_field", self._default_feed_field(name))
+            specs.append(cfg)
+        return specs
+
+    def inputs_frame(
+        self,
+        *names: str,
+        mode: str = "asof",
+        fields: dict[str, str] | None = None,
+    ) -> pd.DataFrame:
+        selected = list(names) if names else self.available_inputs()
+        if mode not in {"asof", "native"}:
+            raise DecisionContractError("inputs_frame(mode=...) must be 'asof' or 'native'.")
+        columns: list[pd.Series] = []
+        for name in selected:
+            field_name = (fields or {}).get(name)
+            view = self.input(name)
+            series = (
+                view.asof_series(field_name)
+                if mode == "asof"
+                else view.native_series(field_name)
+            )
+            columns.append(series.rename(name))
+        if not columns:
+            index = self.decision_index() if mode == "asof" else pd.DatetimeIndex([])
+            return pd.DataFrame(index=index)
+        frame = pd.concat(columns, axis=1)
+        if mode == "asof":
+            frame = frame.reindex(self.decision_index())
+        return frame
 
     def inspect_feed(self, name: str) -> dict[str, Any]:
         field = self._default_feed_field(name)
@@ -200,6 +243,9 @@ class DecisionContext:
 
     def _default_feed_field(self, name: str) -> str:
         feed_cfg = ((self.engine.context or {}).get("_feeds") or {}).get(name) or {}
+        explicit = str(feed_cfg.get("default_field") or "").strip().lower()
+        if explicit:
+            return explicit
         if str(feed_cfg.get("kind") or "").strip().lower() == "series":
             return "value"
         return "close"
@@ -233,24 +279,26 @@ class _DecisionFeedView:
         self.ctx = ctx
         self.name = name
 
-    def native_series(self, field: str = "close") -> pd.Series:
-        frame = self.ctx._load_feed_frame(self.name, field)
-        series = _frame_to_series(frame, field=field, feed_name=self.name)
+    def native_series(self, field: str | None = None) -> pd.Series:
+        field_name = field or self.ctx._default_feed_field(self.name)
+        frame = self.ctx._load_feed_frame(self.name, field_name)
+        series = _frame_to_series(frame, field=field_name, feed_name=self.name)
         self.ctx._record_trace(
             surface="feed.native_series",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(series),
         )
         return series
 
-    def asof_series(self, field: str = "close") -> pd.Series:
-        native = self.native_series(field)
-        aligned = native.reindex(self.ctx.decision_index()).ffill()
+    def asof_series(self, field: str | None = None) -> pd.Series:
+        field_name = field or self.ctx._default_feed_field(self.name)
+        native = self.native_series(field_name)
+        aligned = _align_asof_to_index(native, self.ctx.decision_index())
         self.ctx._record_trace(
             surface="feed.asof_series",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(aligned),
             aligned_to_decision_index=True,
         )
@@ -279,6 +327,9 @@ class DecisionPoint:
 
     def feed(self, name: str):
         return _PointFeedView(self, name)
+
+    def input(self, name: str):
+        return self.feed(name)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -312,29 +363,31 @@ class _PointFeedView:
         self.point = point
         self.name = name
 
-    def history(self, field: str = "close", *, bars: int | None = None) -> pd.Series:
-        native = self.point.ctx.feed(self.name).native_series(field)
+    def history(self, field: str | None = None, *, bars: int | None = None) -> pd.Series:
+        field_name = field or self.point.ctx._default_feed_field(self.name)
+        native = self.point.ctx.feed(self.name).native_series(field_name)
         window = native.loc[native.index <= self.point.timestamp]
         if bars is not None:
             window = window.tail(int(bars))
         self.point.ctx._record_trace(
             surface="point.feed.history",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(window),
             decision_time=self.point.timestamp,
         )
         return window
 
-    def between(self, start, end, *, field: str = "close") -> pd.Series:
-        native = self.point.ctx.feed(self.name).native_series(field)
+    def between(self, start, end, *, field: str | None = None) -> pd.Series:
+        field_name = field or self.point.ctx._default_feed_field(self.name)
+        native = self.point.ctx.feed(self.name).native_series(field_name)
         start_ts = _as_utc_timestamp(start) if start is not None else native.index.min()
         end_ts = _as_utc_timestamp(end) if end is not None else self.point.timestamp
         window = native.loc[(native.index >= start_ts) & (native.index <= end_ts)]
         self.point.ctx._record_trace(
             surface="point.feed.between",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(window),
             decision_time=self.point.timestamp,
             start=start_ts,
@@ -342,14 +395,15 @@ class _PointFeedView:
         )
         return window
 
-    def asof(self, field: str = "close"):
-        history = self.history(field)
+    def asof(self, field: str | None = None):
+        field_name = field or self.point.ctx._default_feed_field(self.name)
+        history = self.history(field_name)
         if history.empty:
             return None
         self.point.ctx._record_trace(
             surface="point.feed.asof",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=1,
             decision_time=self.point.timestamp,
         )
@@ -368,6 +422,15 @@ def _frame_to_series(frame: pd.DataFrame, *, field: str, feed_name: str) -> pd.S
         index=pd.DatetimeIndex(frame["timestamp"]),
         name=f"{feed_name}.{field}",
     )
+
+
+def _align_asof_to_index(series: pd.Series, target_index: pd.DatetimeIndex) -> pd.Series:
+    if series.empty or len(target_index) == 0:
+        return pd.Series(dtype=float, index=target_index, name=series.name)
+    expanded = series.reindex(series.index.union(target_index)).sort_index().ffill()
+    aligned = expanded.reindex(target_index)
+    aligned.name = series.name
+    return aligned
 
 
 def _to_trace_value(value) -> str | None:

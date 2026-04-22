@@ -15,6 +15,7 @@ import pandas as pd
 from causal_edge.engine.decision_context import DecisionContext
 from causal_edge.engine.feed_contract import align_series_to_dates
 from causal_edge.engine.feed_loader import load_declared_feed, load_feed_frame
+from causal_edge.graph_nodes import coerce_graph_node_refs
 from causal_edge.engine.runtime_contract import (
     CompiledDecisionOutput,
     DecisionDraft,
@@ -51,6 +52,25 @@ class StrategyEngine(ABC):
     def execution_constraints(self) -> ExecutionConstraints:
         """Return the execution envelope for this run."""
         return execution_constraints_from_context(self.context)
+
+    def prepared_input_nodes(self) -> list[str]:
+        """Return prepared non-primary input feed names when present."""
+        feeds = (self.context or {}).get("_feeds") or {}
+        return sorted(
+            str(name)
+            for name in feeds.keys()
+            if str(name).strip() and str(name) != "primary"
+        )
+
+    def prepared_input_specs(self) -> list[dict]:
+        """Return prepared non-primary feed specs for authoring/debugging helpers."""
+        feeds = (self.context or {}).get("_feeds") or {}
+        specs: list[dict] = []
+        for name in self.prepared_input_nodes():
+            cfg = dict(feeds.get(name) or {})
+            cfg.setdefault("name", name)
+            specs.append(cfg)
+        return specs
 
     def decision_context(
         self,
@@ -194,6 +214,7 @@ class StrategyEngine(ABC):
         """Return discovered driver candidates merged with edge data-readiness facts."""
         discovery = self.research_discovery()
         target = self.research_target_ticker()
+        target_node = _research_target_node(self.context)
         readiness_by_ticker = _readiness_by_ticker(self.research_data_readiness())
         allowed_roles = {str(role).strip().lower() for role in (roles or []) if str(role).strip()}
         candidates = _discovery_candidates(discovery)
@@ -205,7 +226,10 @@ class StrategyEngine(ABC):
         merged: list[dict] = []
         for item in candidates:
             ticker = item["ticker"]
-            if exclude_target and target and ticker == target:
+            node_id = str(item.get("node_id") or "")
+            if exclude_target and target_node and node_id == target_node:
+                continue
+            if exclude_target and not node_id and target and ticker == target:
                 continue
             discovery_roles = item["discovery_roles"]
             if allowed_roles and not allowed_roles.intersection({role.lower() for role in discovery_roles}):
@@ -223,6 +247,7 @@ class StrategyEngine(ABC):
             merged.append(
                 {
                     "ticker": ticker,
+                    "node_id": node_id,
                     "field": item.get("field"),
                     "discovery_roles": discovery_roles,
                     "readiness_status": readiness.get("status", "unknown"),
@@ -238,7 +263,12 @@ class StrategyEngine(ABC):
 
     def research_driver_tickers(self, **kwargs) -> list[str]:
         """Return only the tickers for research driver candidates."""
-        return [item["ticker"] for item in self.research_driver_candidates(**kwargs)]
+        ordered: list[str] = []
+        for item in self.research_driver_candidates(**kwargs):
+            ticker = item["ticker"]
+            if ticker not in ordered:
+                ordered.append(ticker)
+        return ordered
 
     def research_data_requirements(self) -> dict:
         """Return the prepared branch data requirements when present."""
@@ -714,8 +744,8 @@ class StrategyEngine(ABC):
                 symbols.append(target)
         selected = driver_tickers
         if selected is None:
-            explicit = self.research_branch_spec().get("selected_drivers") or []
-            selected = [str(item).strip().upper() for item in explicit if str(item).strip()]
+            explicit = _selected_input_assets(self.research_branch_spec())
+            selected = explicit
             if not selected:
                 selected = self.research_driver_tickers(
                     require_usable=require_usable,
@@ -737,28 +767,20 @@ def _discovery_candidates(discovery: dict) -> list[dict]:
     combined: dict[str, dict] = {}
 
     def remember(item: object, fallback_role: str) -> None:
-        if isinstance(item, str):
-            ticker = _normalize_ticker(item)
-            field = None
-            roles = [fallback_role]
-        elif isinstance(item, dict):
-            ticker = _normalize_ticker(item.get("ticker"))
-            field_value = str(item.get("field", "")).strip()
-            field = field_value or None
-            roles = [str(role).strip() for role in item.get("roles", []) if str(role).strip()]
-            if fallback_role not in roles:
-                roles.append(fallback_role)
-        else:
+        refs = coerce_graph_node_refs([item], extra_roles=[fallback_role])
+        if not refs:
             return
-        if not ticker:
-            return
+        ref = refs[0]
         record = combined.setdefault(
-            ticker,
-            {"ticker": ticker, "field": field, "discovery_roles": set()},
+            ref.node_id,
+            {
+                "node_id": ref.node_id,
+                "ticker": ref.asset,
+                "field": ref.field,
+                "discovery_roles": set(),
+            },
         )
-        if record["field"] is None and field is not None:
-            record["field"] = field
-        record["discovery_roles"].update(role for role in roles if role)
+        record["discovery_roles"].update(role for role in ref.roles if role)
 
     for item in discovery.get("parents") or []:
         remember(item, "parent")
@@ -769,29 +791,61 @@ def _discovery_candidates(discovery: dict) -> list[dict]:
 
     return [
         {
-            "ticker": ticker,
+            "node_id": node_id,
+            "ticker": payload["ticker"],
             "field": payload["field"],
             "discovery_roles": sorted(payload["discovery_roles"]),
         }
-        for ticker, payload in sorted(combined.items())
+        for node_id, payload in sorted(combined.items())
     ]
 
 
 def _explicit_candidates(branch_spec: dict) -> list[dict]:
-    selected = branch_spec.get("selected_drivers") or []
+    selected = branch_spec.get("selected_inputs") or branch_spec.get("selected_drivers") or []
     candidates: list[dict] = []
-    for ticker in selected:
-        normalized = _normalize_ticker(ticker)
-        if not normalized:
+    for ref in coerce_graph_node_refs(selected):
+        if not ref.asset:
             continue
         candidates.append(
             {
-                "ticker": normalized,
-                "field": None,
-                "discovery_roles": ["selected"],
+                "ticker": ref.asset,
+                "field": ref.field,
+                "node_id": ref.node_id,
+                "discovery_roles": list(ref.roles) or ["selected"],
             }
         )
     return candidates
+
+
+def _selected_input_assets(branch_spec: dict) -> list[str]:
+    explicit = branch_spec.get("selected_inputs")
+    if explicit:
+        return [ref.asset for ref in coerce_graph_node_refs(explicit)]
+    selected = branch_spec.get("selected_drivers") or []
+    assets: list[str] = []
+    for item in selected:
+        normalized = _normalize_ticker(item)
+        if normalized and normalized not in assets:
+            assets.append(normalized)
+    return assets
+
+
+def _research_target_node(context: dict | None) -> str | None:
+    runtime_profile = ((context or {}).get("_runtime_profile") or {}) if isinstance(context, dict) else {}
+    discovery = ((context or {}).get("discovery") or {}) if isinstance(context, dict) else {}
+    branch_spec = ((context or {}).get("branch_spec") or {}) if isinstance(context, dict) else {}
+    refs = coerce_graph_node_refs(
+        [
+            runtime_profile.get("target_node"),
+            branch_spec.get("target_node"),
+            discovery.get("target_node"),
+            runtime_profile.get("target"),
+            branch_spec.get("target_asset"),
+            branch_spec.get("target"),
+            discovery.get("ticker"),
+        ]
+    )
+    return refs[0].node_id if refs else None
 
 
 def _readiness_by_ticker(report: dict) -> dict[str, dict]:
