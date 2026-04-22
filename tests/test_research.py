@@ -297,8 +297,10 @@ class TestInitWorkspace:
         assert (workspace / "memory.md").exists()
         assert (workspace / "discovery.json").exists()
         template = (workspace / "engine.py").read_text(encoding="utf-8")
+        discovery = json.loads((workspace / "discovery.json").read_text(encoding="utf-8"))
         assert "compute_decisions(self, ctx)" in template
         assert "ctx.decisions(" in template
+        assert discovery["target_node"] == "SOLUSD.price"
 
     def test_idempotent_engine_file(self, tmp_path):
         workspace = init_workspace("SOL", tmp_path / "sol")
@@ -675,6 +677,42 @@ class TestResearchHelpers:
         assert list(frame.columns) == ["SONY", "AAPL"]
         assert float(frame.iloc[-1]["SONY"]) == 101.0
         assert float(frame.iloc[-1]["AAPL"]) == 51.0
+
+    def test_same_asset_volume_candidate_survives_target_exclusion(self):
+        class DemoEngine(StrategyEngine):
+            def compute_signals(self):
+                raise NotImplementedError
+
+            def get_latest_signal(self):
+                return {"position": 0.0}
+
+        engine = DemoEngine(
+            context={
+                "discovery": {
+                    "ticker": "SONY",
+                    "target_node": "SONY.price",
+                    "parents": [],
+                    "blanket_new": [{"ticker": "SONY", "field": "volume", "roles": ["sibling"]}],
+                    "children": [],
+                    "data_readiness": {
+                        "results": [
+                            {
+                                "ticker": "SONY",
+                                "status": "start_covered",
+                                "usable": True,
+                                "covers_requested_start": True,
+                            }
+                        ]
+                    },
+                }
+            }
+        )
+
+        candidates = engine.research_driver_candidates(require_usable=False)
+
+        assert len(candidates) == 1
+        assert candidates[0]["node_id"] == "SONY.volume"
+        assert candidates[0]["ticker"] == "SONY"
 
     def test_load_research_bars_rejects_empty_symbol_selection(self):
         class DemoEngine(StrategyEngine):

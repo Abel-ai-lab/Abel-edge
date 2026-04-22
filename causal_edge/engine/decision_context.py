@@ -200,6 +200,9 @@ class DecisionContext:
 
     def _default_feed_field(self, name: str) -> str:
         feed_cfg = ((self.engine.context or {}).get("_feeds") or {}).get(name) or {}
+        explicit = str(feed_cfg.get("default_field") or "").strip().lower()
+        if explicit:
+            return explicit
         if str(feed_cfg.get("kind") or "").strip().lower() == "series":
             return "value"
         return "close"
@@ -233,24 +236,26 @@ class _DecisionFeedView:
         self.ctx = ctx
         self.name = name
 
-    def native_series(self, field: str = "close") -> pd.Series:
-        frame = self.ctx._load_feed_frame(self.name, field)
-        series = _frame_to_series(frame, field=field, feed_name=self.name)
+    def native_series(self, field: str | None = None) -> pd.Series:
+        field_name = field or self.ctx._default_feed_field(self.name)
+        frame = self.ctx._load_feed_frame(self.name, field_name)
+        series = _frame_to_series(frame, field=field_name, feed_name=self.name)
         self.ctx._record_trace(
             surface="feed.native_series",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(series),
         )
         return series
 
-    def asof_series(self, field: str = "close") -> pd.Series:
-        native = self.native_series(field)
+    def asof_series(self, field: str | None = None) -> pd.Series:
+        field_name = field or self.ctx._default_feed_field(self.name)
+        native = self.native_series(field_name)
         aligned = native.reindex(self.ctx.decision_index()).ffill()
         self.ctx._record_trace(
             surface="feed.asof_series",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(aligned),
             aligned_to_decision_index=True,
         )
@@ -312,29 +317,31 @@ class _PointFeedView:
         self.point = point
         self.name = name
 
-    def history(self, field: str = "close", *, bars: int | None = None) -> pd.Series:
-        native = self.point.ctx.feed(self.name).native_series(field)
+    def history(self, field: str | None = None, *, bars: int | None = None) -> pd.Series:
+        field_name = field or self.point.ctx._default_feed_field(self.name)
+        native = self.point.ctx.feed(self.name).native_series(field_name)
         window = native.loc[native.index <= self.point.timestamp]
         if bars is not None:
             window = window.tail(int(bars))
         self.point.ctx._record_trace(
             surface="point.feed.history",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(window),
             decision_time=self.point.timestamp,
         )
         return window
 
-    def between(self, start, end, *, field: str = "close") -> pd.Series:
-        native = self.point.ctx.feed(self.name).native_series(field)
+    def between(self, start, end, *, field: str | None = None) -> pd.Series:
+        field_name = field or self.point.ctx._default_feed_field(self.name)
+        native = self.point.ctx.feed(self.name).native_series(field_name)
         start_ts = _as_utc_timestamp(start) if start is not None else native.index.min()
         end_ts = _as_utc_timestamp(end) if end is not None else self.point.timestamp
         window = native.loc[(native.index >= start_ts) & (native.index <= end_ts)]
         self.point.ctx._record_trace(
             surface="point.feed.between",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=len(window),
             decision_time=self.point.timestamp,
             start=start_ts,
@@ -342,14 +349,15 @@ class _PointFeedView:
         )
         return window
 
-    def asof(self, field: str = "close"):
-        history = self.history(field)
+    def asof(self, field: str | None = None):
+        field_name = field or self.point.ctx._default_feed_field(self.name)
+        history = self.history(field_name)
         if history.empty:
             return None
         self.point.ctx._record_trace(
             surface="point.feed.asof",
             feed=self.name,
-            field=field,
+            field=field_name,
             rows=1,
             decision_time=self.point.timestamp,
         )

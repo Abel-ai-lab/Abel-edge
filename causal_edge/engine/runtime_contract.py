@@ -10,6 +10,7 @@ import pandas as pd
 
 from causal_edge.engine.backtest import compile_effective_positions
 from causal_edge.engine.feed_contract import FeedContractError, validate_datetime_index
+from causal_edge.graph_nodes import normalize_graph_node_id
 
 
 class DecisionContractError(FeedContractError):
@@ -22,6 +23,7 @@ class RuntimeProfile:
 
     profile: str
     target: str | None
+    target_node: str | None = None
     decision_event: str = "bar_close"
     execution_delay_bars: int = 1
     return_basis: str = "close_to_close"
@@ -65,11 +67,18 @@ def runtime_profile_from_context(context: dict | None) -> RuntimeProfile:
     payload = ((context or {}).get("_runtime_profile") or {}) if isinstance(context, dict) else {}
     data_contract = ((context or {}).get("_data_contract") or {}) if isinstance(context, dict) else {}
     profile = str(payload.get("profile") or data_contract.get("profile") or "daily").strip().lower()
+    target_node = _normalize_target_node(
+        payload.get("target_node")
+        or ((context or {}).get("branch_spec") or {}).get("target_node")
+    )
     target = _normalize_target(
-        payload.get("target")
+        payload.get("target_asset")
+        or payload.get("target")
+        or (target_node.rpartition(".")[0] if target_node else None)
         or (context or {}).get("asset")
         or (context or {}).get("ticker")
         or ((context or {}).get("discovery") or {}).get("ticker")
+        or ((context or {}).get("branch_spec") or {}).get("target_asset")
         or ((context or {}).get("branch_spec") or {}).get("target")
     )
     decision_event = str(payload.get("decision_event") or "bar_close").strip().lower() or "bar_close"
@@ -80,6 +89,7 @@ def runtime_profile_from_context(context: dict | None) -> RuntimeProfile:
     return RuntimeProfile(
         profile=profile,
         target=target,
+        target_node=target_node,
         decision_event=decision_event,
         execution_delay_bars=execution_delay_bars,
         return_basis=return_basis or "close_to_close",
@@ -210,6 +220,13 @@ def _as_numeric_vector(values, *, name: str) -> np.ndarray:
 def _normalize_target(value: Any) -> str | None:
     target = str(value or "").strip().upper()
     return target or None
+
+
+def _normalize_target_node(value: Any) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    return normalize_graph_node_id(raw)
 
 
 def _normalize_position_bounds(bounds: Any) -> tuple[float, float]:
