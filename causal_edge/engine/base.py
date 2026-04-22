@@ -1,31 +1,133 @@
-"""Abstract base class for strategy engines.
+"""Base class for strategy engines.
 
-Every strategy engine must implement compute_signals() and get_latest_signal().
-Engines are standalone: strategies/ never imports causal_edge/ internals.
+The branch-default contract is ``compute_decisions(self, ctx)``. Legacy
+``compute_signals()`` engines are still supported internally during the rollout
+so existing examples and tests remain runnable.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import numpy as np
 import pandas as pd
 
+from causal_edge.engine.decision_context import DecisionContext
 from causal_edge.engine.feed_contract import align_series_to_dates
 from causal_edge.engine.feed_loader import load_declared_feed, load_feed_frame
+from causal_edge.engine.runtime_contract import (
+    CompiledDecisionOutput,
+    DecisionDraft,
+    ExecutionConstraints,
+    RuntimeProfile,
+    compile_decision_draft,
+    execution_constraints_from_context,
+    legacy_output_to_compiled,
+    runtime_profile_from_context,
+)
 from causal_edge.engine.signal_contract import validate_signal_output
 
 
 class StrategyEngine(ABC):
     """Base class for all strategy engines.
 
-    Subclasses must implement:
+    Preferred subclass contract:
+        compute_decisions(ctx) -> DecisionDraft
+
+    Legacy contract:
         compute_signals() -> tuple of (positions, dates, prices)
-        get_latest_signal() -> dict with at least 'position' key
     """
 
     def __init__(self, context: dict | None = None) -> None:
         self.context = context
+        self._decision_surface_guard = False
+        self._last_decision_context: DecisionContext | None = None
+        self._last_compiled_output: CompiledDecisionOutput | None = None
+
+    def runtime_profile(self) -> RuntimeProfile:
+        """Return the explicit runtime profile for this run."""
+        return runtime_profile_from_context(self.context)
+
+    def execution_constraints(self) -> ExecutionConstraints:
+        """Return the execution envelope for this run."""
+        return execution_constraints_from_context(self.context)
+
+    def decision_context(
+        self,
+        *,
+        start=None,
+        end=None,
+        limit: int | None = None,
+    ) -> DecisionContext:
+        """Construct the branch-visible decision context."""
+        return DecisionContext(
+            self,
+            runtime_profile=self.runtime_profile(),
+            execution_constraints=self.execution_constraints(),
+            start=self.research_requested_start() if start is None else start,
+            end=end,
+            limit=limit,
+        )
+
+    def uses_decision_contract(self) -> bool:
+        """Return whether the subclass overrides ``compute_decisions``."""
+        return type(self).compute_decisions is not StrategyEngine.compute_decisions
+
+    def uses_legacy_signal_contract(self) -> bool:
+        """Return whether the subclass overrides ``compute_signals``."""
+        return type(self).compute_signals is not StrategyEngine.compute_signals
+
+    def compute_runtime_output(
+        self,
+        *,
+        start=None,
+        end=None,
+        limit: int | None = None,
+    ) -> CompiledDecisionOutput:
+        """Run the active contract and normalize into one compiled output shape."""
+        if self.uses_decision_contract():
+            ctx = self.decision_context(start=start, end=end, limit=limit)
+            self._last_decision_context = ctx
+            self._decision_surface_guard = True
+            try:
+                draft = self.compute_decisions(ctx)
+            finally:
+                self._decision_surface_guard = False
+            if not isinstance(draft, DecisionDraft):
+                raise TypeError(
+                    f"{self.__class__.__name__}.compute_decisions(ctx) must return "
+                    "ctx.decisions(...), not a raw array/object."
+                )
+            close = ctx.target.series("close").to_numpy(dtype=float)
+            compiled = compile_decision_draft(
+                draft,
+                close,
+                runtime_profile=ctx.runtime_profile,
+                execution_constraints=ctx.execution_constraints,
+            )
+            self._last_compiled_output = compiled
+            return compiled
+
+        if self.uses_legacy_signal_contract():
+            profile = self.runtime_profile()
+            positions, dates, prices = validate_signal_output(
+                *self.compute_signals(),
+                profile=profile.profile,
+            )
+            compiled = legacy_output_to_compiled(
+                positions,
+                dates,
+                prices,
+                runtime_profile=profile,
+                execution_constraints=self.execution_constraints(),
+            )
+            self._last_compiled_output = compiled
+            return compiled
+
+        raise NotImplementedError(
+            f"{self.__class__.__name__} must implement either compute_decisions(ctx) "
+            "or compute_signals()."
+        )
 
     def research_context(self) -> dict:
         """Return the research-specific context payload injected by the evaluator."""
@@ -192,6 +294,7 @@ class StrategyEngine(ABC):
         fields: list[str] | None = None,
     ) -> pd.DataFrame:
         """Load a research-ready bar set for the target plus selected drivers."""
+        self._assert_raw_strategy_access_allowed("load_research_bars()")
         symbols = self._research_symbol_list(
             driver_tickers=driver_tickers,
             include_target=include_target,
@@ -207,21 +310,14 @@ class StrategyEngine(ABC):
         effective_timeframe = timeframe or default_timeframe
         frames: list[pd.DataFrame] = []
         for symbol in symbols:
-            feed_cfg = {
-                "name": f"research:{symbol}",
-                "kind": "bars",
-                "adapter": adapter,
-                "symbol": symbol,
-                "timeframe": effective_timeframe,
-                "profile": profile,
-                **options,
-            }
-            frame = load_feed_frame(
-                feed_cfg,
-                strategy_id=(self.context or {}).get("id"),
+            frame = self._load_research_symbol_bars(
+                symbol,
+                adapter=adapter,
+                timeframe=effective_timeframe,
+                profile=profile,
+                options=options,
                 start=effective_start,
                 end=end,
-                timeframe=effective_timeframe,
                 limit=limit,
                 fields=fields,
             )
@@ -231,8 +327,45 @@ class StrategyEngine(ABC):
             return pd.DataFrame(columns=["timestamp", "symbol", *(fields or [])])
         bars = pd.concat(frames, ignore_index=True)
         bars["timestamp"] = pd.to_datetime(bars["timestamp"], utc=True, errors="coerce")
-        bars = bars.dropna(subset=["timestamp"]).sort_values(["timestamp", "symbol"])
+        bars = bars.dropna(subset=["timestamp"]).copy()
+        if "symbol" in bars.columns:
+            bars["symbol"] = pd.Categorical(bars["symbol"], categories=symbols, ordered=True)
+        bars = bars.sort_values(["timestamp", "symbol"]).reset_index(drop=True)
+        if "symbol" in bars.columns:
+            bars["symbol"] = bars["symbol"].astype(str)
         return bars.reset_index(drop=True)
+
+    def _load_research_symbol_bars(
+        self,
+        symbol: str,
+        *,
+        adapter: str,
+        timeframe: str,
+        profile: str,
+        options: dict[str, object],
+        start=None,
+        end=None,
+        limit: int | None = None,
+        fields: list[str] | None = None,
+    ) -> pd.DataFrame:
+        feed_cfg = {
+            "name": f"research:{symbol}",
+            "kind": "bars",
+            "adapter": adapter,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "profile": profile,
+            **options,
+        }
+        return load_feed_frame(
+            feed_cfg,
+            strategy_id=(self.context or {}).get("id"),
+            start=start,
+            end=end,
+            timeframe=timeframe,
+            limit=limit,
+            fields=fields,
+        )
 
     def research_close_frame(
         self,
@@ -247,6 +380,7 @@ class StrategyEngine(ABC):
         limit: int | None = 600,
     ) -> pd.DataFrame:
         """Load a close-price frame ordered by target then driver ticker selection."""
+        self._assert_raw_strategy_access_allowed("research_close_frame()")
         symbols = self._research_symbol_list(
             driver_tickers=driver_tickers,
             include_target=include_target,
@@ -304,6 +438,7 @@ class StrategyEngine(ABC):
             - "target_only": keep timestamps where the target is present and leave
               driver gaps explicit for the engine to handle intentionally.
         """
+        self._assert_raw_strategy_access_allowed("research_target_driver_frame()")
         target = self.research_target_ticker()
         if not target:
             raise ValueError("Research target ticker is not available in the injected context.")
@@ -362,6 +497,48 @@ class StrategyEngine(ABC):
             "and load them with load_bars() / load_feed()."
         )
 
+    def _runtime_load_bars(
+        self,
+        symbols: list[str] | None = None,
+        *,
+        start=None,
+        end=None,
+        timeframe: str | None = None,
+        limit: int | None = None,
+        fields: list[str] | None = None,
+    ) -> pd.DataFrame:
+        bars = self._runtime_load_feed(
+            "primary",
+            start=start,
+            end=end,
+            timeframe=timeframe,
+            limit=limit,
+            fields=fields,
+        )
+        if symbols is None:
+            return bars
+        return bars[bars["symbol"].isin(symbols)].reset_index(drop=True)
+
+    def _runtime_load_feed(
+        self,
+        name: str,
+        *,
+        start=None,
+        end=None,
+        timeframe: str | None = None,
+        limit: int | None = None,
+        fields: list[str] | None = None,
+    ) -> pd.DataFrame:
+        return load_declared_feed(
+            self,
+            name,
+            start=start,
+            end=end,
+            timeframe=timeframe,
+            limit=limit,
+            fields=fields,
+        )
+
     def load_bars(
         self,
         symbols: list[str] | None = None,
@@ -372,7 +549,8 @@ class StrategyEngine(ABC):
         limit: int | None = None,
         fields: list[str] | None = None,
     ) -> pd.DataFrame:
-        bars = self.load_feed(
+        self._assert_raw_strategy_access_allowed("load_bars()")
+        bars = self._runtime_load_feed(
             "primary",
             start=start,
             end=end,
@@ -394,8 +572,8 @@ class StrategyEngine(ABC):
         limit: int | None = None,
         fields: list[str] | None = None,
     ) -> pd.DataFrame:
-        return load_declared_feed(
-            self,
+        self._assert_raw_strategy_access_allowed("load_feed()")
+        return self._runtime_load_feed(
             name,
             start=start,
             end=end,
@@ -413,7 +591,8 @@ class StrategyEngine(ABC):
         method: str | None = None,
         allow_gaps: bool = True,
     ) -> pd.Series:
-        frame = self.load_feed(name)
+        self._assert_raw_strategy_access_allowed("feed_series()")
+        frame = self._runtime_load_feed(name)
         feed_cfg = ((self.context or {}).get("_feeds") or {}).get(name) or {}
         kind = feed_cfg.get("kind")
         if kind == "series":
@@ -439,6 +618,7 @@ class StrategyEngine(ABC):
         method: str | None = "ffill",
         allow_gaps: bool = True,
     ) -> pd.Series:
+        self._assert_raw_strategy_access_allowed("align_series()")
         profile = ((self.context or {}).get("_data_contract") or {}).get("profile", "daily")
         return align_series_to_dates(
             series,
@@ -462,39 +642,62 @@ class StrategyEngine(ABC):
             profile=profile,
         )
 
-    @abstractmethod
+    def latest_decision_trace(self) -> list[dict]:
+        """Return the most recent decision-context read trace."""
+        if self._last_decision_context is None:
+            return []
+        return self._last_decision_context.trace_entries()
+
+    def _assert_raw_strategy_access_allowed(self, method_name: str) -> None:
+        if self._decision_surface_guard:
+            raise RuntimeError(
+                f"{method_name} is not available inside compute_decisions(); "
+                "read market data through DecisionContext instead."
+            )
+
+    def compute_decisions(self, ctx: DecisionContext) -> DecisionDraft:
+        """Preferred branch contract.
+
+        Subclasses should return ``ctx.decisions(next_position)``.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement compute_decisions(ctx)."
+        )
+
     def compute_signals(
         self,
     ) -> tuple[np.ndarray, pd.DatetimeIndex, np.ndarray]:
-        """Compute full signal history.
+        """Legacy signal contract kept during the rollout."""
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement compute_signals(). "
+            "Prefer compute_decisions(ctx) for new branch engines."
+        )
 
-        Returns:
-            Tuple of (positions, dates, prices) where:
-                positions: np.ndarray of daily position sizes (0=flat, 1=long).
-                    IMPORTANT: positions[t] must be decided using only data through
-                    day t-1. Apply .shift(1) to any indicators before using them
-                    to determine positions. This prevents look-ahead bias.
-                dates: pd.DatetimeIndex of trading dates
-                prices: np.ndarray of daily closing prices
-        """
-
-    @abstractmethod
     def get_latest_signal(self) -> dict:
-        """Return the most recent signal as a dict.
-
-        Must include at least a 'position' key.
-        """
+        """Return the most recent effective and intended position."""
+        compiled = self.compute_runtime_output()
+        if len(compiled.decision_index) == 0:
+            return {"position": 0.0, "next_position": 0.0, "date": "not-run"}
+        return {
+            "position": float(compiled.positions[-1]),
+            "next_position": float(compiled.next_position[-1]),
+            "date": str(compiled.decision_index[-1].date()),
+        }
 
     def get_paper_signal(self, *, as_of=None) -> dict:
         """Return the next position decided at the close of ``as_of``.
 
-        Engines can override this to support incrementally appending live paper-trading rows.
-        The returned dict must include at least ``next_position``.
+        Engines can override this for a cheaper incremental path. The default
+        implementation re-runs the engine up to ``as_of`` and returns the last
+        compiled ``next_position``.
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement paper trading. "
-            "Add get_paper_signal(as_of=...) to the engine."
-        )
+        compiled = self.compute_runtime_output(end=as_of)
+        if len(compiled.decision_index) == 0:
+            return {"next_position": 0.0, "date": "not-run"}
+        return {
+            "next_position": float(compiled.next_position[-1]),
+            "date": str(compiled.decision_index[-1].date()),
+        }
 
     def _research_symbol_list(
         self,

@@ -256,6 +256,21 @@ def _normalize_strategy_runtime(strategy: dict[str, Any], settings: dict[str, An
         )
     normalized["_feeds"] = feeds
     normalized["_data_contract"] = {"profile": profile}
+    normalized["_runtime_profile"] = {
+        "profile": profile,
+        "target": strategy.get("asset"),
+        "decision_event": "bar_close",
+        "execution_delay_bars": 1,
+        "return_basis": "close_to_close",
+    }
+    max_abs_position = (settings.get("execution") or {}).get("max_abs_position")
+    execution_constraints = {
+        "long_only": bool(strategy.get("long_only", False)),
+    }
+    if max_abs_position is not None:
+        max_value = float(max_abs_position)
+        execution_constraints["position_bounds"] = [-max_value, max_value]
+    normalized["_execution_constraints"] = execution_constraints
     return normalized
 
 

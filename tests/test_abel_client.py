@@ -1,10 +1,11 @@
 """Tests for Abel client helpers and example integration."""
 
+import json
 import requests
 import pandas as pd
 
 from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
-from examples.causal_demo.engine import CausalDemoEngine, resolve_price_column
+from examples.causal_demo.engine import CausalDemoEngine, GRAPH_PATH, resolve_price_column
 
 
 def test_normalize_public_node_id_ethusd():
@@ -19,11 +20,73 @@ def test_resolve_price_column_prefers_close():
     assert resolve_price_column(df, "volume") == "volume"
 
 
-def test_causal_demo_runs_with_default_parent_metadata():
-    engine = CausalDemoEngine()
-    positions, dates, prices = engine.compute_signals()
-    assert len(positions) == len(dates) == len(prices)
-    assert positions[-1] >= 0.0
+def _build_causal_demo_context(tmp_path):
+    with open(GRAPH_PATH, encoding="utf-8") as handle:
+        graph = json.load(handle)
+
+    dates = pd.bdate_range("2025-01-01", periods=40, tz="UTC")
+    target = pd.DataFrame(
+        {
+            "timestamp": dates.astype(str),
+            "close": [10.0 + 0.12 * i + ((i % 5) - 2) * 0.08 for i in range(len(dates))],
+        }
+    )
+    primary_path = tmp_path / "tonusd.csv"
+    target.to_csv(primary_path, index=False)
+
+    feeds = {
+        "primary": {
+            "name": "primary",
+            "kind": "bars",
+            "adapter": "csv",
+            "path": str(primary_path),
+            "symbol": "TONUSD",
+            "timeframe": "1d",
+            "profile": "daily",
+        }
+    }
+    for idx, item in enumerate(graph.get("parents", [])):
+        ticker = item["ticker"] if isinstance(item, dict) else str(item)
+        feed_path = tmp_path / f"{ticker.lower()}.csv"
+        frame = pd.DataFrame(
+            {
+                "timestamp": dates.astype(str),
+                "close": [
+                    20.0 + idx + 0.07 * i + ((i + idx) % 4 - 1.5) * 0.05
+                    for i in range(len(dates))
+                ],
+            }
+        )
+        frame.to_csv(feed_path, index=False)
+        feeds[ticker] = {
+            "name": ticker,
+            "kind": "bars",
+            "adapter": "csv",
+            "path": str(feed_path),
+            "symbol": ticker,
+            "timeframe": "1d",
+            "profile": "daily",
+        }
+
+    return {
+        "_data_contract": {"profile": "daily"},
+        "_runtime_profile": {
+            "profile": "daily",
+            "target": "TONUSD",
+            "decision_event": "bar_close",
+            "execution_delay_bars": 1,
+            "return_basis": "close_to_close",
+        },
+        "_execution_constraints": {"position_bounds": [0.0, 1.0], "long_only": True},
+        "_feeds": feeds,
+    }
+
+
+def test_causal_demo_runs_with_default_parent_metadata(tmp_path):
+    engine = CausalDemoEngine(context=_build_causal_demo_context(tmp_path))
+    compiled = engine.compute_runtime_output()
+    assert len(compiled.positions) == len(compiled.decision_index) == len(compiled.close_prices)
+    assert compiled.next_position[-1] >= 0.0
 
 
 def test_causal_demo_realistic_csv_mapping_demo(tmp_path):

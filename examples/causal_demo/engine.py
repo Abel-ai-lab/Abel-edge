@@ -1,16 +1,10 @@
-"""Causal voting strategy demo using Abel-discovered graph structure.
-
-The live Abel discovery flow currently returns graph membership, not per-edge
-lag/weight metadata. This demo therefore uses default lag/window settings for
-discovered parent nodes while still supporting manual overrides in JSON.
-"""
+"""DecisionContext causal voting demo using Abel-discovered graph structure."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from causal_edge.engine.base import StrategyEngine
@@ -22,105 +16,62 @@ DEFAULT_WINDOW = 5
 
 
 class CausalDemoEngine(StrategyEngine):
-    """Vote-based strategy using Abel causal graph structure."""
+    """Vote-based strategy using named parent feeds plus target history."""
 
-    def __init__(self, context: dict | None = None, n_days: int = 600) -> None:
+    def __init__(self, context: dict | None = None) -> None:
         super().__init__(context=context)
-        self.n_days = n_days
         with open(GRAPH_PATH, encoding="utf-8") as f:
             self.graph = json.load(f)
 
-    def compute_signals(self):
-        """Generate signals from causal graph components."""
+    def compute_decisions(self, ctx):
+        """Generate vote-based next-position intent from graph components."""
         components = [
             self._normalize_component(item, "parent") for item in self.graph.get("parents", [])
         ]
         components += [
             self._normalize_component(item, "child") for item in self.graph.get("children", [])
         ]
-        rng = np.random.default_rng(seed=55)
+        close = ctx.target.series("close").astype(float)
+        target_ret = close.pct_change().fillna(0.0)
 
-        # Synthetic target (TON-like crypto volatility)
-        target_ret = rng.normal(0.0004, 0.025, self.n_days)
-        target_prices = 5.0 * np.cumprod(1.0 + target_ret)
-        dates = pd.date_range(end="2026-01-01", periods=self.n_days, freq="B", tz="UTC")
-
-        # Generate correlated parent/child prices with realistic causal lags
-        component_returns = {}
-        for comp in components:
-            ticker = comp["ticker"]
-            tau = comp["lag"]
-            # Parent leads target by tau days — inject lagged correlation
-            noise = rng.normal(0, 0.02, self.n_days)
-            if comp["type"] == "parent":
-                # Parent return at t correlates with target return at t+tau
-                signal = np.zeros(self.n_days)
-                signal[: self.n_days - tau] = target_ret[tau:] * 0.15
-                component_returns[ticker] = signal + noise
-            else:
-                # Child return at t+tau correlates with target return at t
-                signal = np.zeros(self.n_days)
-                signal[tau:] = target_ret[: self.n_days - tau] * 0.15
-                component_returns[ticker] = signal + noise
-
-        # Compute per-component directional signals
         sig_matrix = []
+        available = set(ctx.available_feeds())
         for comp in components:
             ticker = comp["ticker"]
             tau = comp["lag"]
             win = comp["window"]
-            ret = pd.Series(component_returns[ticker])
-
             if comp["type"] == "parent":
-                # Parent signal: direction of parent's recent returns, shifted by tau
-                if win > 1:
-                    sig = np.sign(ret.rolling(win).sum().shift(tau)).values
-                else:
-                    sig = np.sign(ret.shift(tau)).values
+                if ticker not in available:
+                    continue
+                source = ctx.feed(ticker).asof_series("close").astype(float).pct_change().fillna(0.0)
             else:
-                # Child signal: direction of target's recent returns, shifted by tau
-                tr = pd.Series(target_ret)
-                if win > 1:
-                    sig = np.sign(tr.rolling(win).sum().shift(tau)).values
-                else:
-                    sig = np.sign(tr.shift(tau)).values
+                source = target_ret
+            signal = source.rolling(win, min_periods=win).sum().shift(tau)
+            sig_matrix.append(signal.fillna(0.0).apply(_sign_vote).to_numpy(dtype=float))
 
-            sig_matrix.append(np.nan_to_num(sig, nan=0.0))
+        if not sig_matrix:
+            return ctx.decisions(pd.Series(0.0, index=close.index, dtype=float))
 
-        sig_matrix = np.array(sig_matrix)  # (n_components, n_days)
-
-        # Vote² sizing with conviction threshold
-        n_up = (sig_matrix > 0).sum(axis=0)
-        n_down = (sig_matrix < 0).sum(axis=0)
-        n_active = (sig_matrix != 0).sum(axis=0)
-        vote_frac = np.divide(
+        sig_frame = pd.DataFrame(sig_matrix).to_numpy(dtype=float)
+        n_up = (sig_frame > 0).sum(axis=0)
+        n_down = (sig_frame < 0).sum(axis=0)
+        n_active = (sig_frame != 0).sum(axis=0)
+        vote_frac = pd.Series(
             n_up,
-            n_active,
-            out=np.full(self.n_days, 0.5, dtype=float),
-            where=n_active > 0,
+            index=close.index,
+            dtype=float,
         )
+        active_mask = n_active > 0
+        vote_frac.loc[active_mask] = vote_frac.loc[active_mask] / n_active[active_mask]
+        vote_frac.loc[~active_mask] = 0.5
 
-        positions = np.zeros(self.n_days)
+        next_position = pd.Series(0.0, index=close.index, dtype=float)
         bull = n_up > n_down
-        positions[bull] = vote_frac[bull] ** 2
-
-        # Conviction filter: go flat if vote not strong enough
+        next_position.loc[bull] = vote_frac.loc[bull] ** 2
         weak = bull & (vote_frac < CONVICTION_MIN)
-        positions[weak] = 0.0
-
-        # Long-only (no short in demo)
-        positions = np.maximum(positions, 0.0)
-
-        return self.finalize_signals(positions, dates, target_prices)
-
-    def get_latest_signal(self):
-        """Return latest causal voting signal."""
-        positions, dates, prices = self.compute_signals()
-        return {
-            "position": float(positions[-1]),
-            "date": str(dates[-1].date()),
-            "price": float(prices[-1]),
-        }
+        next_position.loc[weak] = 0.0
+        next_position = next_position.clip(lower=0.0, upper=1.0)
+        return ctx.decisions(next_position)
 
     def _normalize_component(self, component: str | dict, default_role: str) -> dict:
         if isinstance(component, str):
@@ -155,3 +106,11 @@ def resolve_price_column(df: pd.DataFrame, field: str) -> str:
             return "volume"
         raise ValueError("Volume data must contain 'volume' column.")
     raise ValueError(f"Unsupported Abel field '{field}'.")
+
+
+def _sign_vote(value: float) -> float:
+    if value > 0:
+        return 1.0
+    if value < 0:
+        return -1.0
+    return 0.0

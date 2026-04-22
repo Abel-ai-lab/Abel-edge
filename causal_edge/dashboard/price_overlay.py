@@ -12,25 +12,18 @@ def _fetch_price_overlay_from_engine(s_cfg: dict) -> dict | None:
     try:
         engine_cls = _load_engine(s_cfg["engine"])
         engine = engine_cls(context=s_cfg)
-        signal_data = engine.compute_signals()
+        compiled = engine.compute_runtime_output()
     except Exception:
         return None
 
-    if not isinstance(signal_data, tuple):
+    if len(compiled.decision_index) == 0 or len(compiled.close_prices) == 0:
         return None
 
-    if len(signal_data) == 3:
-        _, dates, prices = signal_data
-    elif len(signal_data) == 4:
-        _, dates, _, prices = signal_data
-    else:
-        return None
-
-    if dates is None or prices is None or len(dates) == 0 or len(prices) == 0:
-        return None
-
-    dates = pd.DatetimeIndex(dates)
-    closes = pd.Series(prices, index=dates, dtype=float)
+    closes = pd.Series(
+        compiled.close_prices,
+        index=pd.DatetimeIndex(compiled.decision_index),
+        dtype=float,
+    )
     closes = closes.sort_index().drop_duplicates(keep="last")
     returns = closes.pct_change().fillna(0.0)
     return {

@@ -23,6 +23,10 @@ def read_trade_log(path: str | Path) -> pd.DataFrame:
     df = pd.read_csv(path)
     if "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"], utc=True, format="mixed")
+    if "decision_time" in df.columns:
+        df["decision_time"] = pd.to_datetime(df["decision_time"], utc=True, format="mixed")
+    if "effective_time" in df.columns:
+        df["effective_time"] = pd.to_datetime(df["effective_time"], utc=True, format="mixed")
     return df
 
 
@@ -33,6 +37,8 @@ def write_trade_log(
     positions: np.ndarray,
     path: str | Path,
     source: str = "backfill",
+    decision_times: pd.DatetimeIndex | None = None,
+    effective_times: pd.DatetimeIndex | None = None,
     close_prices: np.ndarray | None = None,
     next_positions: np.ndarray | None = None,
     gross_pnl: np.ndarray | None = None,
@@ -61,6 +67,10 @@ def write_trade_log(
             "source": source,
         }
     )
+    if decision_times is not None:
+        df["decision_time"] = decision_times
+    if effective_times is not None:
+        df["effective_time"] = effective_times
     if close_prices is not None:
         df["close"] = close_prices
     if next_positions is not None:

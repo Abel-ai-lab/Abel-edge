@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import math
 import shutil
 from pathlib import Path
+
+import pandas as pd
 
 
 def scaffold_project(name: str) -> Path:
@@ -25,63 +28,61 @@ def scaffold_project(name: str) -> Path:
             f"Choose a different name or remove the existing directory."
         )
 
-    # Create directory structure
     root.mkdir()
-    (root / "strategies" / "sma_crossover").mkdir(parents=True)
-    (root / "strategies" / "momentum_ml").mkdir(parents=True)
-    (root / "strategies" / "causal_demo").mkdir(parents=True)
+    strategy_names = ("sma_crossover", "momentum_ml", "feed_overlay_demo")
+    for strategy_name in strategy_names:
+        (root / "strategies" / strategy_name).mkdir(parents=True)
     (root / "data").mkdir()
-    (root / "data" / ".gitkeep").write_text("", encoding="utf-8")
+    _write_demo_data(root / "data")
 
-    # Copy example engines + causal graph data
     examples_dir = Path(__file__).parent.parent / "examples"
-    for name_dir in ("sma_crossover", "momentum_ml", "causal_demo"):
-        src = examples_dir / name_dir / "engine.py"
-        dst = root / "strategies" / name_dir / "engine.py"
+    for strategy_name in strategy_names:
+        src = examples_dir / strategy_name / "engine.py"
+        dst = root / "strategies" / strategy_name / "engine.py"
         if src.exists():
             shutil.copy2(src, dst)
 
-    # Copy causal graph JSON
-    graph_src = examples_dir / "causal_demo" / "causal_graph.json"
-    if graph_src.exists():
-        shutil.copy2(graph_src, root / "strategies" / "causal_demo" / "causal_graph.json")
-
-    # Fallback if examples not found (pip install without source tree)
-    if not (root / "strategies" / "sma_crossover" / "engine.py").exists():
-        (root / "strategies" / "sma_crossover" / "engine.py").write_text(
-            _SMA_ENGINE_SRC,
-            encoding="utf-8",
-        )
-
-    if not (root / "strategies" / "causal_demo" / "causal_graph.json").exists():
-        (root / "strategies" / "causal_demo" / "causal_graph.json").write_text(
-            _CAUSAL_GRAPH_JSON,
-            encoding="utf-8",
-        )
+    _write_if_missing(root / "strategies" / "sma_crossover" / "engine.py", _SMA_ENGINE_SRC)
+    _write_if_missing(root / "strategies" / "momentum_ml" / "engine.py", _MOMENTUM_ML_ENGINE_SRC)
+    _write_if_missing(
+        root / "strategies" / "feed_overlay_demo" / "engine.py",
+        _FEED_OVERLAY_ENGINE_SRC,
+    )
 
     (root / "strategies" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "strategies" / "sma_crossover" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "strategies" / "momentum_ml" / "__init__.py").write_text("", encoding="utf-8")
-    (root / "strategies" / "causal_demo" / "__init__.py").write_text("", encoding="utf-8")
+    for strategy_name in strategy_names:
+        (root / "strategies" / strategy_name / "__init__.py").write_text("", encoding="utf-8")
 
-    # strategies.yaml
     (root / "strategies.yaml").write_text(_STRATEGIES_YAML, encoding="utf-8")
-
-    # .env.example
     (root / ".env.example").write_text(_ENV_EXAMPLE, encoding="utf-8")
-
-    # CLAUDE.md
     (root / "CLAUDE.md").write_text(_CLAUDE_MD, encoding="utf-8")
-
-    # AGENTS.md
     (root / "AGENTS.md").write_text(_AGENTS_MD, encoding="utf-8")
 
     return root
 
 
+def _write_demo_data(data_dir: Path) -> None:
+    dates = pd.date_range("2025-01-01", periods=180, freq="B")
+    target_rows = ["timestamp,close"]
+    driver_rows = ["timestamp,close"]
+    scale_rows = ["timestamp,value"]
+
+    for i, ts in enumerate(dates):
+        target_close = 100.0 + 0.18 * i + 3.4 * math.sin(i / 6.0) + 1.6 * math.cos(i / 11.0)
+        driver_close = 78.0 + 0.14 * i + 2.6 * math.sin((i - 2) / 7.0) + 1.2 * math.cos(i / 13.0)
+        risk_scale = 0.55 + 0.25 * math.sin(i / 9.0)
+        target_rows.append(f"{ts.date().isoformat()},{target_close:.4f}")
+        driver_rows.append(f"{ts.date().isoformat()},{driver_close:.4f}")
+        scale_rows.append(f"{ts.date().isoformat()},{max(0.15, min(1.0, risk_scale)):.4f}")
+
+    (data_dir / "demo_target.csv").write_text("\n".join(target_rows) + "\n", encoding="utf-8")
+    (data_dir / "demo_driver.csv").write_text("\n".join(driver_rows) + "\n", encoding="utf-8")
+    (data_dir / "demo_scale.csv").write_text("\n".join(scale_rows) + "\n", encoding="utf-8")
+
+
 _STRATEGIES_YAML = """\
 # causal-edge project configuration
-# Standalone causal-edge project with synthetic demo strategies.
+# Standalone causal-edge project with local sample-data strategies.
 # Run: causal-edge run && causal-edge dashboard && causal-edge validate
 
 settings:
@@ -89,7 +90,7 @@ settings:
   port: 8080
   theme: dark
   price_data:
-    default_adapter: abel
+    default_adapter: csv
     default_timeframe: 1d
 
 strategies:
@@ -100,6 +101,10 @@ strategies:
     engine: strategies.sma_crossover.engine
     trade_log: "data/trade_log_sma_crossover.csv"
     paper_log: "data/paper_log_sma_crossover.csv"
+    price_data:
+      adapter: csv
+      symbol: DEMO
+      path: data/demo_target.csv
 
   - id: momentum_ml
     name: "Momentum ML"
@@ -108,14 +113,33 @@ strategies:
     engine: strategies.momentum_ml.engine
     trade_log: "data/trade_log_momentum_ml.csv"
     paper_log: "data/paper_log_momentum_ml.csv"
+    price_data:
+      adapter: csv
+      symbol: DEMO
+      path: data/demo_target.csv
 
-  - id: causal_demo
-    name: "Causal Voting (TON)"
-    asset: TON
+  - id: feed_overlay_demo
+    name: "Feed Overlay Demo"
+    asset: DEMO
     color: "#30D158"
-    engine: strategies.causal_demo.engine
-    trade_log: "data/trade_log_causal_demo.csv"
-    paper_log: "data/paper_log_causal_demo.csv"
+    engine: strategies.feed_overlay_demo.engine
+    trade_log: "data/trade_log_feed_overlay_demo.csv"
+    paper_log: "data/paper_log_feed_overlay_demo.csv"
+    price_data:
+      adapter: csv
+      symbol: DEMO
+      path: data/demo_target.csv
+    feeds:
+      btc_ref:
+        kind: bars
+        adapter: csv
+        path: data/demo_driver.csv
+        symbol: DEMO_DRV
+      risk_scale:
+        kind: series
+        adapter: csv
+        path: data/demo_scale.csv
+        field: value
 """
 
 _ENV_EXAMPLE = """\
@@ -128,9 +152,6 @@ _ENV_EXAMPLE = """\
 
 # Optional: override the public CAP base URL
 # ABEL_CAP_BASE_URL=https://cap.abel.ai/api
-
-# Optional: point real-price strategies at a local CSV instead of Abel
-# PRICE_DATA_SOURCE=csv
 """
 
 _CLAUDE_MD = """\
@@ -138,8 +159,10 @@ _CLAUDE_MD = """\
 
 ## Constraints
 - strategies.yaml is the single source of truth
-- All features must use shift(1) — zero look-ahead tolerance
-- strategies/ must not import causal_edge internals (except engine base)
+- implement `compute_decisions(self, ctx)` for new strategies
+- read market data through `DecisionContext`
+- return `ctx.decisions(next_position)`
+- use `causal-edge evaluate --workdir strategies/<id>` when you need semantic evidence
 
 ## Commands
 causal-edge run         # run strategies, write trade logs
@@ -151,8 +174,8 @@ causal-edge status      # show strategy summary
 _AGENTS_MD = """\
 # Project — Agent Entry Point
 
-This is a standalone `causal-edge` project scaffold with synthetic demo
-strategies. It is not an Abel-alpha branch workspace.
+This is a standalone `causal-edge` project scaffold with local sample data.
+It is not an Abel-alpha branch workspace.
 
 ## I want to...
 
@@ -160,73 +183,140 @@ strategies. It is not an Abel-alpha branch workspace.
     causal-edge run && causal-edge dashboard && causal-edge validate
 
 ### Add a strategy
-1. Create strategies/my_strategy/engine.py implementing StrategyEngine
-2. Add entry to strategies.yaml
-3. Run: causal-edge run --strategy my_strategy
-4. Run: causal-edge validate --strategy my_strategy
+1. Create `strategies/my_strategy/engine.py`
+2. Implement `compute_decisions(self, ctx)`
+3. Add an entry to `strategies.yaml`
+4. Run `causal-edge run --strategy my_strategy`
+5. Run `causal-edge validate --strategy my_strategy`
 
-### Fix a failing validation
-    causal-edge validate --verbose
-See the failure→fix mapping in the causal-edge docs.
+### Inspect runtime semantics for one strategy
+    causal-edge debug-evaluate --workdir strategies/my_strategy
 
 ### View the dashboard
     causal-edge dashboard && open dashboard.html
+
+## Authoring surface
+
+- primary target data: `ctx.target.series("close")`
+- declared auxiliary feeds: `ctx.feed(name).native_series(...)` or `ctx.feed(name).asof_series(...)`
+- point inspection: `ctx.points()`
+- strategy output: `ctx.decisions(next_position)`
 """
 
 _SMA_ENGINE_SRC = """\
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-
 from causal_edge.engine.base import StrategyEngine
 
 
 class SMAEngine(StrategyEngine):
-    def __init__(self, context=None, n_days=500):
+    def __init__(self, context=None):
         super().__init__(context=context)
-        self.n_days = n_days
         self.fast = 10
         self.slow = 30
 
-    def compute_signals(self):
-        rng = np.random.default_rng(42)
-        returns = rng.normal(0.0005, 0.02, self.n_days)
-        prices = 100.0 * np.cumprod(1.0 + returns)
-        dates = pd.date_range(
-            end=pd.Timestamp.now(tz="UTC").normalize(),
-            periods=self.n_days,
-            freq="B",
-            tz="UTC",
+    def compute_decisions(self, ctx):
+        close = ctx.target.series("close")
+        fast_ma = close.rolling(self.fast, min_periods=self.fast).mean()
+        slow_ma = close.rolling(self.slow, min_periods=self.slow).mean()
+        next_position = (fast_ma > slow_ma).astype(float).fillna(0.0)
+        if len(next_position) > 0:
+            next_position.iloc[: self.slow] = 0.0
+        return ctx.decisions(next_position)
+"""
+
+_MOMENTUM_ML_ENGINE_SRC = """\
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import GradientBoostingClassifier
+
+from causal_edge.engine.base import StrategyEngine
+
+
+class MomentumMLEngine(StrategyEngine):
+    def __init__(self, context=None):
+        super().__init__(context=context)
+        self.train_window = 126
+        self.retrain_every = 5
+
+    def compute_decisions(self, ctx):
+        close = ctx.target.series("close").astype(float)
+        returns = close.pct_change().fillna(0.0)
+        features = pd.DataFrame(
+            {
+                "ret_1d": returns,
+                "ret_5d": returns.rolling(5, min_periods=5).sum(),
+                "ret_20d": returns.rolling(20, min_periods=20).sum(),
+                "vol_20d": returns.rolling(20, min_periods=20).std(),
+                "sma_gap_10": close / close.rolling(10, min_periods=10).mean() - 1.0,
+                "rsi_14": _rsi(returns, 14),
+            },
+            index=close.index,
         )
-        fast_ma = pd.Series(prices).rolling(self.fast).mean().shift(1).values
-        slow_ma = pd.Series(prices).rolling(self.slow).mean().shift(1).values
-        positions = np.where(fast_ma > slow_ma, 1.0, 0.0)
-        positions[:self.slow + 1] = 0.0
-        return self.finalize_signals(positions, dates, prices)
+        target = (returns.shift(-1) > 0).astype(int)
 
-    def get_latest_signal(self):
-        positions, dates, prices = self.compute_signals()
-        return {"position": float(positions[-1]), "date": str(dates[-1].date())}
+        next_position = pd.Series(0.0, index=close.index, dtype=float)
+        start = max(self.train_window, 25)
+        last_model = None
+        last_train_day = 0
+
+        for t in range(start, len(close)):
+            if last_model is None or (t - last_train_day) >= self.retrain_every:
+                train_start = max(0, t - self.train_window)
+                train_slice = features.iloc[train_start:t]
+                target_slice = target.iloc[train_start:t]
+                valid = (~train_slice.isna().any(axis=1)) & target_slice.notna()
+                if int(valid.sum()) < 30:
+                    continue
+                X_train = train_slice.loc[valid].to_numpy()
+                y_train = target_slice.loc[valid].to_numpy()
+                if len(np.unique(y_train)) < 2:
+                    continue
+                model = GradientBoostingClassifier(
+                    n_estimators=50,
+                    max_depth=3,
+                    learning_rate=0.1,
+                    random_state=42,
+                )
+                model.fit(X_train, y_train)
+                last_model = model
+                last_train_day = t
+
+            x_t = features.iloc[t].to_numpy(dtype=float).reshape(1, -1)
+            if np.isnan(x_t).any():
+                continue
+            prob = last_model.predict_proba(x_t)[0]
+            next_position.iloc[t] = 1.0 if prob[1] > 0.55 else 0.0
+
+        return ctx.decisions(next_position)
+
+
+def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0.0).rolling(period).mean()
+    loss = (-delta.where(delta < 0, 0.0)).rolling(period).mean()
+    rs = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
 """
 
-_CAUSAL_GRAPH_JSON = """\
-{
-  "target": "TONUSD",
-  "source": "Abel Causal Graph (cap.abel.ai)",
-  "description": "Causal neighborhood of TONUSD - 5 equity parents and 3 children discovered via Abel's causal graph API. Demo defaults use lag=1 and window=5 unless manually overridden.",
-  "parents": [
-    {"ticker": "GBLI", "field": "price", "type": "parent"},
-    {"ticker": "HSON", "field": "price", "type": "parent"},
-    {"ticker": "SITC", "field": "price", "type": "parent"},
-    {"ticker": "EVC", "field": "price", "type": "parent"},
-    {"ticker": "EAI", "field": "price", "type": "parent"}
-  ],
-  "children": [
-    {"ticker": "ESBA", "field": "price", "type": "child", "lag": 2},
-    {"ticker": "SIRI", "field": "price", "type": "child", "lag": 3},
-    {"ticker": "TVC", "field": "price", "type": "child", "lag": 2, "window": 8}
-  ],
-  "note": "To discover causal parents for other assets, use Abel API: causal-edge discover <TICKER>"
-}
+_FEED_OVERLAY_ENGINE_SRC = """\
+from __future__ import annotations
+
+from causal_edge.engine.base import StrategyEngine
+
+
+class FeedOverlayDemoEngine(StrategyEngine):
+    def compute_decisions(self, ctx):
+        btc_close = ctx.feed("btc_ref").asof_series("close").astype(float)
+        risk_scale = ctx.feed("risk_scale").asof_series("value").astype(float)
+        btc_trend = (btc_close > btc_close.rolling(2, min_periods=2).mean()).astype(float)
+        next_position = (risk_scale * btc_trend.fillna(0.0)).clip(lower=0.0, upper=1.0)
+        return ctx.decisions(next_position)
 """
+
+
+def _write_if_missing(path: Path, content: str) -> None:
+    if not path.exists():
+        path.write_text(content, encoding="utf-8")
