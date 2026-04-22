@@ -139,6 +139,36 @@ def verify_data(discovery_json, tickers, start, end, limit, env_path, output_jso
     raise SystemExit(0 if summary.get("error_count", 0) == 0 else 1)
 
 
+@click.command("probe-data")
+@click.option("--target-node", required=True, help="Target graph node anchoring the decision calendar")
+@click.option("--node-id", "node_ids", multiple=True, help="Graph node to probe (repeatable)")
+@click.option("--start", default=None, help="Requested history start date")
+@click.option("--end", default=None, help="Requested history end date")
+@click.option("--limit", default=500, show_default=True, help="Rows requested per asset probe")
+@click.option("--env-path", default=".env", show_default=True, help="Env file used to resolve Abel auth")
+@click.option("--output-json", default=None, help="Optional path for structured probe JSON")
+def probe_data(target_node, node_ids, start, end, limit, env_path, output_json):
+    """Probe graph-node availability and target overlap without running a strategy."""
+    from causal_edge.research.probes import probe_graph_inputs, render_probe_report, report_to_json
+
+    report = probe_graph_inputs(
+        node_ids=list(node_ids),
+        target_node=target_node,
+        start=start,
+        end=end,
+        limit=limit,
+        env_path=env_path,
+    )
+    if output_json:
+        output_path = Path(output_json)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(report_to_json(report), encoding="utf-8")
+    click.echo(render_probe_report(report))
+    if output_json:
+        click.echo(f"\nRaw JSON: {output_json}")
+    raise SystemExit(0)
+
+
 @click.command("validate-handoff")
 @click.argument("handoff_path")
 def validate_handoff(handoff_path):
