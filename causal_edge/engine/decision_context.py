@@ -60,9 +60,52 @@ class DecisionContext:
     def feed(self, name: str):
         return _DecisionFeedView(self, name)
 
+    def input(self, name: str):
+        return self.feed(name)
+
     def available_feeds(self) -> list[str]:
         feeds = (self.engine.context or {}).get("_feeds") or {}
         return sorted(str(name) for name in feeds.keys())
+
+    def available_inputs(self) -> list[str]:
+        return [name for name in self.available_feeds() if name != "primary"]
+
+    def input_specs(self) -> list[dict[str, Any]]:
+        feeds = (self.engine.context or {}).get("_feeds") or {}
+        specs: list[dict[str, Any]] = []
+        for name in self.available_inputs():
+            cfg = dict(feeds.get(name) or {})
+            cfg.setdefault("name", name)
+            cfg.setdefault("default_field", self._default_feed_field(name))
+            specs.append(cfg)
+        return specs
+
+    def inputs_frame(
+        self,
+        *names: str,
+        mode: str = "asof",
+        fields: dict[str, str] | None = None,
+    ) -> pd.DataFrame:
+        selected = list(names) if names else self.available_inputs()
+        if mode not in {"asof", "native"}:
+            raise DecisionContractError("inputs_frame(mode=...) must be 'asof' or 'native'.")
+        columns: list[pd.Series] = []
+        for name in selected:
+            field_name = (fields or {}).get(name)
+            view = self.input(name)
+            series = (
+                view.asof_series(field_name)
+                if mode == "asof"
+                else view.native_series(field_name)
+            )
+            columns.append(series.rename(name))
+        if not columns:
+            index = self.decision_index() if mode == "asof" else pd.DatetimeIndex([])
+            return pd.DataFrame(index=index)
+        frame = pd.concat(columns, axis=1)
+        if mode == "asof":
+            frame = frame.reindex(self.decision_index())
+        return frame
 
     def inspect_feed(self, name: str) -> dict[str, Any]:
         field = self._default_feed_field(name)
@@ -251,7 +294,7 @@ class _DecisionFeedView:
     def asof_series(self, field: str | None = None) -> pd.Series:
         field_name = field or self.ctx._default_feed_field(self.name)
         native = self.native_series(field_name)
-        aligned = native.reindex(self.ctx.decision_index()).ffill()
+        aligned = _align_asof_to_index(native, self.ctx.decision_index())
         self.ctx._record_trace(
             surface="feed.asof_series",
             feed=self.name,
@@ -284,6 +327,9 @@ class DecisionPoint:
 
     def feed(self, name: str):
         return _PointFeedView(self, name)
+
+    def input(self, name: str):
+        return self.feed(name)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -376,6 +422,15 @@ def _frame_to_series(frame: pd.DataFrame, *, field: str, feed_name: str) -> pd.S
         index=pd.DatetimeIndex(frame["timestamp"]),
         name=f"{feed_name}.{field}",
     )
+
+
+def _align_asof_to_index(series: pd.Series, target_index: pd.DatetimeIndex) -> pd.Series:
+    if series.empty or len(target_index) == 0:
+        return pd.Series(dtype=float, index=target_index, name=series.name)
+    expanded = series.reindex(series.index.union(target_index)).sort_index().ffill()
+    aligned = expanded.reindex(target_index)
+    aligned.name = series.name
+    return aligned
 
 
 def _to_trace_value(value) -> str | None:

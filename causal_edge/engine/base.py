@@ -53,6 +53,25 @@ class StrategyEngine(ABC):
         """Return the execution envelope for this run."""
         return execution_constraints_from_context(self.context)
 
+    def prepared_input_nodes(self) -> list[str]:
+        """Return prepared non-primary input feed names when present."""
+        feeds = (self.context or {}).get("_feeds") or {}
+        return sorted(
+            str(name)
+            for name in feeds.keys()
+            if str(name).strip() and str(name) != "primary"
+        )
+
+    def prepared_input_specs(self) -> list[dict]:
+        """Return prepared non-primary feed specs for authoring/debugging helpers."""
+        feeds = (self.context or {}).get("_feeds") or {}
+        specs: list[dict] = []
+        for name in self.prepared_input_nodes():
+            cfg = dict(feeds.get(name) or {})
+            cfg.setdefault("name", name)
+            specs.append(cfg)
+        return specs
+
     def decision_context(
         self,
         *,

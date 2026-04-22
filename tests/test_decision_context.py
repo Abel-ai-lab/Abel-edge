@@ -87,14 +87,19 @@ def test_batch_view_supports_feed_asof_and_inspection(tmp_path):
     class BatchEngine(StrategyEngine):
         def compute_decisions(self, ctx):
             assert ctx.available_feeds() == ["driver", "primary"]
+            assert ctx.available_inputs() == ["driver"]
             inspect = ctx.inspect_feed("driver")
             assert inspect["rows"] == 5
             close = ctx.target.series("close")
-            driver = ctx.feed("driver").asof_series("close")
+            assert ctx.input_specs()[0]["name"] == "driver"
+            driver = ctx.input("driver").asof_series("close")
+            frame = ctx.inputs_frame("driver")
+            assert list(frame.columns) == ["driver"]
             next_position = (close > driver).astype(float)
             return ctx.decisions(next_position)
 
     engine = BatchEngine(context=_context_with_csv_feeds(tmp_path))
+    assert engine.prepared_input_nodes() == ["driver"]
     compiled = engine.compute_runtime_output()
 
     assert list(compiled.next_position.round(2)) == [1.0, 1.0, 1.0, 1.0, 1.0]
@@ -181,6 +186,38 @@ def test_feed_default_field_can_follow_volume_nodes(tmp_path):
             },
         }
     )
+
+    compiled = engine.compute_runtime_output()
+
+    assert list(compiled.next_position.round(2)) == [0.0, 0.0]
+
+
+def test_asof_alignment_preserves_intermediate_native_observations(tmp_path):
+    class AlignmentEngine(StrategyEngine):
+        def compute_decisions(self, ctx):
+            driver = ctx.input("driver").asof_series("close")
+            assert list(driver.astype(float)) == [10.0, 12.0]
+            return ctx.decisions([0.0, 0.0])
+
+    context = _context_with_csv_feeds(tmp_path)
+    primary_path = Path(context["_feeds"]["primary"]["path"])
+    driver_path = Path(context["_feeds"]["driver"]["path"])
+    _write_feed_csv(
+        primary_path,
+        [
+            ("2024-01-05T00:00:00Z", 100.0),
+            ("2024-01-08T00:00:00Z", 101.0),
+        ],
+    )
+    _write_feed_csv(
+        driver_path,
+        [
+            ("2024-01-05T00:00:00Z", 10.0),
+            ("2024-01-06T00:00:00Z", 11.0),
+            ("2024-01-07T00:00:00Z", 12.0),
+        ],
+    )
+    engine = AlignmentEngine(context=context)
 
     compiled = engine.compute_runtime_output()
 
