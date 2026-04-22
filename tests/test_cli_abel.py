@@ -145,6 +145,29 @@ def test_discover_ethusd_markov_blanket(monkeypatch, tmp_path):
     assert "roles: [spouse]" in result.output
 
 
+def test_discover_json_preserves_target_node_and_field_aware_items(monkeypatch, tmp_path):
+    class StubClient:
+        def discover_parents(self, *, node_id, limit, api_key):
+            assert node_id == "ETHUSD.price"
+            return [{"node_id": "BTCUSD.price"}]
+
+        def markov_blanket(self, *, node_id, limit, api_key):
+            assert node_id == "ETHUSD.price"
+            return [{"node_id": "ETHUSD.volume", "roles": ["sibling"]}]
+
+    from causal_edge.plugins.abel import discover as discover_module
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(discover_module, "require_api_key", lambda env_path=".env": "abel_test")
+    monkeypatch.setattr(discover_module, "AbelClient", StubClient)
+    result = CliRunner().invoke(main, ["discover", "ETHUSD.price", "--mode", "all", "--json"])
+
+    assert result.exit_code == 0, result.output
+    assert '"target_node": "ETHUSD.price"' in result.output
+    assert '"node_id": "BTCUSD.price"' in result.output
+    assert '"node_id": "ETHUSD.volume"' in result.output
+
+
 def test_discover_missing_api_key_fails(monkeypatch, tmp_path):
     from causal_edge.plugins.abel import discover as discover_module
     from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError
