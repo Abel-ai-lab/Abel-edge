@@ -222,3 +222,18 @@ def test_asof_alignment_preserves_intermediate_native_observations(tmp_path):
     compiled = engine.compute_runtime_output()
 
     assert list(compiled.next_position.round(2)) == [0.0, 0.0]
+
+
+def test_inputs_frame_supports_batch_feature_generation(tmp_path):
+    class BatchFeatureEngine(StrategyEngine):
+        def compute_decisions(self, ctx):
+            features = ctx.inputs_frame("driver")
+            signal = features["driver"].pct_change().fillna(0.0)
+            next_position = (signal > 0).astype(float)
+            return ctx.decisions(next_position)
+
+    engine = BatchFeatureEngine(context=_context_with_csv_feeds(tmp_path))
+    compiled = engine.compute_runtime_output()
+
+    assert len(compiled.next_position) == 5
+    assert float(compiled.next_position[0]) == 0.0
