@@ -22,6 +22,7 @@ from causal_edge.validation.gate import validate_strategy
 
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD", "UTC", "D", "B"}
 TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(USD)?$|^[A-Z0-9]{2,10}$|^[A-Z]{2,5}-[A-Z]{1,2}$")
+RUNTIME_FACTS_CONTRACT = "causal-edge.runtime-facts/v1"
 
 
 def compute_k(source_path: Path) -> tuple[int, list[str], list[int]]:
@@ -116,6 +117,7 @@ def run_preflight(
         "semantic": semantic,
     }
     _attach_semantic_artifacts(result, semantic=semantic, engine=prepared["engine"])
+    _attach_runtime_facts(result)
     return result
 
 
@@ -155,6 +157,7 @@ def run_evaluation(
         result["warnings"] = list(semantic["warnings"])
         result["semantic"] = semantic
         _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
+        _attach_runtime_facts(result)
         return result
 
     input_semantics = (
@@ -202,6 +205,7 @@ def run_evaluation(
     result["diagnostics"] = _build_runtime_diagnostics(result, frame)
     result["semantic"] = semantic
     _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
+    _attach_runtime_facts(result)
     return result
 
 
@@ -399,6 +403,87 @@ def _attach_semantic_artifacts(result: dict, *, semantic: dict, engine) -> None:
     semantic["sample_points"] = result["sample_points"]
 
 
+def _attach_runtime_facts(result: dict) -> None:
+    result["runtime_facts"] = _build_runtime_facts(result)
+
+
+def _build_runtime_facts(result: dict) -> dict:
+    diagnostics = result.get("diagnostics") if isinstance(result.get("diagnostics"), dict) else {}
+    semantic = result.get("semantic") if isinstance(result.get("semantic"), dict) else {}
+    prepared = semantic.get("prepared_inputs") if isinstance(semantic.get("prepared_inputs"), dict) else {}
+    trace = result.get("decision_trace") if isinstance(result.get("decision_trace"), list) else []
+    target_reads = sorted(
+        {
+            str(item.get("feed") or "")
+            for item in trace
+            if isinstance(item, dict)
+            and str(item.get("feed") or "")
+            and str(item.get("surface") or "").startswith("target.")
+        }
+    )
+    auxiliary_reads = sorted(
+        {
+            str(item.get("feed") or "")
+            for item in trace
+            if isinstance(item, dict)
+            and str(item.get("feed") or "")
+            and not str(item.get("surface") or "").startswith("target.")
+            and str(item.get("feed") or "") not in {"primary", "target", str((result.get("runtime_profile") or {}).get("target") or "")}
+        }
+    )
+    selected_inputs = [
+        str(item)
+        for item in (prepared.get("selected_inputs") or [])
+        if str(item).strip()
+    ]
+    traced_inputs = [
+        str(item)
+        for item in (prepared.get("traced_inputs") or auxiliary_reads)
+        if str(item).strip()
+    ]
+    issues = [
+        item
+        for item in (prepared.get("issues") or [])
+        if isinstance(item, dict)
+    ]
+    runtime_stage = str(diagnostics.get("runtime_stage") or "missing")
+    verdict = str(result.get("verdict") or "ERROR").upper()
+    validation_completed = runtime_stage == "validation" and verdict in {"PASS", "FAIL"}
+    return {
+        "contract": RUNTIME_FACTS_CONTRACT,
+        "verdict": verdict,
+        "semantic_verdict": str(semantic.get("verdict") or "missing").upper(),
+        "runtime_stage": runtime_stage,
+        "workflow_status": "evaluation_completed" if validation_completed else "not_completed",
+        "implementation_contract": result.get("implementation_contract", "unknown"),
+        "profile": result.get("profile", "unknown"),
+        "requested_window": result.get("requested_window") or {},
+        "effective_window": result.get("effective_window") or {},
+        "read_summary": {
+            "target_reads": target_reads,
+            "auxiliary_reads": sorted(set(traced_inputs or auxiliary_reads)),
+            "read_count": int(semantic.get("read_count") or len(trace)),
+            "decision_count": int(semantic.get("decision_count") or 0),
+        },
+        "signal_summary": diagnostics.get("signal") or {},
+        "metric_failures": _metric_failure_facts(result),
+        "prepared_inputs": {
+            "selected_inputs": selected_inputs,
+            "traced_inputs": sorted(set(traced_inputs)),
+            "effective_window": prepared.get("effective_window") or {},
+            "issues": issues,
+        },
+        "temporal_visibility": {
+            "issue_kinds": [
+                str(item.get("kind") or "").strip()
+                for item in issues
+                if str(item.get("kind") or "").strip()
+            ],
+            "has_error": any(str(item.get("severity") or "").lower() == "error" for item in issues),
+        },
+    }
+
+
 def _build_preflight_diagnostics(semantic: dict) -> dict:
     signal = semantic.get("signal") or _signal_summary(np.array([], dtype=float))
     failure_signature = "semantic_ready"
@@ -565,7 +650,7 @@ def _error(
         runtime_stage=runtime_stage,
         signal=signal,
     )
-    return {
+    result = {
         "verdict": "ERROR",
         "score": "0/0",
         "failures": [message],
@@ -577,12 +662,81 @@ def _error(
         "total_days": diagnostics["signal"]["total_days"],
         "diagnostics": diagnostics,
     }
+    _attach_runtime_facts(result)
+    return result
 
 
 def _format_failures(failures: list[str]) -> str:
     if not failures:
         return "- none"
     return "\n".join(f"- {failure}" for failure in failures)
+
+
+def _metric_failure_facts(result: dict) -> list[dict]:
+    metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
+    facts: list[dict] = []
+    for message in result.get("failures") or []:
+        text = str(message or "")
+        if match := re.search(r"T15 MaxDD ([0-9.]+)% > ([0-9.]+)%", text):
+            facts.append(
+                {
+                    "metric": "max_dd",
+                    "observed": float(match.group(1)) / 100.0,
+                    "threshold": float(match.group(2)) / 100.0,
+                    "comparison": "abs_gt",
+                    "profile": result.get("profile", "unknown"),
+                    "message": text,
+                }
+            )
+            continue
+        if match := re.search(r"T15 Lo (-?[0-9.]+) < (-?[0-9.]+)", text):
+            facts.append(
+                {
+                    "metric": "lo_adjusted",
+                    "observed": float(match.group(1)),
+                    "threshold": float(match.group(2)),
+                    "comparison": "lt",
+                    "profile": result.get("profile", "unknown"),
+                    "message": text,
+                }
+            )
+            continue
+        if match := re.search(r"T15 Omega (-?[0-9.]+) < (-?[0-9.]+)", text):
+            facts.append(
+                {
+                    "metric": "omega",
+                    "observed": float(match.group(1)),
+                    "threshold": float(match.group(2)),
+                    "comparison": "lt",
+                    "profile": result.get("profile", "unknown"),
+                    "message": text,
+                }
+            )
+            continue
+        if match := re.search(r"PositionIC (-?[0-9.]+) < (-?[0-9.]+)", text):
+            facts.append(
+                {
+                    "metric": "position_ic",
+                    "observed": float(match.group(1)),
+                    "threshold": float(match.group(2)),
+                    "comparison": "lt",
+                    "profile": result.get("profile", "unknown"),
+                    "message": text,
+                }
+            )
+            continue
+        if text.startswith("Return floor"):
+            facts.append(
+                {
+                    "metric": "total_return",
+                    "observed": metrics.get("total_return", 0),
+                    "threshold": None,
+                    "comparison": "lt",
+                    "profile": result.get("profile", "unknown"),
+                    "message": text,
+                }
+            )
+    return facts
 
 
 def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
@@ -604,13 +758,13 @@ def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
         hints.append("Prepared inputs stop before the evaluated decision tail, so late bars rely on stale auxiliary data.")
     elif signal["active_days"] == 0:
         failure_signature = "signal_always_flat"
-        hints.append("Positions never left zero. Check data readiness and threshold logic.")
+        hints.append("Positions never left zero during the effective evaluation window.")
     elif signal["unique_position_count"] <= 1 or signal["position_switches"] == 0:
         failure_signature = "constant_position"
-        hints.append("The engine produced only one position level. Check whether the signal ever changes sign.")
+        hints.append("The engine produced one position level and no position switches.")
     elif result.get("verdict") != "PASS" and abs(float(metrics.get("position_ic", 0) or 0)) < 1e-12:
         failure_signature = "zero_information_signal"
-        hints.append("position_ic stayed at 0. Inspect feature construction, alignment, and active-day coverage.")
+        hints.append("position_ic stayed at 0 for the evaluated decision frame.")
     elif result.get("verdict") != "PASS":
         failure_signature = "validation_failed"
         hints.append("The engine executed, but validation metrics did not clear the research gate.")
@@ -620,6 +774,7 @@ def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
         "failure_signature": failure_signature,
         "runtime_stage": "validation",
         "signal": signal,
+        "metric_failures": _metric_failure_facts(result),
         "hints": hints + [item.get("message", "") for item in (prepared.get("issues") or []) if item.get("message")],
     }
 
@@ -802,16 +957,36 @@ def _signal_summary(positions) -> dict:
         return {
             "active_days": 0,
             "total_days": 0,
+            "finite_days": 0,
+            "nonfinite_days": 0,
+            "nonzero_position_ratio": 0.0,
             "unique_position_count": 0,
             "unique_positions": [],
             "position_switches": 0,
         }
-    rounded = np.round(arr, 8)
+    finite = arr[np.isfinite(arr)]
+    nonfinite_days = int(arr.size - finite.size)
+    if finite.size == 0:
+        return {
+            "active_days": 0,
+            "total_days": int(arr.size),
+            "finite_days": 0,
+            "nonfinite_days": nonfinite_days,
+            "nonzero_position_ratio": 0.0,
+            "unique_position_count": 0,
+            "unique_positions": [],
+            "position_switches": 0,
+        }
+    rounded = np.round(finite, 8)
     unique_positions = sorted({float(value) for value in rounded.tolist()})
     switches = int(np.count_nonzero(np.abs(np.diff(rounded)) > 1e-8)) if len(rounded) > 1 else 0
+    active_days = int((np.abs(finite) > 0.01).sum())
     return {
-        "active_days": int((np.abs(arr) > 0.01).sum()),
+        "active_days": active_days,
         "total_days": int(len(arr)),
+        "finite_days": int(finite.size),
+        "nonfinite_days": nonfinite_days,
+        "nonzero_position_ratio": float(active_days / finite.size) if finite.size else 0.0,
         "unique_position_count": len(unique_positions),
         "unique_positions": unique_positions[:12],
         "position_switches": switches,

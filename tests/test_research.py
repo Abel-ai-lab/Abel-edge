@@ -408,6 +408,8 @@ class TestRunEvaluation:
         result = run_evaluation(tmp_path)
         assert result["verdict"] == "ERROR"
         assert "engine.py not found" in result["failures"][0]
+        assert result["runtime_facts"]["runtime_stage"] == "load_engine"
+        assert result["runtime_facts"]["workflow_status"] == "not_completed"
 
     def test_strategy_py_only_is_rejected(self, tmp_path):
         (tmp_path / "strategy.py").write_text("def run_strategy():\n    return None\n", encoding="utf-8")
@@ -456,6 +458,11 @@ class TestRunEvaluation:
         assert result["decision_trace"]
         assert result["decision_preview"]
         assert result["semantic"]["verdict"] == "PASS"
+        runtime_facts = result["runtime_facts"]
+        assert runtime_facts["contract"] == "causal-edge.runtime-facts/v1"
+        assert runtime_facts["runtime_stage"] == "validation"
+        assert runtime_facts["workflow_status"] == "evaluation_completed"
+        assert runtime_facts["read_summary"]["read_count"] >= 1
 
     def test_start_aware_engine_records_requested_and_effective_window(self, tmp_path):
         _write_start_aware_engine(tmp_path / "engine.py")
@@ -486,6 +493,41 @@ class TestRunEvaluation:
         assert diagnostics["failure_signature"] == "constant_position"
         assert diagnostics["signal"]["position_switches"] == 0
         assert diagnostics["signal"]["unique_position_count"] == 1
+        signal = result["runtime_facts"]["signal_summary"]
+        assert signal["finite_days"] == signal["total_days"]
+        assert signal["nonfinite_days"] == 0
+        assert signal["nonzero_position_ratio"] == 1.0
+
+    def test_metric_failure_facts_are_structured_without_advice(self):
+        facts = research_evaluate._metric_failure_facts(
+            {
+                "profile": "equity_daily",
+                "metrics": {"total_return": -0.12},
+                "failures": [
+                    "T15 MaxDD 35.0% > 20%",
+                    "PositionIC 0.000 < 0.02",
+                ],
+            }
+        )
+
+        assert facts == [
+            {
+                "metric": "max_dd",
+                "observed": 0.35,
+                "threshold": 0.2,
+                "comparison": "abs_gt",
+                "profile": "equity_daily",
+                "message": "T15 MaxDD 35.0% > 20%",
+            },
+            {
+                "metric": "position_ic",
+                "observed": 0.0,
+                "threshold": 0.02,
+                "comparison": "lt",
+                "profile": "equity_daily",
+                "message": "PositionIC 0.000 < 0.02",
+            },
+        ]
 
     def test_validation_exception_surfaces_runtime_stage(self, tmp_path, monkeypatch):
         _write_engine(tmp_path / "engine.py", flat=True)
@@ -621,6 +663,10 @@ class TestRunEvaluation:
             "Prepared input availability starts after" in warning
             for warning in result["semantic"]["warnings"]
         )
+        runtime_facts = result["runtime_facts"]
+        assert runtime_facts["runtime_stage"] == "semantic_preflight"
+        assert runtime_facts["read_summary"]["auxiliary_reads"] == ["driver"]
+        assert "effective_window_collapse" in runtime_facts["temporal_visibility"]["issue_kinds"]
 
     @pytest.mark.parametrize(
         "example_dir",
