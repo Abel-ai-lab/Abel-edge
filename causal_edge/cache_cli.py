@@ -21,12 +21,18 @@ def warm_cache_payload(
     profile: str,
     limit: int | None,
     env_path: str | None,
+    path: str | None,
 ) -> dict:
     adapter = resolve_adapter(adapter_name)
     results: list[dict] = []
     cache_root = resolve_cache_root()
     for symbol in symbols:
         normalized_symbol = str(symbol or "").strip().upper()
+        options: dict[str, object] = {}
+        if env_path:
+            options["env_path"] = env_path
+        if path:
+            options["path"] = path
         request = FeedLoadRequest(
             adapter=adapter_name,
             kind="bars",
@@ -37,7 +43,7 @@ def warm_cache_payload(
             end=end,
             limit=limit,
             profile=profile,
-            options={"env_path": env_path} if env_path else {},
+            options=options,
             strategy_id=None,
             feed_name=f"warm-cache:{normalized_symbol}",
         )
@@ -72,6 +78,7 @@ def warm_cache_payload(
             )
     return {
         "adapter": adapter_name,
+        "path": path,
         "timeframe": timeframe,
         "profile": profile,
         "start": start,
@@ -90,6 +97,7 @@ def warm_cache_payload(
 @click.option("--profile", default="daily", show_default=True)
 @click.option("--limit", default=5000, show_default=True, type=click.IntRange(min=1))
 @click.option("--env-path", default=None, help="Optional env file used by the adapter")
+@click.option("--path", default=None, help="Optional local data path used by adapters such as csv")
 @click.option("--output-json", default=None, help="Optional path for the JSON payload")
 def warm_cache(
     adapter_name: str,
@@ -100,6 +108,7 @@ def warm_cache(
     profile: str,
     limit: int | None,
     env_path: str | None,
+    path: str | None,
     output_json: str | None,
 ) -> None:
     """Warm adapter-backed market data into the formal edge cache."""
@@ -112,6 +121,7 @@ def warm_cache(
         profile=profile,
         limit=limit,
         env_path=env_path,
+        path=path,
     )
     failures = [item for item in payload["results"] if not item.get("ok")]
     if output_json:

@@ -1,5 +1,6 @@
 """CLI entry point tests."""
 
+import json
 import os
 from pathlib import Path
 
@@ -120,6 +121,38 @@ def test_run_empty():
         result = runner.invoke(main, ["run"])
         assert result.exit_code == 0
         assert "No strategies" in result.output
+
+
+def test_warm_cache_supports_csv_path_option(tmp_path):
+    runner = CliRunner()
+    csv_path = tmp_path / "bars.csv"
+    csv_path.write_text(
+        "timestamp,symbol,close\n"
+        "2020-01-01T00:00:00Z,AAPL,100\n"
+        "2020-01-02T00:00:00Z,AAPL,101\n",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        main,
+        [
+            "warm-cache",
+            "--adapter",
+            "csv",
+            "--path",
+            str(csv_path),
+            "--symbol",
+            "AAPL",
+            "--output-json",
+            str(tmp_path / "warm-cache.json"),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads((tmp_path / "warm-cache.json").read_text(encoding="utf-8"))
+    assert payload["adapter"] == "csv"
+    assert payload["path"] == str(csv_path)
+    assert payload["results"][0]["ok"] is True
 
 
 def test_validate_empty():
