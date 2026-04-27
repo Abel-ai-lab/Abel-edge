@@ -809,11 +809,10 @@ def _context_selected_inputs(context: dict, *, target: str) -> list[str]:
         if text:
             values.append(text)
 
-    for field in ("selected_inputs", "selected_drivers"):
-        raw = branch_spec.get(field) or []
-        if isinstance(raw, list):
-            for item in raw:
-                add(item)
+    raw_branch_selected = branch_spec.get("selected_inputs") or []
+    if isinstance(raw_branch_selected, list):
+        for item in raw_branch_selected:
+            add(item)
 
     raw_manifest_selected = data_manifest.get("selected_inputs") or []
     if isinstance(raw_manifest_selected, list):
@@ -822,11 +821,6 @@ def _context_selected_inputs(context: dict, *, target: str) -> list[str]:
                 add(item.get("node_id") or item.get("name") or item.get("symbol"))
             else:
                 add(item)
-
-    raw_manifest_drivers = data_manifest.get("selected_drivers") or []
-    if isinstance(raw_manifest_drivers, list):
-        for item in raw_manifest_drivers:
-            add(item)
 
     for item in data_manifest.get("feeds") or []:
         if not isinstance(item, dict):

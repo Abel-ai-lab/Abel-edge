@@ -678,14 +678,14 @@ class TestRunEvaluation:
         assert runtime_facts["prepared_inputs"]["selected_inputs"] == ["DRIVER"]
         assert "effective_window_collapse" in runtime_facts["temporal_visibility"]["issue_kinds"]
 
-    def test_prepared_input_selection_uses_branch_and_manifest_drivers(self):
+    def test_prepared_input_selection_uses_branch_and_manifest_inputs(self):
         selected_inputs = research_evaluate._context_selected_inputs(
             {
                 "branch_spec": {
-                    "selected_drivers": ["IMOUSD", "SFIUSD", "IMOUSD"],
+                    "selected_inputs": ["IMOUSD", "SFIUSD", "IMOUSD"],
                 },
                 "data_manifest": {
-                    "selected_drivers": ["SFIUSD"],
+                    "selected_inputs": ["SFIUSD"],
                     "feeds": [
                         {"name": "primary", "symbol": "TSLA", "role": "target"},
                         {"name": "IMOUSD", "symbol": "IMOUSD", "role": "driver"},

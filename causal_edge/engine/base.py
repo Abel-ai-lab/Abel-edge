@@ -801,7 +801,7 @@ def _discovery_candidates(discovery: dict) -> list[dict]:
 
 
 def _explicit_candidates(branch_spec: dict) -> list[dict]:
-    selected = branch_spec.get("selected_inputs") or branch_spec.get("selected_drivers") or []
+    selected = branch_spec.get("selected_inputs") or []
     candidates: list[dict] = []
     for ref in coerce_graph_node_refs(selected):
         if not ref.asset:
@@ -821,13 +821,7 @@ def _selected_input_assets(branch_spec: dict) -> list[str]:
     explicit = branch_spec.get("selected_inputs")
     if explicit:
         return [ref.asset for ref in coerce_graph_node_refs(explicit)]
-    selected = branch_spec.get("selected_drivers") or []
-    assets: list[str] = []
-    for item in selected:
-        normalized = _normalize_ticker(item)
-        if normalized and normalized not in assets:
-            assets.append(normalized)
-    return assets
+    return []
 
 
 def _research_target_node(context: dict | None) -> str | None:
