@@ -506,6 +506,7 @@ class TestRunEvaluation:
                 "failures": [
                     "T15 MaxDD 35.0% > 20%",
                     "PositionIC 0.000 < 0.02",
+                    "PositionIC stab 19% < 55%",
                 ],
             }
         )
@@ -526,6 +527,14 @@ class TestRunEvaluation:
                 "comparison": "lt",
                 "profile": "equity_daily",
                 "message": "PositionIC 0.000 < 0.02",
+            },
+            {
+                "metric": "position_ic_stability",
+                "observed": 0.19,
+                "threshold": 0.55,
+                "comparison": "lt",
+                "profile": "equity_daily",
+                "message": "PositionIC stab 19% < 55%",
             },
         ]
 
@@ -666,7 +675,28 @@ class TestRunEvaluation:
         runtime_facts = result["runtime_facts"]
         assert runtime_facts["runtime_stage"] == "semantic_preflight"
         assert runtime_facts["read_summary"]["auxiliary_reads"] == ["driver"]
+        assert runtime_facts["prepared_inputs"]["selected_inputs"] == ["DRIVER"]
         assert "effective_window_collapse" in runtime_facts["temporal_visibility"]["issue_kinds"]
+
+    def test_prepared_input_selection_uses_branch_and_manifest_drivers(self):
+        selected_inputs = research_evaluate._context_selected_inputs(
+            {
+                "branch_spec": {
+                    "selected_drivers": ["IMOUSD", "SFIUSD", "IMOUSD"],
+                },
+                "data_manifest": {
+                    "selected_drivers": ["SFIUSD"],
+                    "feeds": [
+                        {"name": "primary", "symbol": "TSLA", "role": "target"},
+                        {"name": "IMOUSD", "symbol": "IMOUSD", "role": "driver"},
+                        {"name": "SFIUSD", "symbol": "SFIUSD", "role": "driver"},
+                    ],
+                },
+            },
+            target="TSLA",
+        )
+
+        assert selected_inputs == ["IMOUSD", "SFIUSD"]
 
     @pytest.mark.parametrize(
         "example_dir",

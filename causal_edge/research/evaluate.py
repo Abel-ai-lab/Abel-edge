@@ -431,11 +431,7 @@ def _build_runtime_facts(result: dict) -> dict:
             and str(item.get("feed") or "") not in {"primary", "target", str((result.get("runtime_profile") or {}).get("target") or "")}
         }
     )
-    selected_inputs = [
-        str(item)
-        for item in (prepared.get("selected_inputs") or [])
-        if str(item).strip()
-    ]
+    selected_inputs = _ordered_unique_strings(prepared.get("selected_inputs") or [])
     traced_inputs = [
         str(item)
         for item in (prepared.get("traced_inputs") or auxiliary_reads)
@@ -725,6 +721,18 @@ def _metric_failure_facts(result: dict) -> list[dict]:
                 }
             )
             continue
+        if match := re.search(r"PositionIC stab ([0-9.]+)% < ([0-9.]+)%", text):
+            facts.append(
+                {
+                    "metric": "position_ic_stability",
+                    "observed": float(match.group(1)) / 100.0,
+                    "threshold": float(match.group(2)) / 100.0,
+                    "comparison": "lt",
+                    "profile": result.get("profile", "unknown"),
+                    "message": text,
+                }
+            )
+            continue
         if text.startswith("Return floor"):
             facts.append(
                 {
@@ -779,6 +787,60 @@ def _build_runtime_diagnostics(result: dict, frame: pd.DataFrame) -> dict:
     }
 
 
+def _ordered_unique_strings(values) -> list[str]:
+    selected: list[str] = []
+    for item in values:
+        value = str(item or "").strip()
+        if value and value not in selected:
+            selected.append(value)
+    return selected
+
+
+def _context_selected_inputs(context: dict, *, target: str) -> list[str]:
+    if not isinstance(context, dict):
+        return []
+    target_symbol = str(target or "").strip().upper()
+    branch_spec = context.get("branch_spec") if isinstance(context.get("branch_spec"), dict) else {}
+    data_manifest = context.get("data_manifest") if isinstance(context.get("data_manifest"), dict) else {}
+    values: list[str] = []
+
+    def add(value: object) -> None:
+        text = str(value or "").strip()
+        if text:
+            values.append(text)
+
+    for field in ("selected_inputs", "selected_drivers"):
+        raw = branch_spec.get(field) or []
+        if isinstance(raw, list):
+            for item in raw:
+                add(item)
+
+    raw_manifest_selected = data_manifest.get("selected_inputs") or []
+    if isinstance(raw_manifest_selected, list):
+        for item in raw_manifest_selected:
+            if isinstance(item, dict):
+                add(item.get("node_id") or item.get("name") or item.get("symbol"))
+            else:
+                add(item)
+
+    raw_manifest_drivers = data_manifest.get("selected_drivers") or []
+    if isinstance(raw_manifest_drivers, list):
+        for item in raw_manifest_drivers:
+            add(item)
+
+    for item in data_manifest.get("feeds") or []:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip().lower()
+        symbol = str(item.get("symbol") or "").strip()
+        name = str(item.get("name") or "").strip()
+        if role == "target" or symbol.upper() == target_symbol:
+            continue
+        add(symbol or name)
+
+    return _ordered_unique_strings(str(item).strip().upper() for item in values)
+
+
 def _prepared_input_feedback(*, compiled, engine) -> dict:
     context = engine.context or {}
     window = context.get("window_availability")
@@ -789,11 +851,7 @@ def _prepared_input_feedback(*, compiled, engine) -> dict:
     if not isinstance(data_manifest, dict):
         data_manifest = {}
 
-    selected_inputs = [
-        str(item.get("node_id") or "")
-        for item in (data_manifest.get("selected_inputs") or [])
-        if isinstance(item, dict) and str(item.get("node_id") or "").strip()
-    ]
+    selected_inputs = _context_selected_inputs(context, target=str(compiled.runtime_profile.target or ""))
     traced_inputs = sorted(
         {
             str(item.get("feed") or "")
