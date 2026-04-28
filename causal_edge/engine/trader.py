@@ -93,6 +93,41 @@ def _ensure_paper_signal(engine, *, as_of):
     return signal
 
 
+RESERVED_PAPER_ROW_FIELDS = {
+    "date",
+    "decision_time",
+    "effective_time",
+    "close",
+    "asset_return",
+    "position",
+    "pnl",
+    "next_position",
+    "source",
+    "cum_return",
+    "gross_pnl",
+    "turnover",
+    "execution_cost",
+}
+
+
+def _paper_signal_extra_fields(signal: dict) -> dict:
+    extras = {}
+    for key, value in signal.items():
+        if key in RESERVED_PAPER_ROW_FIELDS:
+            continue
+        if isinstance(value, pd.Timestamp):
+            extras[key] = value.isoformat()
+        elif isinstance(value, np.datetime64):
+            extras[key] = pd.Timestamp(value).isoformat()
+        elif isinstance(value, np.generic):
+            native_value = value.item()
+            if native_value is None or isinstance(native_value, (str, int, float, bool)):
+                extras[key] = native_value
+        elif value is None or isinstance(value, (str, int, float, bool)):
+            extras[key] = value
+    return extras
+
+
 def _resolve_last_logged_row(trade_log_path: str):
     try:
         log_df = read_trade_log(trade_log_path)
@@ -185,19 +220,19 @@ def paper_run_one(
         idx = date_to_index[ts]
         signal = _ensure_paper_signal(engine, as_of=ts)
         next_position = float(signal["next_position"])
-        rows.append(
-            {
-                "date": ts,
-                "decision_time": ts,
-                "effective_time": ts,
-                "close": float(prices[idx]),
-                "asset_return": float(returns[idx]),
-                "position": carry_position,
-                "pnl": float(carry_position * returns[idx]),
-                "next_position": next_position,
-                "source": "live",
-            }
-        )
+        row = {
+            "date": ts,
+            "decision_time": ts,
+            "effective_time": ts,
+            "close": float(prices[idx]),
+            "asset_return": float(returns[idx]),
+            "position": carry_position,
+            "pnl": float(carry_position * returns[idx]),
+            "next_position": next_position,
+            "source": "live",
+        }
+        row.update(_paper_signal_extra_fields(signal))
+        rows.append(row)
         carry_position = next_position
 
     append_trade_log_rows(paper_log_path, rows)

@@ -36,7 +36,22 @@ class PaperDemoEngine(StrategyEngine):
         bars = self.load_bars(limit=10, end=as_of)
         target = bars[bars['symbol'] == self.context.get('asset', 'ETHUSD')].copy().sort_values('timestamp')
         last_close = float(target['close'].iloc[-1])
-        return {'next_position': 1.0 if last_close >= 100.0 else 0.0, 'date': str(target['timestamp'].iloc[-1]), 'price': last_close}
+        return {
+            'next_position': 1.0 if last_close >= 100.0 else 0.0,
+            'date': str(target['timestamp'].iloc[-1]),
+            'price': last_close,
+            'data_backend': 'csv',
+            'data_fetch_status': 'provider_fetch',
+            'data_latest_timestamp': str(target['timestamp'].iloc[-1]),
+            'provider_sequence': np.int64(len(target)),
+            'paper_audit_status': 'provider_fetch',
+            'source': 'bad-source-override',
+            'pnl': 999.0,
+            'cum_return': 999.0,
+            'gross_pnl': 999.0,
+            'turnover': 999.0,
+            'execution_cost': 999.0,
+        }
 """.strip()
 
 
@@ -122,7 +137,17 @@ def test_paper_appends_live_rows_with_close_fill_semantics(tmp_path):
         assert list(paper_df["next_position"].tail(2).round(2)) == [0.0, 1.0]
         assert list(paper_df["close"].tail(2).round(2)) == [90.0, 120.0]
         assert float(paper_df.iloc[-2]["pnl"]) < 0
+        assert paper_df.iloc[-1]["data_backend"] == "csv"
+        assert paper_df.iloc[-1]["data_fetch_status"] == "provider_fetch"
+        assert str(paper_df.iloc[-1]["data_latest_timestamp"]).startswith("2026-01-04")
+        assert int(paper_df.iloc[-1]["provider_sequence"]) == 4
+        assert paper_df.iloc[-1]["paper_audit_status"] == "provider_fetch"
+        assert paper_df.iloc[-1]["source"] == "live"
         assert float(paper_df.iloc[-1]["pnl"]) == 0.0
+        assert float(paper_df.iloc[-1]["cum_return"]) != 999.0
+        for column in ["gross_pnl", "turnover", "execution_cost"]:
+            if column in paper_df.columns:
+                assert float(paper_df.iloc[-1][column]) != 999.0
         sys.path.pop(0)
 
 
