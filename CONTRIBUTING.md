@@ -4,7 +4,7 @@
 
 ```bash
 git clone https://github.com/Abel-ai-causality/Abel-edge.git
-cd abel-edge
+cd Abel-edge
 pip install -e ".[dev]"
 make test    # all tests must pass
 ```
@@ -24,7 +24,8 @@ make test    # all tests must pass
 
 These are enforced by structural tests — PRs that violate them will fail CI:
 
-- **No file > 400 lines** — split at 350
+- **No new file > 400 lines** — split at 350. Legacy oversized files are
+  explicitly allowlisted in `tests/test_structure.py`.
 - **strategies.yaml is the single source of truth** — no hardcoded strategy names
 - **Components are pure functions** — data in, string out, no side effects
 - **strategies/ never imports abel_edge/** (except engine base ABC)

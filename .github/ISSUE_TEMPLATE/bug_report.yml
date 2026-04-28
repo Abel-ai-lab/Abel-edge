@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a reproducible defect in Abel Edge
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report.
+
+        Please include enough detail for us to reproduce the behavior from the repository state alone.
+  - type: input
+    id: summary
+    attributes:
+      label: Summary
+      description: What is going wrong?
+      placeholder: abel-edge validate fails when...
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Exact steps to reproduce the issue
+      placeholder: |
+        1. Install with ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, package version, OS, and relevant Abel auth/data setup
+      placeholder: |
+        Python:
+        abel-edge:
+        OS:
+        Data source:
+        Auth source:
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Traceback or command output
+      description: Paste the relevant error output
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links, code snippets, payload examples, or related issues

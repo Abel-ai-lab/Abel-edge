@@ -25,12 +25,14 @@ Neither edge exists alone. Causal without agents = a paper you read once. Agents
 
 ## 5 Minutes: See Both Edges
 
+Install the published package:
+
 ```bash
 python -m venv .venv
 # PowerShell: .venv\Scripts\Activate.ps1
 # bash/zsh: source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
+pip install abel-edge
 abel-edge init my-portfolio
 cd my-portfolio
 
@@ -39,6 +41,20 @@ abel-edge login
 
 abel-edge run
 abel-edge validate
+```
+
+For local development from source:
+
+```bash
+git clone https://github.com/Abel-ai-causality/Abel-edge.git
+cd Abel-edge
+pip install -e ".[dev]"
+```
+
+If you need to install from the repository before a PyPI release is available:
+
+```bash
+pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
 ```
 
 If the `git+https` install path is unstable in your network environment, use the same public repo via zip:
@@ -142,6 +158,15 @@ abel-edge validate --export r.txt  # export report for sharing
 abel-edge discover <TICKER>        # find causal parents (Abel API key)
 ```
 
+## Public Surface
+
+- PyPI distribution: `abel-edge`
+- Python import package: `abel_edge`
+- CLI entry point: `abel-edge`
+- Supported Python versions: 3.11, 3.12, and 3.13
+- Runtime facts contract: `abel-edge.runtime-facts/v1`
+- Strategy handoff contract: `abel-edge.strategy-handoff/v1`
+
 The bundled `init` scaffold is a standalone demo project, not an Abel-alpha
 branch workspace. For real-data branch research inside an Abel-alpha workspace,
 stay on the `abel-alpha init-session -> init-branch -> prepare-branch` path.
@@ -239,12 +264,15 @@ tests/
 - [`CAPABILITY.md`](CAPABILITY.md) — agent capability acquisition (start here)
 - [`docs/validation-audit-matrix.md`](docs/validation-audit-matrix.md) — long-lived validation timing/score contract and migration notes
 - [`docs/strategy-handoff.md`](docs/strategy-handoff.md) — exact upstream handoff contract and rejection behavior
+- [`docs/releasing.md`](docs/releasing.md) — maintainer release process for PyPI
 - [Adding a Strategy](docs/add-strategy.md) — three paths: CSV / engine / causal
 - [Look-Ahead Rules](abel_edge/validation/look_ahead_rules.md) — semantic review checklist for leaked features
 - [Why Causal?](docs/why-causal.md) — Pearl, DGP, intervention invariance
 - [Agent Developer Guide](docs/harness-guide.md) — how agents operate this framework
 - [Contributing](CONTRIBUTING.md) — how to contribute
+- [Support](SUPPORT.md) — usage questions and issue triage
+- [Security](SECURITY.md) — private vulnerability reporting
 
 ## License
 
-MIT
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

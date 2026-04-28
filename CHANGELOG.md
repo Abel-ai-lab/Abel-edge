@@ -2,7 +2,15 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-28
+
 ### Changed
+- **Public package rename**: the PyPI distribution is now `abel-edge`, the CLI is `abel-edge`, and the Python import package is `abel_edge`.
+- **Contract namespace rename**: runtime facts now use `abel-edge.runtime-facts/v1`, and strategy handoffs now use `abel-edge.strategy-handoff/v1`.
+- **Environment namespace rename**: runtime hardening and market-data cache controls now use `ABEL_EDGE_*` environment variables.
+- **PyPI packaging**: added package metadata, package data, `py.typed`, `MANIFEST.in`, and build/twine validation support for public distribution.
+- **Release automation**: added GitHub Actions CI and tag-based PyPI Trusted Publishing release workflows.
+
 - **Validation contract migration**: `validate` no longer uses the legacy `20/21`-style denominator narrative. The audited live contract now reports denominators based on applicable gates: typically `5` or `7`, rising further when `Omega` and full-year loss accounting are applicable.
 - **Stability gate redesign**: `T13 NegRoll` was replaced by diagnostic drawdown-time payloads on underwater bar fraction and longest underwater duration rather than live PASS/FAIL gates.
 - **Longest drawdown duration downgraded**: `max_drawdown_duration_bars` remains in the validation payload for audit, but `T13 MaxDDDuration` no longer acts as a live PASS/FAIL gate or score denominator slot.
