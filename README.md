@@ -1,49 +1,34 @@
 # abel-edge
 
-**Two edges. One framework.**
+`abel-edge` is the open-source runtime layer for graph-grounded trading
+research.
 
-**Causal edge** — correlations break when regimes change. Only causal structure survives. Three strategies, same audited validation contract, prove it:
+It gives a strategy project three things:
 
-```
-Correlation (SMA)    →  Lo = -0.65   dead on arrival
-ML (GBDT)            →  Lo = -0.27   still dead
-Causal (Abel graph)  →  Lo = +0.55   alive
-```
+- a deterministic execution surface built around `DecisionContext`
+- validation facts that make look-ahead, overfitting, and weak signal shape
+  visible
+- CLI and Python APIs that agents and humans can both use without relying on
+  repository-local workspace conventions
 
-**Agent edge** — your AI agent reads one file, gains the full capability, and works autonomously. No tutorial, no hand-holding, no human in the loop:
+The core idea is simple: causal structure can be a useful research prior, but
+only runtime facts should decide whether a strategy run is valid evidence.
 
-```
-Agent receives repo URL
-  → reads CAPABILITY.md (90 lines)
-  → installs, validates, diagnoses failures, applies fixes
-  → reports: "your strategy improved under the same audited gate contract"
-```
+`abel-edge` is research software. It is not financial advice, a broker, or a
+guarantee that a strategy will perform in live markets.
 
-Neither edge exists alone. Causal without agents = a paper you read once. Agents without causal = fast noise. Together = **autonomous discovery of what actually works.**
-
-> **Agents start here → [`CAPABILITY.md`](CAPABILITY.md)**
-
-## 5 Minutes: See Both Edges
-
-Install the published package:
+## Install
 
 ```bash
 python -m venv .venv
 # PowerShell: .venv\Scripts\Activate.ps1
 # bash/zsh: source .venv/bin/activate
+
 python -m pip install --upgrade pip
 pip install abel-edge
-abel-edge init my-portfolio
-cd my-portfolio
-
-# If you want live Abel discovery, authenticate before discover.
-abel-edge login
-
-abel-edge run
-abel-edge validate
 ```
 
-For local development from source:
+Install from source for development:
 
 ```bash
 git clone https://github.com/Abel-ai-causality/Abel-edge.git
@@ -51,112 +36,198 @@ cd Abel-edge
 pip install -e ".[dev]"
 ```
 
-If you need to install from the repository before a PyPI release is available:
+If PyPI is not available in your environment, install from the public
+repository:
 
 ```bash
 pip install git+https://github.com/Abel-ai-causality/Abel-edge.git
 ```
 
-If the `git+https` install path is unstable in your network environment, use the same public repo via zip:
+## Quickstart
+
+Create a standalone demo project, run the bundled strategies, and validate the
+results:
 
 ```bash
-pip install https://github.com/Abel-ai-causality/Abel-edge/archive/refs/heads/main.zip
+abel-edge init my-portfolio
+cd my-portfolio
+abel-edge run
+abel-edge validate
+abel-edge dashboard
 ```
 
-For live discovery, authenticate once before `abel-edge discover <TICKER>`:
-
-```bash
-abel-edge login
-```
-
-Or validate any existing backtest:
+Validate an existing backtest CSV:
 
 ```bash
 abel-edge validate --csv my_backtest.csv
 ```
 
-Abel discovery and market data default to the public CAP base: `https://cap.abel.ai/api`
+Use live Abel discovery or Abel market data by authenticating once:
 
-## Why Causal?
-
-Correlation is a property of *data*. Causation is a property of the *data generating process*.
-
-When regimes change (bull→bear, policy shift, crisis):
-- Correlations break → correlation-based signals die
-- Causal links persist → causal signals survive
-
-This is Pearl's definition: a causal relationship remains invariant under intervention. The causal demo bundles a real causal graph from [Abel](https://abel.ai) — 5 equity parents and 3 children of TONUSD. For live discovery: `abel-edge discover <TICKER>`.
-
-## Why Agent-Native?
-
-Every other quant framework is designed for humans to read docs, write code, run commands.
-
-abel-edge is designed for agents to read `CAPABILITY.md` and operate autonomously:
-
-| What | Human framework | abel-edge |
-|------|----------------|-------------|
-| Learn the tool | Read 50-page docs | Agent reads 1 file (CAPABILITY.md) |
-| Validate a strategy | Configure, run, interpret | `validate_strategy(csv)` → structured result |
-| Fix failures | Google the error, guess | Failure→fix table with copy-paste code |
-| Iterate | Manual loop, hours | Autonomous loop: validate→fix→revalidate |
-| Remember how | Bookmark, forget | Self-internalization (skill/memory/CLAUDE.md) |
-
-## The Metric Triangle
-
-Three leverage-invariant, mathematically orthogonal dimensions:
-
-```
-        Lo-adjusted Sharpe (ratio — optimized)
-             /           \
-       Position-Return IC (rank —  Omega (shape —
-        guardrail)          guardrail)
+```bash
+abel-edge login
+abel-edge discover ETHUSD
 ```
 
-No known transformation improves all three simultaneously except genuine signal improvement:
-- **Clipping** inflates Sharpe but tanks Omega
-- **Serial correlation** inflates Sharpe but Lo catches it
-- **Concentration** boosts ratios but Position-Return IC drops
+Discovery and market data default to `https://cap.abel.ai/api`. You can set
+`ABEL_API_KEY` directly, use `abel-edge login`, or point at an existing auth
+file with `ABEL_AUTH_ENV_FILE`. Override endpoints with `ABEL_CAP_BASE_URL` and
+`ABEL_AUTH_BASE_URL` when needed.
 
-Verified across 38 controlled experiments.
+## Why This Exists
+
+Most strategy tooling rewards the wrong thing first: a high backtest number.
+
+`abel-edge` puts another layer in front of that number:
+
+1. Was the strategy allowed to observe those inputs at decision time?
+2. Did it produce next-position intent rather than same-bar leakage?
+3. Did it read the auxiliary feeds it claimed to use?
+4. Did validation pass for ratio, rank, and shape rather than one headline
+   metric?
+
+That distinction matters for agent-led research. A language model can generate
+many variants quickly, so the runtime has to be strict about evidence quality
+without telling the agent which strategy idea to try next.
+
+## Causal Graphs As A Research Prior
+
+Correlation is a property of observed data. Causal structure is a hypothesis
+about the data-generating process.
+
+In the Abel research stack, causal graph discovery is used as a search prior:
+it helps narrow the first set of candidate inputs before strategy variants and
+parameter refinements begin. `abel-edge` does not decide which graph path to
+explore. It provides the runtime contracts and facts needed to check whether a
+graph-supported strategy actually used the selected inputs legally.
+
+The intended research priority is:
+
+```text
+causal graph structure first -> strategy variants second -> parameters last
+```
+
+Target-only work can still be useful as a control, diagnostic, or explicit
+fallback. It just should not be mistaken for candidate causal evidence unless
+the runtime facts support that label.
+
+## Agent-Native Runtime Facts
+
+`abel-edge` is designed for both people and AI coding agents.
+
+The agent-facing promise is not that the framework chooses the next research
+move. It is that the framework returns structured facts an agent can use:
+
+- validation verdicts and metric failures
+- look-ahead and semantic preflight diagnostics
+- runtime read facts for target and auxiliary feeds
+- effective evaluation windows
+- exact handoff contracts for upstream orchestration layers
+
+Agents can start from [`CAPABILITY.md`](CAPABILITY.md). Humans can use the same
+CLI and Python APIs directly.
+
+## Abel Edge And Abel Invest
+
+`abel-edge` is the deterministic runtime and contract owner.
+
+It owns:
+
+- strategy execution
+- `DecisionContext`
+- feed and data contracts
+- look-ahead checks
+- metric validation
+- dashboards
+- raw runtime facts
+- handoff validation
+
+It does not own:
+
+- research sessions
+- branch organization
+- evidence ledgers
+- research journals
+- narrative summaries
+- recommendations about what strategy to try next
+
+Those workflow concerns belong in an orchestration layer such as Abel Invest.
+That separation is deliberate: the runtime should protect evidence quality,
+while the research agent remains responsible for strategy judgment.
+
+## Validation Model
+
+The validation layer focuses on a metric triangle:
+
+```text
+               Lo-adjusted Sharpe
+                    /      \
+                   /        \
+     Position-Return IC    Omega
+```
+
+Each side catches a different failure mode:
+
+- **Lo-adjusted Sharpe** reduces reward for serial-correlation artifacts.
+- **Position-Return IC** checks whether position sizing has rank relationship
+  with subsequent returns.
+- **Omega** makes clipping and asymmetric loss behavior harder to hide.
+
+The goal is not to turn validation into an optimizer. The goal is to make weak
+or suspicious evidence explicit before it becomes a research conclusion.
 
 ## Demo Strategies
 
-| Strategy | What it is | Validation note | What it teaches |
-|----------|-----------|-----------------|-----------------|
-| `sma_crossover` | DecisionContext crossover on local sample bars | Uses the audited live `validate` contract | primary target reads plus next-position intent |
-| `momentum_ml` | DecisionContext walk-forward GBDT demo | Uses the audited live `validate` contract | vectorized features and walk-forward training on the target feed |
-| `feed_overlay_demo` | Target plus declared auxiliary feeds | Uses the audited live `validate` contract | `ctx.feed(name)` and as-of feed reads |
+The scaffolded project includes small demo strategies that run on local sample
+data:
 
-The repo also includes `examples/causal_demo/` as an optional graph-shaped
-example for named driver feeds.
+| Strategy | What it demonstrates |
+| --- | --- |
+| `sma_crossover` | Primary target reads and next-position intent |
+| `momentum_ml` | Vectorized features and walk-forward ML |
+| `feed_overlay_demo` | Declared auxiliary feeds and legal as-of reads |
 
-## Commands
+The repository also includes `examples/causal_demo/` as a graph-shaped example
+for named driver feeds.
+
+## CLI
 
 ```bash
-abel-edge init <name>              # scaffold standalone project with 3 local sample-data demo strategies
-abel-edge login                    # run explicit Abel OAuth and persist ABEL_API_KEY
-abel-edge run [--strategy ID]      # run strategies, write backtest trade logs
-abel-edge paper [--strategy ID]    # append latest live paper-trading rows
-abel-edge dashboard                # generate dark-theme dashboard HTML
+abel-edge version
+abel-edge init <name>
+abel-edge login
+abel-edge discover <TICKER>
+
+abel-edge run [--strategy ID]
+abel-edge paper [--strategy ID]
+abel-edge validate [--verbose]
+abel-edge validate --csv file.csv
+abel-edge dashboard
+
 abel-edge signal-demo --strategy ethusd_causal --output signal-demo-ethusd.html
-                                # generate a single-strategy Signal Demo page
 abel-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
-                                # generate a separate tracking page for live rows
+
 abel-edge evaluate --workdir strategies/my_strategy
-                                # emit raw validation facts for one strategy workspace
 abel-edge evaluate --workdir strategies/my_strategy --start 2020-01-01
-                                # pin the requested backtest start for upstream orchestration
-abel-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md
-                                # persist raw JSON + markdown facts for an upstream orchestration layer
-abel-edge evaluate --workdir strategies/my_strategy --output-json edge-result.json --output-md edge-validation.md --output-handoff edge-handoff.json
-                                # emit an edge-owned handoff that upstream tools must preserve exactly
+abel-edge evaluate --workdir strategies/my_strategy \
+  --output-json edge-result.json \
+  --output-md edge-validation.md \
+  --output-handoff edge-handoff.json
 abel-edge validate-handoff edge-handoff.json
-                                # reject invalid upstream handoffs with explicit reasons
-abel-edge validate [--verbose]     # Abel Proof validation (audited live gate contract)
-abel-edge validate --csv file.csv  # validate any backtest CSV directly
-abel-edge validate --export r.txt  # export report for sharing
-abel-edge discover <TICKER>        # find causal parents (Abel API key)
 ```
+
+## Python API
+
+```python
+from abel_edge.validation.gate import validate_strategy
+
+result = validate_strategy("my_backtest.csv", positions_col="position")
+print(result["verdict"])
+print(result["metrics"])
+```
+
+New strategies should author against `compute_decisions(self, ctx)` and
+`DecisionContext`, not the legacy tuple-return signal contract.
 
 ## Public Surface
 
@@ -166,112 +237,75 @@ abel-edge discover <TICKER>        # find causal parents (Abel API key)
 - Supported Python versions: 3.11, 3.12, and 3.13
 - Runtime facts contract: `abel-edge.runtime-facts/v1`
 - Strategy handoff contract: `abel-edge.strategy-handoff/v1`
+- Cache environment variable: `ABEL_EDGE_CACHE_ROOT`
 
-The bundled `init` scaffold is a standalone demo project, not an Abel-alpha
-branch workspace. For real-data branch research inside an Abel-alpha workspace,
-stay on the `abel-alpha init-session -> init-branch -> prepare-branch` path.
+`abel-edge evaluate` emits raw execution facts: verdict, score, metrics,
+triangle, failures, profile, K, runtime reads, and the requested/effective
+evaluation window. When requested, it also emits a handoff JSON that
+orchestration layers can preserve exactly. `abel-edge validate-handoff`
+rejects handoffs that do not match the published contract.
 
-New strategies should author against `compute_decisions(self, ctx)` and
-`DecisionContext`, not against the legacy tuple-return signal contract.
+## Data And Configuration
 
-Real-price strategies default to Abel price APIs. Override per strategy with
-`price_data.adapter: csv` for local bar files, or register a project-local
-adapter via `settings.data_adapters.imports` when your project owns a custom
-data backend. The framework still normalizes timestamps, enforces feed/runtime
-contracts, and compiles next-position intent after adapter loading. Configure
-Abel access with `ABEL_API_KEY` and optionally `ABEL_CAP_BASE_URL`. If you do
-not already have an API key, install `causal-abel` and complete its OAuth flow
-before running `abel-edge discover <TICKER>` or any workflow that triggers
-live Abel discovery:
+Real-price strategies default to Abel price APIs. For local or custom data:
 
-```bash
-npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -y
-```
+- set `price_data.adapter: csv` for local bar files
+- register project-local adapters with `settings.data_adapters.imports`
+- use `--config` to point CLI commands at an explicit config file
 
-For a global install instead of a project-local skill copy, use:
+If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands prefer
+`strategies.local.yaml` automatically.
 
-```bash
-npx --yes skills add https://github.com/Abel-ai-causality/Abel-skills/tree/main/skills --skill causal-abel -g -y
-```
+When a strategy declares `paper_log`, backtests stay in `trade_log` and live
+paper rows append to `paper_log`. If `paper_log` is omitted, `abel-edge` falls
+back to the single-log format and reads `source=live` rows as paper-trading
+data.
 
-`abel-edge` prefers reusing an existing `causal-abel` auth file before asking you to authorize
-again. Use `abel-edge login` when you want a standalone fallback that stores `ABEL_API_KEY`
-directly for the current project, or set `ABEL_API_KEY` directly. Override endpoints with
-`ABEL_CAP_BASE_URL` and `ABEL_AUTH_BASE_URL` when needed.
+## Project Layout
 
-After `causal-abel` OAuth succeeds, `abel-edge` checks the current project `.env`,
-`ABEL_AUTH_ENV_FILE`, the local `.agents/skills/causal-abel/.env.skill` fallback, and known global
-skill installs such as `~/.config/opencode/skills/causal-abel/.env.skill` or
-`~/.codex/skills/causal-abel/.env.skill` before failing for a missing key. That lets
-agent-driven installs reuse the `causal-abel` auth file without copying the key into each
-workspace.
-
-If discovery still reports a missing key after `causal-abel` is installed, run:
-
-```bash
-python <causal-abel-skill-root>/scripts/cap_probe.py auth-status --compact
-```
-
-For example, the skill root might be one of these locations:
-
-- project-local: `.agents/skills/causal-abel`
-- OpenCode global: `~/.config/opencode/skills/causal-abel`
-- Codex global: `~/.codex/skills/causal-abel`
-
-If your auth file lives outside those paths, point `abel-edge` at it with `ABEL_AUTH_ENV_FILE`.
-
-For agent-driven setups, `abel-edge login --json --no-browser` emits a JSON
-handoff event first, then a final JSON result after authorization completes.
-It also prints the authorization URL and periodic waiting updates to `stderr`
-so agent runtimes can surface the browser handoff immediately instead of
-appearing hung.
-
-When a strategy declares `paper_log`, backtests stay in `trade_log` and live paper rows
-append to `paper_log`. If `paper_log` is omitted, abel-edge falls back to the legacy
-single-log format and reads `source=live` rows as paper-trading data.
-
-If both `strategies.local.yaml` and `strategies.yaml` exist, CLI commands now prefer
-`strategies.local.yaml` automatically. Use `--config` to point at any explicit file.
-
-`abel-edge evaluate` uses the same audited validation contract as the main CLI and emits
-raw execution facts: verdict, score, metrics, triangle, failures, K, profile, and the
-requested/effective evaluation window. When asked, it also emits an edge-owned handoff JSON
-for upstream orchestrators. `abel-edge validate-handoff` rejects any upstream handoff that
-does not exactly match the published contract. `abel-edge` still does not own exploration-session
-structure, branch organization, or narrative summaries; those belong to the upstream orchestration
-layer such as `Abel-alpha`.
-
-## Architecture
-
-```
-CAPABILITY.md          → agent reads this, gains full capability
-AGENTS.md              → "use as tool" or "develop on this repo"
+```text
+CAPABILITY.md          agent-facing capability guide
+AGENTS.md              contributor and agent operating notes
 abel_edge/
-  validation/          → Abel Proof metric triangle + audited live gate contract
-  engine/              → StrategyEngine ABC + execution
-  dashboard/           → Jinja2 + Plotly → static HTML
-  plugins/             → optional (Abel causal discovery)
+  validation/          Abel Proof metrics and look-ahead checks
+  engine/              StrategyEngine, DecisionContext, execution runtime
+  dashboard/           Jinja2 and Plotly static dashboard generation
+  plugins/             optional Abel discovery and price integrations
 examples/
-  sma_crossover/       → correlation demo (30 lines)
-  momentum_ml/         → ML demo (80 lines)
-  causal_demo/         → causal demo (100 lines + graph JSON)
-tests/
-  test_structure.py    → 15 structural tests enforce architecture
+  sma_crossover/       sample target-only strategy
+  momentum_ml/         sample walk-forward ML strategy
+  causal_demo/         graph-shaped example with driver feeds
+tests/                 runtime, validation, CLI, packaging, and dashboard tests
 ```
 
 ## Documentation
 
-- [`CAPABILITY.md`](CAPABILITY.md) — agent capability acquisition (start here)
-- [`docs/validation-audit-matrix.md`](docs/validation-audit-matrix.md) — long-lived validation timing/score contract and migration notes
-- [`docs/strategy-handoff.md`](docs/strategy-handoff.md) — exact upstream handoff contract and rejection behavior
-- [`docs/releasing.md`](docs/releasing.md) — maintainer release process for PyPI
-- [Adding a Strategy](docs/add-strategy.md) — three paths: CSV / engine / causal
-- [Look-Ahead Rules](abel_edge/validation/look_ahead_rules.md) — semantic review checklist for leaked features
-- [Why Causal?](docs/why-causal.md) — Pearl, DGP, intervention invariance
-- [Agent Developer Guide](docs/harness-guide.md) — how agents operate this framework
-- [Contributing](CONTRIBUTING.md) — how to contribute
-- [Support](SUPPORT.md) — usage questions and issue triage
-- [Security](SECURITY.md) — private vulnerability reporting
+- [`CAPABILITY.md`](CAPABILITY.md) - agent capability guide
+- [`docs/add-strategy.md`](docs/add-strategy.md) - CSV, engine, and graph-shaped
+  strategy paths
+- [`docs/why-causal.md`](docs/why-causal.md) - causal framing and intervention
+  invariance
+- [`docs/validation-audit-matrix.md`](docs/validation-audit-matrix.md) -
+  validation timing and score contract
+- [`docs/strategy-handoff.md`](docs/strategy-handoff.md) - exact handoff
+  contract and rejection behavior
+- [`abel_edge/validation/look_ahead_rules.md`](abel_edge/validation/look_ahead_rules.md) -
+  semantic review checklist for leaked features
+- [`docs/harness-guide.md`](docs/harness-guide.md) - agent operation guide
+- [`docs/releasing.md`](docs/releasing.md) - maintainer release process for PyPI
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) - how to contribute
+- [`SUPPORT.md`](SUPPORT.md) - usage questions and issue triage
+- [`SECURITY.md`](SECURITY.md) - private vulnerability reporting
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+python -m pytest
+python -m ruff check .
+python -m build --sdist --wheel
+python -m twine check dist/*
+```
 
 ## License
 
