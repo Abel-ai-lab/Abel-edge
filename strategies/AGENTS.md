@@ -2,7 +2,7 @@
 
 Strategy engine implementations. Each is a directory with an engine module such
 as `strategies/ethusd_causal/engine.py` implementing `StrategyEngine` from
-`causal_edge/engine/base.py`.
+`abel_edge/engine/base.py`.
 
 ## I want to...
 
@@ -12,7 +12,7 @@ as `strategies/ethusd_causal/engine.py` implementing `StrategyEngine` from
 3. Create the strategy engine module under `strategies/my_strategy/`
 4. Add entry to root `strategies.yaml` with `engine: strategies.my_strategy.engine`
 5. `make test` — `TestEngineModuleImportable` verifies import works
-6. `causal-edge validate` — runs the Abel Proof audited live gate contract
+6. `abel-edge validate` — runs the Abel Proof audited live gate contract
 
 ### Use the SMA example as template
     cp -r examples/sma_crossover/ strategies/my_strategy/
@@ -23,7 +23,7 @@ baselines.
 
 ### Rules
 - Engine wrappers should be < 100 lines
-- strategies/ must NOT import from `causal_edge/` (except `causal_edge/engine/base.py`)
+- strategies/ must NOT import from `abel_edge/` (except `abel_edge/engine/base.py`)
 - `TestStrategiesStandalone` enforces this mechanically
 - All features must use `shift(1)` — zero look-ahead tolerance
 - the strategy engine module must define its own `StrategyEngine` subclass; do

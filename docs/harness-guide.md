@@ -1,6 +1,6 @@
 # Agent Developer Guide
 
-How AI agents operate the causal-edge framework.
+How AI agents operate the abel-edge framework.
 
 ## The Core Idea
 
@@ -13,9 +13,9 @@ This is not documentation. It is an **executable architecture spec**.
 ```
 AGENTS.md (root)
 ├── "Add a strategy"        → strategies/AGENTS.md
-├── "Fix a validation"      → causal_edge/validation/AGENTS.md
-├── "Add a dashboard chart"  → causal_edge/dashboard/AGENTS.md
-└── "Use Abel discovery"     → causal_edge/plugins/AGENTS.md
+├── "Fix a validation"      → abel_edge/validation/AGENTS.md
+├── "Add a dashboard chart"  → abel_edge/dashboard/AGENTS.md
+└── "Use Abel discovery"     → abel_edge/plugins/AGENTS.md
 ```
 
 Each subsystem AGENTS.md provides:
@@ -70,4 +70,4 @@ To add the agent-native pattern to your own project:
 4. Include `Fix:` instructions in every test assertion
 5. Use `strategies.yaml` pattern — data as config, not code
 
-The causal-edge framework demonstrates this pattern end-to-end. Study `tests/test_structure.py` for the enforcement approach.
+The abel-edge framework demonstrates this pattern end-to-end. Study `tests/test_structure.py` for the enforcement approach.

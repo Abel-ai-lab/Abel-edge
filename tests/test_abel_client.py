@@ -4,7 +4,7 @@ import json
 import requests
 import pandas as pd
 
-from causal_edge.plugins.abel.client import AbelClient, normalize_public_node_id
+from abel_edge.plugins.abel.client import AbelClient, normalize_public_node_id
 from examples.causal_demo.engine import CausalDemoEngine, GRAPH_PATH, resolve_price_column
 
 
@@ -308,10 +308,10 @@ def test_fetch_bars_falls_back_to_curl_on_windows_connection_reset(monkeypatch):
 
     fallback_calls = []
 
-    monkeypatch.setattr("causal_edge.plugins.abel.client.sys.platform", "win32")
-    monkeypatch.setattr("causal_edge.plugins.abel.client.shutil.which", lambda name: "C:/Windows/System32/curl.exe")
+    monkeypatch.setattr("abel_edge.plugins.abel.client.sys.platform", "win32")
+    monkeypatch.setattr("abel_edge.plugins.abel.client.shutil.which", lambda name: "C:/Windows/System32/curl.exe")
     monkeypatch.setattr(
-        "causal_edge.plugins.abel.client._post_with_curl",
+        "abel_edge.plugins.abel.client._post_with_curl",
         lambda **kwargs: fallback_calls.append(kwargs) or {"data": [{"symbol": "ETHUSD"}]},
     )
 
@@ -359,7 +359,7 @@ def test_fetch_bars_retries_on_429(monkeypatch):
             return OkResponse()
 
     slept = []
-    monkeypatch.setattr("causal_edge.plugins.abel.client.time.sleep", lambda seconds: slept.append(seconds))
+    monkeypatch.setattr("abel_edge.plugins.abel.client.time.sleep", lambda seconds: slept.append(seconds))
 
     session = StubSession()
     client = AbelClient(session=session)

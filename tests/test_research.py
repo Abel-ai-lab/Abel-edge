@@ -8,18 +8,18 @@ from click.testing import CliRunner
 import pandas as pd
 import pytest
 
-from causal_edge.cli import main
-from causal_edge.engine.base import StrategyEngine
-import causal_edge.research.evaluate as research_evaluate
-from causal_edge.research.evaluate import (
+from abel_edge.cli import main
+from abel_edge.engine.base import StrategyEngine
+import abel_edge.research.evaluate as research_evaluate
+from abel_edge.research.evaluate import (
     check_look_ahead,
     compute_k,
     render_validation_markdown,
     run_evaluation,
     run_preflight,
 )
-from causal_edge.research.data_readiness import run_data_verification
-from causal_edge.research.workspace import init_workspace
+from abel_edge.research.data_readiness import run_data_verification
+from abel_edge.research.workspace import init_workspace
 
 
 def _write_engine(path: Path, *, bias: float = 0.02, flat: bool = False) -> None:
@@ -45,7 +45,7 @@ def _write_engine(path: Path, *, bias: float = 0.02, flat: bool = False) -> None
                 "import numpy as np",
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -70,7 +70,7 @@ def _write_start_aware_engine(path: Path) -> None:
                 "import numpy as np",
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -101,7 +101,7 @@ def _write_alignment_failure_engine(path: Path) -> None:
                 "import numpy as np",
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -132,7 +132,7 @@ def _write_naive_dates_engine(path: Path) -> None:
                 "import numpy as np",
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -158,7 +158,7 @@ def _write_feed_loader_engine(path: Path) -> None:
                 "import numpy as np",
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -186,7 +186,7 @@ def _write_decision_context_engine(path: Path) -> None:
             [
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -209,7 +209,7 @@ def _write_decision_context_escape_engine(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -227,7 +227,7 @@ def _write_decision_context_input_engine(path: Path) -> None:
     path.write_text(
         "\n".join(
             [
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",
@@ -422,7 +422,7 @@ class TestRunEvaluation:
         engine.write_text(
             "\n".join(
                 [
-                    "from causal_edge.engine.base import StrategyEngine",
+                    "from abel_edge.engine.base import StrategyEngine",
                     "",
                     "class BranchEngine(StrategyEngine):",
                     "    def compute_signals(self):",
@@ -459,7 +459,7 @@ class TestRunEvaluation:
         assert result["decision_preview"]
         assert result["semantic"]["verdict"] == "PASS"
         runtime_facts = result["runtime_facts"]
-        assert runtime_facts["contract"] == "causal-edge.runtime-facts/v1"
+        assert runtime_facts["contract"] == "abel-edge.runtime-facts/v1"
         assert runtime_facts["runtime_stage"] == "validation"
         assert runtime_facts["workflow_status"] == "evaluation_completed"
         assert runtime_facts["read_summary"]["read_count"] >= 1
@@ -587,7 +587,7 @@ class TestRunEvaluation:
         helper.write_text(
             "\n".join(
                 [
-                    "from causal_edge.engine.base import StrategyEngine",
+                    "from abel_edge.engine.base import StrategyEngine",
                     "",
                     "class HelperEngine(StrategyEngine):",
                     "    def compute_signals(self):",
@@ -635,7 +635,7 @@ class TestRunEvaluation:
                     "import numpy as np",
                     "import pandas as pd",
                     "",
-                    "from causal_edge.engine.base import StrategyEngine",
+                    "from abel_edge.engine.base import StrategyEngine",
                     "",
                     "",
                     "class BranchEngine(StrategyEngine):",
@@ -1041,7 +1041,7 @@ class TestEvaluateCli:
 
 class TestVerifyData:
     def test_run_data_verification_reports_full_partial_and_missing(self, monkeypatch, tmp_path):
-        from causal_edge.research import data_readiness as data_module
+        from abel_edge.research import data_readiness as data_module
 
         def _fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
             ticker = symbols[0]
@@ -1088,7 +1088,7 @@ class TestVerifyData:
         assert cnet["left_boundary_confidence"] == "confirmed"
 
     def test_run_data_verification_marks_target_boundary_unknown_when_probe_truncates(self, monkeypatch, tmp_path):
-        from causal_edge.research import data_readiness as data_module
+        from abel_edge.research import data_readiness as data_module
 
         def _fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
             ticker = symbols[0]
@@ -1125,7 +1125,7 @@ class TestVerifyData:
         assert meta["covers_requested_start"] is False
 
     def test_verify_data_cli_writes_json(self, monkeypatch, tmp_path):
-        from causal_edge.research import data_readiness as data_module
+        from abel_edge.research import data_readiness as data_module
 
         monkeypatch.setattr(
             data_module,

@@ -174,8 +174,6 @@ def generate_ic_unsupported_no_position() -> None:
     pnl = np.abs(pnl)  # ensure all positive → omega_applicable=False
 
     # Adjust to hit exact total_return
-    # current total_return = prod(1+pnl) - 1
-    current = np.prod(1.0 + pnl) - 1.0
     # Scale pnl to hit target. For small values, scaling linearly is close enough.
     # More precisely: we want prod(1 + pnl_i * s) = 1.041
     # For small pnl, log(1+x) ≈ x, so sum(pnl*s) ≈ 0.041, s = 0.041/sum(pnl)

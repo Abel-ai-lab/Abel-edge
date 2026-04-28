@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class FeedDemoEngine(StrategyEngine):
@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class BarsFeedDemoEngine(StrategyEngine):
@@ -58,7 +58,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class UndeclaredFeedEngine(StrategyEngine):
@@ -82,7 +82,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class NaiveDatesEngine(StrategyEngine):
@@ -104,7 +104,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class PrimaryOnlyEngine(StrategyEngine):

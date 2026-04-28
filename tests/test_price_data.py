@@ -5,9 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from causal_edge import config as config_module
-from causal_edge.engine.feed_contract import FeedNormalizationError
-from causal_edge.engine import price_data as price_data_module
+from abel_edge import config as config_module
+from abel_edge.engine.feed_contract import FeedNormalizationError
+from abel_edge.engine import price_data as price_data_module
 
 
 def test_normalize_bars_maps_aliases_and_sorts():

@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 GRAPH_PATH = Path(__file__).parent / "causal_graph.json"
 CONVICTION_MIN = 0.75

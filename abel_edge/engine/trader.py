@@ -1,0 +1,306 @@
+"""Strategy execution orchestrator. Iterates strategies.yaml, calls engines."""
+
+from __future__ import annotations
+
+import click
+import numpy as np
+import pandas as pd
+from datetime import date, datetime
+
+from abel_edge.engine.backtest import BacktestSettings, run_backtest
+from abel_edge.engine.feed_contract import FeedContractError
+from abel_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
+from abel_edge.engine.loader import load_engine_from_import_path
+from abel_edge.engine.runtime_contract import DecisionContractError
+from abel_edge.engine.signal_contract import SignalContractError
+
+
+def _load_engine(engine_path: str):
+    """Import engine module and find the StrategyEngine subclass."""
+    return load_engine_from_import_path(engine_path)
+
+
+def _compute_runtime_output(engine, strategy_cfg: dict):
+    try:
+        return engine.compute_runtime_output()
+    except (DecisionContractError, FeedContractError, SignalContractError, TypeError, ValueError) as exc:
+        raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
+
+
+def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
+    """Run a single strategy and write its trade log.
+
+    Args:
+        strategy_cfg: Strategy dict from strategies.yaml
+
+    Returns:
+        dict with keys: id, n_days, trade_log
+    """
+    sid = strategy_cfg["id"]
+    engine_path = strategy_cfg["engine"]
+    trade_log_path = strategy_cfg["trade_log"]
+
+    click.echo(f"  Running {sid}...")
+    engine_cls = _load_engine(engine_path)
+    engine = engine_cls(context=strategy_cfg)
+
+    compiled = _compute_runtime_output(engine, strategy_cfg)
+    dates = compiled.decision_index
+    prices = compiled.close_prices
+
+    execution_cfg = (settings or {}).get("execution") or {}
+    input_semantics = (
+        "next_position" if compiled.output_mode == "decision_context" else "effective_position"
+    )
+    result = run_backtest(
+        compiled.next_position if input_semantics == "next_position" else compiled.positions,
+        prices,
+        dates=dates,
+        settings=BacktestSettings(
+            cost_bps=float(execution_cfg.get("cost_bps", 0.0) or 0.0),
+            max_abs_position=execution_cfg.get("max_abs_position"),
+        ),
+        input_semantics=input_semantics,
+        execution_delay_bars=compiled.runtime_profile.execution_delay_bars,
+    )
+
+    write_trade_log(
+        pd.DatetimeIndex(dates),
+        result["asset_returns"],
+        result["pnl"],
+        result["positions"],
+        trade_log_path,
+        decision_times=result.get("decision_time"),
+        effective_times=result.get("effective_time"),
+        close_prices=prices,
+        next_positions=result.get("next_position"),
+        gross_pnl=result["gross_pnl"],
+        turnover=result["turnover"],
+        execution_cost=result["execution_cost"],
+    )
+
+    return {"id": sid, "n_days": len(dates), "trade_log": trade_log_path}
+
+
+def _ensure_paper_signal(engine, *, as_of):
+    try:
+        signal = engine.get_paper_signal(as_of=as_of)
+    except NotImplementedError as e:
+        raise click.ClickException(str(e)) from e
+    if "next_position" not in signal:
+        raise click.ClickException(
+            f"{engine.__class__.__name__}.get_paper_signal(as_of=...) must return 'next_position'."
+        )
+    return signal
+
+
+RESERVED_PAPER_ROW_FIELDS = {
+    "date",
+    "decision_time",
+    "effective_time",
+    "close",
+    "asset_return",
+    "position",
+    "pnl",
+    "next_position",
+    "source",
+    "cum_return",
+    "gross_pnl",
+    "turnover",
+    "execution_cost",
+}
+
+
+def _paper_signal_extra_fields(signal: dict) -> dict:
+    extras = {}
+    for key, value in signal.items():
+        if key in RESERVED_PAPER_ROW_FIELDS:
+            continue
+        if isinstance(value, pd.Timestamp):
+            extras[key] = value.isoformat()
+        elif isinstance(value, datetime):
+            extras[key] = value.isoformat()
+        elif isinstance(value, date):
+            extras[key] = value.isoformat()
+        elif isinstance(value, np.datetime64):
+            extras[key] = pd.Timestamp(value).isoformat()
+        elif isinstance(value, np.generic):
+            native_value = value.item()
+            if native_value is None or isinstance(native_value, (str, int, float, bool)):
+                extras[key] = native_value
+        elif value is None or isinstance(value, (str, int, float, bool)):
+            extras[key] = value
+    return extras
+
+
+def _resolve_last_logged_row(trade_log_path: str):
+    try:
+        log_df = read_trade_log(trade_log_path)
+    except FileNotFoundError as e:
+        raise click.ClickException(
+            f"Trade log not found for paper trading: {trade_log_path}. Run 'abel-edge run' first."
+        ) from e
+
+    if len(log_df) == 0:
+        raise click.ClickException(
+            f"Trade log is empty for paper trading: {trade_log_path}. Run 'abel-edge run' first."
+        )
+
+    log_df = log_df.sort_values("date").reset_index(drop=True)
+    return log_df, log_df.iloc[-1]
+
+
+def _paper_log_path(strategy_cfg: dict) -> str:
+    return strategy_cfg.get("paper_log") or strategy_cfg["trade_log"]
+
+
+def _resolve_paper_state(strategy_cfg: dict):
+    trade_log_path = strategy_cfg["trade_log"]
+    paper_log_path = _paper_log_path(strategy_cfg)
+
+    if paper_log_path != trade_log_path:
+        try:
+            paper_df, paper_last_row = _resolve_last_logged_row(paper_log_path)
+            return paper_log_path, paper_df, paper_last_row
+        except click.ClickException:
+            pass
+
+    trade_df, trade_last_row = _resolve_last_logged_row(trade_log_path)
+    return paper_log_path, trade_df, trade_last_row
+
+
+def paper_run_one(
+    strategy_cfg: dict,
+    *,
+    settings: dict | None = None,
+    as_of=None,
+) -> dict:
+    sid = strategy_cfg["id"]
+    engine_path = strategy_cfg["engine"]
+    paper_log_path = _paper_log_path(strategy_cfg)
+
+    click.echo(f"  Paper trading {sid}...")
+    engine_cls = _load_engine(engine_path)
+    engine = engine_cls(context=strategy_cfg)
+
+    compiled = _compute_runtime_output(engine, strategy_cfg)
+    dates = compiled.decision_index
+    prices = compiled.close_prices
+    positions = compiled.positions
+    if as_of is not None:
+        cutoff = pd.to_datetime(as_of, utc=True)
+        mask = dates <= cutoff
+        positions = positions[mask]
+        prices = prices[mask]
+        dates = dates[mask]
+
+    if len(dates) == 0:
+        raise click.ClickException(f"No bars available for strategy '{sid}'.")
+
+    returns = np.zeros_like(prices, dtype=float)
+    if len(prices) > 1:
+        returns[1:] = prices[1:] / prices[:-1] - 1.0
+
+    _, paper_df, last_row = _resolve_paper_state(strategy_cfg)
+    last_logged_date = pd.to_datetime(last_row["date"], utc=True)
+    new_mask = dates > last_logged_date
+    new_dates = dates[new_mask]
+    if len(new_dates) == 0:
+        return {
+            "id": sid,
+            "n_rows": 0,
+            "trade_log": paper_log_path,
+            "last_date": str(last_logged_date),
+        }
+
+    if "next_position" in paper_df.columns and pd.notna(last_row.get("next_position")):
+        carry_position = float(last_row["next_position"])
+    else:
+        bootstrap = _ensure_paper_signal(engine, as_of=last_logged_date)
+        carry_position = float(bootstrap["next_position"])
+
+    rows = []
+    date_to_index = {ts: idx for idx, ts in enumerate(dates)}
+    for ts in new_dates:
+        idx = date_to_index[ts]
+        signal = _ensure_paper_signal(engine, as_of=ts)
+        next_position = float(signal["next_position"])
+        row = {
+            "date": ts,
+            "decision_time": ts,
+            "effective_time": ts,
+            "close": float(prices[idx]),
+            "asset_return": float(returns[idx]),
+            "position": carry_position,
+            "pnl": float(carry_position * returns[idx]),
+            "next_position": next_position,
+            "source": "live",
+        }
+        row.update(_paper_signal_extra_fields(signal))
+        rows.append(row)
+        carry_position = next_position
+
+    append_trade_log_rows(paper_log_path, rows)
+    return {
+        "id": sid,
+        "n_rows": len(rows),
+        "trade_log": paper_log_path,
+        "last_date": str(new_dates[-1].date()),
+    }
+
+
+def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
+    """Run all strategies (or one specific strategy) from config.
+
+    Args:
+        config: Loaded config dict from load_config()
+        strategy_id: If set, run only this strategy
+
+    Returns:
+        List of result dicts from run_one()
+    """
+    strategies = config["strategies"]
+    if strategy_id:
+        strategies = [s for s in strategies if s["id"] == strategy_id]
+        if not strategies:
+            raise ValueError(
+                f"Strategy '{strategy_id}' not found in strategies.yaml. "
+                f"Available: {[s['id'] for s in config['strategies']]}"
+            )
+
+    results = []
+    for s_cfg in strategies:
+        result = run_one(s_cfg, settings=config.get("settings"))
+        results.append(result)
+        click.echo(f"    → {result['n_days']} days written to {result['trade_log']}")
+
+    return results
+
+
+def paper_run_all(config: dict, strategy_id: str | None = None, as_of=None) -> list[dict]:
+    strategies = config["strategies"]
+    if strategy_id:
+        strategies = [s for s in strategies if s["id"] == strategy_id]
+        if not strategies:
+            raise ValueError(
+                f"Strategy '{strategy_id}' not found in strategies.yaml. "
+                f"Available: {[s['id'] for s in config['strategies']]}"
+            )
+
+    results = []
+    for s_cfg in strategies:
+        result = paper_run_one(
+            s_cfg,
+            settings=config.get("settings"),
+            as_of=as_of,
+        )
+        results.append(result)
+        if result["n_rows"] == 0:
+            click.echo(f"    → no new closed bars for {result['id']}")
+        else:
+            click.echo(
+                f"    → appended {result['n_rows']} live rows to {result['trade_log']} "
+                f"through {result['last_date']}"
+            )
+
+    return results

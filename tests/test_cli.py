@@ -6,15 +6,15 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge import __version__
-from causal_edge.cli import main
-from causal_edge.engine.ledger import read_trade_log
+from abel_edge import __version__
+from abel_edge.cli import main
+from abel_edge.engine.ledger import read_trade_log
 
 
 def test_help():
     result = CliRunner().invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert "causal-edge" in result.output
+    assert "abel-edge" in result.output
 
 
 def test_version():

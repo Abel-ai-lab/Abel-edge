@@ -1,0 +1,134 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Validate version metadata
+        id: version
+        shell: bash
+        run: |
+          PACKAGE_VERSION="$(python - <<'PY'
+          import re
+          import tomllib
+          from pathlib import Path
+
+          pyproject = Path("pyproject.toml")
+          data = tomllib.loads(pyproject.read_text())
+          package_version = data["project"]["version"]
+
+          init_text = Path("abel_edge/__init__.py").read_text()
+          match = re.search(r'__version__\s*=\s*"([^"]+)"', init_text)
+          init_version = match.group(1) if match else None
+          if init_version != package_version:
+              raise SystemExit(
+                  f"abel_edge.__version__ {init_version!r} does not match "
+                  f"pyproject version {package_version!r}"
+              )
+
+          print(package_version)
+          PY
+          )"
+          RELEASE_TAG="v${PACKAGE_VERSION}"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            if [[ "${GITHUB_REF_NAME}" != "${RELEASE_TAG}" ]]; then
+              echo "Tag ${GITHUB_REF_NAME} does not match package version ${PACKAGE_VERSION}" >&2
+              exit 1
+            fi
+          fi
+
+          echo "package_version=${PACKAGE_VERSION}" >> "${GITHUB_OUTPUT}"
+          echo "release_tag=${RELEASE_TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Check distribution metadata
+        run: python -m twine check dist/*
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/abel-edge/
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    needs:
+      - build
+      - publish-pypi
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download distribution artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.build.outputs.release_tag }}" \
+            --verify-tag \
+            --title "${{ needs.build.outputs.release_tag }}" \
+            --generate-notes \
+            dist/*

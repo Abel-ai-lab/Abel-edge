@@ -10,11 +10,11 @@ public validation surface.
 
 | Surface | File | Current contract |
 |---|---|---|
-| Metric computation | `causal_edge/validation/metrics.py`, `causal_edge/validation/position_ic.py` | Live payload computes ratio, shape, and Position-Return IC metrics from `pnl`, optional `position`, and optional `asset_return` |
-| Gate evaluation | `causal_edge/validation/metrics.py` | Live failures are conditional on applicability rather than fixed legacy gate counts |
-| Result contract | `causal_edge/validation/gate.py` | `validate_strategy()` returns `verdict`, `score`, `failures`, `metrics`, `triangle`, `profile` |
-| Trade-log contract | `causal_edge/engine/ledger.py`, `causal_edge/validation/gate.py` | Validation consumes trade logs with `date`, `pnl`, optional `position`, optional `asset_return`, and derived `cum_return` |
-| Public wording | `README.md`, `CAPABILITY.md`, `causal_edge/validation/AGENTS.md` | Public docs should describe the applicable-gate live contract rather than legacy fixed-denominator narratives |
+| Metric computation | `abel_edge/validation/metrics.py`, `abel_edge/validation/position_ic.py` | Live payload computes ratio, shape, and Position-Return IC metrics from `pnl`, optional `position`, and optional `asset_return` |
+| Gate evaluation | `abel_edge/validation/metrics.py` | Live failures are conditional on applicability rather than fixed legacy gate counts |
+| Result contract | `abel_edge/validation/gate.py` | `validate_strategy()` returns `verdict`, `score`, `failures`, `metrics`, `triangle`, `profile` |
+| Trade-log contract | `abel_edge/engine/ledger.py`, `abel_edge/validation/gate.py` | Validation consumes trade logs with `date`, `pnl`, optional `position`, optional `asset_return`, and derived `cum_return` |
+| Public wording | `README.md`, `CAPABILITY.md`, `abel_edge/validation/AGENTS.md` | Public docs should describe the applicable-gate live contract rather than legacy fixed-denominator narratives |
 
 ## Timing Contract
 
@@ -63,4 +63,4 @@ Apply these checks when auditing strategy math:
 - Trade logs without `asset_return` remain supported, but they cannot activate the
   full Position-Return IC family.
 - Deferred and removed validation items belong in
-  `causal_edge/validation/deferred_registry.yaml` rather than in this contract file.
+  `abel_edge/validation/deferred_registry.yaml` rather than in this contract file.

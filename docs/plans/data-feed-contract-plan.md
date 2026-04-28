@@ -486,7 +486,7 @@ through adapter-backed framework normalization and alignment.
 
 Keep the implementation narrow and explicit.
 
-### `causal_edge/engine/feed_contract.py`
+### `abel_edge/engine/feed_contract.py`
 
 Owns:
 
@@ -501,7 +501,7 @@ Suggested exception types:
 - `FeedAlignmentError`
 - `SignalContractError`
 
-### `causal_edge/engine/adapter_registry.py`
+### `abel_edge/engine/adapter_registry.py`
 
 Owns:
 
@@ -510,7 +510,7 @@ Owns:
 - config-driven import loading
 - adapter existence checks used during config normalization
 
-### `causal_edge/engine/feed_loader.py`
+### `abel_edge/engine/feed_loader.py`
 
 Owns:
 
@@ -519,19 +519,19 @@ Owns:
 - invoking adapters
 - applying framework normalization after adapter output returns
 
-### `causal_edge/engine/signal_contract.py`
+### `abel_edge/engine/signal_contract.py`
 
 Owns:
 
 - validation of `(positions, dates, prices)` output
 - reusable helper called by both run and paper paths
 
-### `causal_edge/engine/base.py`
+### `abel_edge/engine/base.py`
 
 Extends `StrategyEngine` to expose the safe data-access and output-finalization
 APIs described above.
 
-### `causal_edge/config.py`
+### `abel_edge/config.py`
 
 Extends schema validation for:
 
