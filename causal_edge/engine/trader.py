@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 import numpy as np
 import pandas as pd
+from datetime import date, datetime
 
 from causal_edge.engine.backtest import BacktestSettings, run_backtest
 from causal_edge.engine.feed_contract import FeedContractError
@@ -116,6 +117,10 @@ def _paper_signal_extra_fields(signal: dict) -> dict:
         if key in RESERVED_PAPER_ROW_FIELDS:
             continue
         if isinstance(value, pd.Timestamp):
+            extras[key] = value.isoformat()
+        elif isinstance(value, datetime):
+            extras[key] = value.isoformat()
+        elif isinstance(value, date):
             extras[key] = value.isoformat()
         elif isinstance(value, np.datetime64):
             extras[key] = pd.Timestamp(value).isoformat()

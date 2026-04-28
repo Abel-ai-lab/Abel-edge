@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from datetime import date, datetime, timezone
 
 from causal_edge.engine.base import StrategyEngine
 
@@ -43,6 +44,8 @@ class PaperDemoEngine(StrategyEngine):
             'data_backend': 'csv',
             'data_fetch_status': 'provider_fetch',
             'data_latest_timestamp': str(target['timestamp'].iloc[-1]),
+            'broker_decision_time': datetime(2026, 1, 4, 16, 30, tzinfo=timezone.utc),
+            'provider_session_date': date(2026, 1, 4),
             'provider_sequence': np.int64(len(target)),
             'paper_audit_status': 'provider_fetch',
             'source': 'bad-source-override',
@@ -140,6 +143,8 @@ def test_paper_appends_live_rows_with_close_fill_semantics(tmp_path):
         assert paper_df.iloc[-1]["data_backend"] == "csv"
         assert paper_df.iloc[-1]["data_fetch_status"] == "provider_fetch"
         assert str(paper_df.iloc[-1]["data_latest_timestamp"]).startswith("2026-01-04")
+        assert str(paper_df.iloc[-1]["broker_decision_time"]).startswith("2026-01-04T16:30:00")
+        assert str(paper_df.iloc[-1]["provider_session_date"]) == "2026-01-04"
         assert int(paper_df.iloc[-1]["provider_sequence"]) == 4
         assert paper_df.iloc[-1]["paper_audit_status"] == "provider_fetch"
         assert paper_df.iloc[-1]["source"] == "live"
