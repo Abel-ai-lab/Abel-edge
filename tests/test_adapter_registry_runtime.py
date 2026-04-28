@@ -9,9 +9,9 @@ from pathlib import Path
 from click.testing import CliRunner
 import pytest
 
-from causal_edge.cli import main
-from causal_edge.config import load_config
-from causal_edge.engine.ledger import read_trade_log
+from abel_edge.cli import main
+from abel_edge.config import load_config
+from abel_edge.engine.ledger import read_trade_log
 
 
 ENGINE_CODE = """
@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class AdapterRegistryDemoEngine(StrategyEngine):
@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from causal_edge.engine.adapter_registry import register_adapter
+from abel_edge.engine.adapter_registry import register_adapter
 
 
 class ConstantSeriesAdapter:

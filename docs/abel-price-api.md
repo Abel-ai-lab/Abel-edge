@@ -1,10 +1,10 @@
 # Abel Price API Context
 
-This document aligns the planned Abel price API with `causal-edge` runtime needs.
+This document aligns the planned Abel price API with `abel-edge` runtime needs.
 
 ## Goal
 
-`causal-edge` should fetch real price bars from Abel by default, without exposing
+`abel-edge` should fetch real price bars from Abel by default, without exposing
 database tables or SQL details in user config.
 
 ## Endpoint
@@ -18,8 +18,8 @@ database tables or SQL details in user config.
 - Override base URL with `ABEL_CAP_BASE_URL=<custom_base>`
 
 Notes:
-- `causal-edge` currently uses Abel prod for both graph discovery and market data
-- `causal-edge login --json --no-browser` emits a JSON handoff event first, then
+- `abel-edge` currently uses Abel prod for both graph discovery and market data
+- `abel-edge login --json --no-browser` emits a JSON handoff event first, then
   the final authorization result, which is the preferred flow for agent-driven
   environments
 
@@ -40,7 +40,7 @@ Notes:
 - `symbols` are bare tickers like `ETHUSD`, not `ETHUSD.price`
 - `timeframe` is currently expected to be `1d`
 - `limit` is applied per symbol
-- `fields` lets the API trim payloads later, but `causal-edge` currently expects
+- `fields` lets the API trim payloads later, but `abel-edge` currently expects
   at least `timestamp`, `symbol`, `close` in the response
 
 ## Response Shape
@@ -72,7 +72,7 @@ Each returned row should represent one daily bar.
 
 ## Runtime Expectations
 
-`causal-edge` normalizes the response into a DataFrame with these standard columns:
+`abel-edge` normalizes the response into a DataFrame with these standard columns:
 
 - `timestamp`
 - `symbol`
@@ -94,7 +94,7 @@ Runtime rules:
 
 ## Why This Contract
 
-- keeps `causal-edge` config simple
+- keeps `abel-edge` config simple
 - keeps database schema hidden behind Abel
 - supports multi-asset strategies and causal parent lookups
 - matches the engine contract: strategies need aligned daily close series and may

@@ -1,0 +1,37 @@
+name: Feature request
+description: Propose a new runtime, validation, CLI, or documentation improvement
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea.
+
+        Good feature requests explain the user problem first, then the proposed API or behavior.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: It is difficult to evaluate a strategy because...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the CLI, API, contract, or documentation change you want
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternatives have you tried?
+  - type: textarea
+    id: impact
+    attributes:
+      label: Expected impact
+      description: Who benefits, and how would success look?

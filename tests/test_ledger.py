@@ -5,8 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from causal_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
-from causal_edge.validation.gate import validate_strategy
+from abel_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
+from abel_edge.validation.gate import validate_strategy
 
 
 def test_append_trade_rows_prefer_live_over_same_day_backfill(tmp_path) -> None:

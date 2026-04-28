@@ -4,11 +4,11 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
+from abel_edge.cli import main
 
 
 def test_login_json_output(monkeypatch):
-    from causal_edge.plugins.abel import auth as auth_module
+    from abel_edge.plugins.abel import auth as auth_module
 
     def _login_with_oauth(**kwargs):
         kwargs["notify"]("Open this URL to authorize Abel access:\nhttps://example.com/auth")
@@ -55,7 +55,7 @@ def test_login_json_output(monkeypatch):
 
 
 def test_login_print_token_for_existing_key(monkeypatch):
-    from causal_edge.plugins.abel import auth as auth_module
+    from abel_edge.plugins.abel import auth as auth_module
 
     monkeypatch.setattr(
         auth_module,
@@ -79,7 +79,7 @@ def test_login_print_token_for_existing_key(monkeypatch):
 
 
 def test_login_reports_shared_auth_reuse(monkeypatch):
-    from causal_edge.plugins.abel import auth as auth_module
+    from abel_edge.plugins.abel import auth as auth_module
 
     monkeypatch.setattr(
         auth_module,
@@ -109,7 +109,7 @@ def test_discover_ethusd_parents(monkeypatch, tmp_path):
             assert api_key == "abel_test"
             return [{"node_id": "BTCUSD.price"}, {"node_id": "SOLUSD.price"}]
 
-    from causal_edge.plugins.abel import discover as discover_module
+    from abel_edge.plugins.abel import discover as discover_module
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discover_module, "require_api_key", lambda env_path=".env": "abel_test")
@@ -132,7 +132,7 @@ def test_discover_ethusd_markov_blanket(monkeypatch, tmp_path):
                 {"node_id": "SOLUSD.price", "roles": ["spouse"]},
             ]
 
-    from causal_edge.plugins.abel import discover as discover_module
+    from abel_edge.plugins.abel import discover as discover_module
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discover_module, "require_api_key", lambda env_path=".env": "abel_test")
@@ -155,7 +155,7 @@ def test_discover_json_preserves_target_node_and_field_aware_items(monkeypatch, 
             assert node_id == "ETHUSD.price"
             return [{"node_id": "ETHUSD.volume", "roles": ["sibling"]}]
 
-    from causal_edge.plugins.abel import discover as discover_module
+    from abel_edge.plugins.abel import discover as discover_module
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(discover_module, "require_api_key", lambda env_path=".env": "abel_test")
@@ -169,8 +169,8 @@ def test_discover_json_preserves_target_node_and_field_aware_items(monkeypatch, 
 
 
 def test_discover_missing_api_key_fails(monkeypatch, tmp_path):
-    from causal_edge.plugins.abel import discover as discover_module
-    from causal_edge.plugins.abel.credentials import MissingAbelApiKeyError
+    from abel_edge.plugins.abel import discover as discover_module
+    from abel_edge.plugins.abel.credentials import MissingAbelApiKeyError
 
     monkeypatch.chdir(tmp_path)
 
@@ -192,7 +192,7 @@ def test_discover_uses_causal_abel_skill_auth_file(monkeypatch, tmp_path):
             assert api_key == "abel_skill"
             return [{"node_id": "BTCUSD.price"}]
 
-    from causal_edge.plugins.abel import discover as discover_module
+    from abel_edge.plugins.abel import discover as discover_module
 
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
@@ -212,8 +212,8 @@ def test_discover_uses_causal_abel_skill_auth_file(monkeypatch, tmp_path):
 
 
 def test_run_with_abel_source_missing_api_key_fails(monkeypatch, tmp_path):
-    from causal_edge.engine import trader as trader_module
-    from causal_edge.engine.base import StrategyEngine
+    from abel_edge.engine import trader as trader_module
+    from abel_edge.engine.base import StrategyEngine
 
     class DemoEngine(StrategyEngine):
         def compute_signals(self):

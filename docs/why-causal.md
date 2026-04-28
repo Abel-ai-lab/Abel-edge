@@ -28,14 +28,14 @@ This is the meta-standard: not "use causal because K is smaller" but "use causal
 
 ## The Abel Plugin (Optional)
 
-causal-edge integrates with [Abel's Causal API](https://abel.ai) for automated causal discovery:
+abel-edge integrates with [Abel's Causal API](https://abel.ai) for automated causal discovery:
 
 ```bash
 # Discover what causally drives an asset
-causal-edge discover ETHUSD
+abel-edge discover ETHUSD
 
 # Or inspect the markov blanket
-causal-edge discover ETHUSD --mode mb
+abel-edge discover ETHUSD --mode mb
 
 # Output: YAML snippet to paste into strategies.yaml
 ```

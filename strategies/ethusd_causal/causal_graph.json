@@ -6,5 +6,5 @@
     {"ticker": "SSTK", "field": "price", "type": "parent"}
   ],
   "children": [],
-  "note": "Discovered with causal-edge discover ETHUSD --limit 5"
+  "note": "Discovered with abel-edge discover ETHUSD --limit 5"
 }

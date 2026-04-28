@@ -5,10 +5,10 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from causal_edge.config import load_config
-from causal_edge.engine.base import StrategyEngine
-from causal_edge.engine.feed_contract import FeedAlignmentError, align_series_to_dates
-from causal_edge.engine.signal_contract import SignalContractError, validate_signal_output
+from abel_edge.config import load_config
+from abel_edge.engine.base import StrategyEngine
+from abel_edge.engine.feed_contract import FeedAlignmentError, align_series_to_dates
+from abel_edge.engine.signal_contract import SignalContractError, validate_signal_output
 
 
 def test_load_config_synthesizes_primary_feed_and_default_contract(tmp_path):

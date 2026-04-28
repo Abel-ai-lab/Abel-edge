@@ -7,8 +7,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
-from causal_edge.engine.ledger import read_trade_log
+from abel_edge.cli import main
+from abel_edge.engine.ledger import read_trade_log
 from tests.data_contract_helpers import (
     BAR_FEED_ENGINE_CODE,
     FEED_ENGINE_CODE,

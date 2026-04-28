@@ -17,7 +17,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
+from abel_edge.cli import main
 
 
 def _write_demo_project(base: Path) -> None:
@@ -51,7 +51,7 @@ def test_dashboard_renders_three_page_nav(tmp_path):
     """Portfolio / Live / Strategy page navigation must exist.
 
     If this fails, the three-page layout shipped 2026-04-15 has been
-    regressed. Fix: inspect causal_edge/dashboard/templates/base.html
+    regressed. Fix: inspect abel_edge/dashboard/templates/base.html
     and ensure the nav block renders three `.nav-btn` buttons wired to
     `showPage('portfolio')`, `showPage('live')`, `showPage('strategy')`.
     """

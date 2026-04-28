@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security policy
+    url: https://github.com/Abel-ai-causality/Abel-edge/blob/main/SECURITY.md
+    about: Please use the private reporting guidance for vulnerabilities.
+  - name: Support guide
+    url: https://github.com/Abel-ai-causality/Abel-edge/blob/main/SUPPORT.md
+    about: Start here for usage questions and troubleshooting.

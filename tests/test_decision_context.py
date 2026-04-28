@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 def _write_feed_csv(path: Path, rows: list[tuple[str, float]]) -> None:

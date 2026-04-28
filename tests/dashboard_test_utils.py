@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 DEMO_ENGINE = (
-    "from causal_edge.engine.base import StrategyEngine\n"
+    "from abel_edge.engine.base import StrategyEngine\n"
     "class DemoSignalEngine(StrategyEngine):\n"
     "    def compute_signals(self):\n"
     "        raise NotImplementedError\n"

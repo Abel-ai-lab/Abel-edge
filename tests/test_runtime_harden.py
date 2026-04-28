@@ -1,4 +1,4 @@
-"""Tests for ``causal_edge._runtime_harden``.
+"""Tests for ``abel_edge._runtime_harden``.
 
 Verifies the three-layer joblib/fork deadlock prevention:
   - env vars set at apply() time
@@ -22,7 +22,7 @@ import time
 
 import pytest
 
-from causal_edge import _runtime_harden as rh
+from abel_edge import _runtime_harden as rh
 
 
 def test_apply_sets_thread_count_env_vars(monkeypatch):
@@ -69,7 +69,7 @@ def test_apply_sets_forkserver_when_unset(monkeypatch):
     """
     script = (
         "import multiprocessing as mp;"
-        "from causal_edge import _runtime_harden as rh;"
+        "from abel_edge import _runtime_harden as rh;"
         "rh.apply();"
         "print(mp.get_start_method(allow_none=True))"
     )
@@ -104,7 +104,7 @@ def test_descendant_pids_detects_real_child():
 def test_descendant_pids_empty_on_leaf():
     """A freshly spawned subprocess with no children reports empty descendants."""
     script = (
-        "from causal_edge._runtime_harden import _descendant_pids;"
+        "from abel_edge._runtime_harden import _descendant_pids;"
         "import os;"
         "print(len(_descendant_pids(os.getpid())))"
     )
@@ -188,7 +188,7 @@ def test_install_global_timeout_installs_alarm(monkeypatch):
 
 
 def test_install_from_env_without_env_installs_only_trap(monkeypatch):
-    monkeypatch.delenv("CAUSAL_EDGE_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("ABEL_EDGE_TIMEOUT_SECONDS", raising=False)
     monkeypatch.setattr(rh, "_trap_installed", False)
     monkeypatch.setattr(rh, "_alarm_installed", False)
 
@@ -200,7 +200,7 @@ def test_install_from_env_without_env_installs_only_trap(monkeypatch):
 
 @pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="SIGALRM unavailable (Windows)")
 def test_install_from_env_installs_timeout_when_set(monkeypatch):
-    monkeypatch.setenv("CAUSAL_EDGE_TIMEOUT_SECONDS", "3600")
+    monkeypatch.setenv("ABEL_EDGE_TIMEOUT_SECONDS", "3600")
     monkeypatch.setattr(rh, "_trap_installed", False)
     monkeypatch.setattr(rh, "_alarm_installed", False)
     original = signal.getsignal(signal.SIGALRM)
@@ -213,7 +213,7 @@ def test_install_from_env_installs_timeout_when_set(monkeypatch):
 
 
 def test_install_from_env_ignores_non_integer(monkeypatch):
-    monkeypatch.setenv("CAUSAL_EDGE_TIMEOUT_SECONDS", "not-a-number")
+    monkeypatch.setenv("ABEL_EDGE_TIMEOUT_SECONDS", "not-a-number")
     monkeypatch.setattr(rh, "_trap_installed", False)
     monkeypatch.setattr(rh, "_alarm_installed", False)
 
@@ -249,8 +249,8 @@ def test_install_global_timeout_clamps_oversized_value(monkeypatch, capsys):
 
 @pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="SIGALRM unavailable (Windows)")
 def test_install_from_env_oversized_value_does_not_crash(monkeypatch):
-    """Setting CAUSAL_EDGE_TIMEOUT_SECONDS to a huge value must not crash CLI startup."""
-    monkeypatch.setenv("CAUSAL_EDGE_TIMEOUT_SECONDS", "99999999999999")
+    """Setting ABEL_EDGE_TIMEOUT_SECONDS to a huge value must not crash CLI startup."""
+    monkeypatch.setenv("ABEL_EDGE_TIMEOUT_SECONDS", "99999999999999")
     monkeypatch.setattr(rh, "_trap_installed", False)
     monkeypatch.setattr(rh, "_alarm_installed", False)
     original = signal.getsignal(signal.SIGALRM)
@@ -270,7 +270,7 @@ def test_apply_handles_value_error_from_set_start_method(monkeypatch):
     Regression for the P1 review on PR #25: rare embedded Python builds
     raise ValueError when set_start_method is called with an unsupported
     method name. apply() previously caught only RuntimeError/ImportError,
-    so importing causal_edge.cli would crash every CLI invocation.
+    so importing abel_edge.cli would crash every CLI invocation.
     """
     import multiprocessing as mp
 

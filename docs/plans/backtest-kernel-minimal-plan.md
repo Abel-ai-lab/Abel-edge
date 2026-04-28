@@ -4,13 +4,13 @@ This plan describes the legacy `compute_signals() -> (positions, dates, prices)`
 contract and is kept only as historical context.
 
 For the active authoring/runtime model, see the agent-first rollout documents
-in the mono workspace and the current `DecisionContext` runtime in `causal-edge`.
+in the mono workspace and the current `DecisionContext` runtime in `abel-edge`.
 
 # Backtest Kernel Minimal Plan
 
 ## Goal
 
-Create a small deterministic backtest kernel under `causal_edge/engine/` so execution semantics stop living inside CLI-orchestrator code.
+Create a small deterministic backtest kernel under `abel_edge/engine/` so execution semantics stop living inside CLI-orchestrator code.
 
 This iteration is intentionally narrow:
 
@@ -45,7 +45,7 @@ Those can be addressed in later iterations after this kernel boundary is stable.
 ## Guiding Principles
 
 1. Smallest correct change.
-2. Preserve current user-visible workflow: `strategies.yaml -> causal-edge run -> trade_log.csv -> validate/dashboard`.
+2. Preserve current user-visible workflow: `strategies.yaml -> abel-edge run -> trade_log.csv -> validate/dashboard`.
 3. Do not widen strategy obligations. Existing `compute_signals()` engines should keep working.
 4. Move execution semantics out of `trader.py`, but do not build a big framework.
 5. Default behavior must remain backward-compatible when cost and leverage settings are absent.
@@ -144,12 +144,12 @@ This is enough for the current engine contract because engines already output di
 
 Keep this small. A good first cut is:
 
-- `causal_edge/engine/backtest.py`
+- `abel_edge/engine/backtest.py`
   - `BacktestSettings` dataclass or small helper
   - `run_backtest(positions, prices, settings=None)`
-- `causal_edge/engine/trader.py`
+- `abel_edge/engine/trader.py`
   - call the kernel instead of computing returns/PnL inline
-- `causal_edge/config.py`
+- `abel_edge/config.py`
   - validate the new `settings.execution` block
 
 Avoid introducing more layers than this in the first pass.
