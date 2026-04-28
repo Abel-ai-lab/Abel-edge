@@ -2,20 +2,20 @@
 
 ## Purpose
 
-`causal-edge` owns the strategy-compliance decision. External orchestrators such as
+`abel-edge` owns the strategy-compliance decision. External orchestrators such as
 `Abel-alpha` may package that decision for downstream workflow handoff, but the
-handoff itself must conform to the edge contract or `causal-edge` rejects it.
+handoff itself must conform to the edge contract or `abel-edge` rejects it.
 
 Validate a handoff with:
 
 ```bash
-causal-edge validate-handoff path/to/edge-handoff.json
+abel-edge validate-handoff path/to/edge-handoff.json
 ```
 
 Generate an edge-owned handoff while evaluating a strategy with:
 
 ```bash
-causal-edge evaluate \
+abel-edge evaluate \
   --workdir strategies/my_strategy \
   --output-json edge-result.json \
   --output-md edge-validation.md \
@@ -28,7 +28,7 @@ The handoff must be a JSON object with exactly these fields:
 
 ```json
 {
-  "contract": "causal-edge.strategy-handoff/v1",
+  "contract": "abel-edge.strategy-handoff/v1",
   "strategy_path": "../engine.py",
   "verdict": "PASS",
   "profile": "equity_daily",
@@ -40,7 +40,7 @@ The handoff must be a JSON object with exactly these fields:
 
 Rules:
 
-- `contract` must exactly equal `causal-edge.strategy-handoff/v1`
+- `contract` must exactly equal `abel-edge.strategy-handoff/v1`
 - `verdict` must be one of `PASS`, `FAIL`, `ERROR`
 - `blocking_failures` must be a list of strings
 - all paths must be relative to the handoff file
@@ -50,7 +50,7 @@ Rules:
 
 ## Rejection Behavior
 
-`causal-edge validate-handoff` rejects a handoff when any of the following is true:
+`abel-edge validate-handoff` rejects a handoff when any of the following is true:
 
 - missing required fields
 - unknown extra fields

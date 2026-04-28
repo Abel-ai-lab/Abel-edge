@@ -4,8 +4,8 @@ import json
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
-from causal_edge.research.probes import probe_graph_inputs
+from abel_edge.cli import main
+from abel_edge.research.probes import probe_graph_inputs
 
 
 def _bars(rows: list[tuple[str, float, float]], symbol: str):
@@ -24,7 +24,7 @@ def _bars(rows: list[tuple[str, float, float]], symbol: str):
 
 
 def test_probe_graph_inputs_supports_cross_calendar_and_volume(monkeypatch):
-    from causal_edge.research import probes as probe_module
+    from abel_edge.research import probes as probe_module
 
     def _fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
         symbol = symbols[0]
@@ -69,7 +69,7 @@ def test_probe_graph_inputs_supports_cross_calendar_and_volume(monkeypatch):
 
 
 def test_probe_data_cli_writes_json(monkeypatch, tmp_path):
-    from causal_edge.research import probes as probe_module
+    from abel_edge.research import probes as probe_module
 
     monkeypatch.setattr(
         probe_module,

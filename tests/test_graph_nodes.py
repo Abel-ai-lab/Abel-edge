@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from causal_edge.graph_nodes import (
+from abel_edge.graph_nodes import (
     GraphNodeRef,
     coerce_graph_node_ref,
     coerce_graph_node_refs,

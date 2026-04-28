@@ -5,8 +5,8 @@ import sys
 import pandas as pd
 from click.testing import CliRunner
 
-from causal_edge.cli import main
-from causal_edge.engine.ledger import read_trade_log, write_trade_log
+from abel_edge.cli import main
+from abel_edge.engine.ledger import read_trade_log, write_trade_log
 
 
 ENGINE_CODE = """
@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class PaperDemoEngine(StrategyEngine):

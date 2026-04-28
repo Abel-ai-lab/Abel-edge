@@ -1,10 +1,10 @@
-# Contributing to causal-edge
+# Contributing to abel-edge
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/Abel-ai-causality/Abel-edge.git
-cd causal-edge
+cd abel-edge
 pip install -e ".[dev]"
 make test    # all tests must pass
 ```
@@ -27,7 +27,7 @@ These are enforced by structural tests — PRs that violate them will fail CI:
 - **No file > 400 lines** — split at 350
 - **strategies.yaml is the single source of truth** — no hardcoded strategy names
 - **Components are pure functions** — data in, string out, no side effects
-- **strategies/ never imports causal_edge/** (except engine base ABC)
+- **strategies/ never imports abel_edge/** (except engine base ABC)
 - **AGENTS.md at every subsystem** with "I want to..." decision tree
 - **No hardcoded paths or secrets** in source
 - **Structural test assertions include Fix: instructions**

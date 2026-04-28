@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from causal_edge.validation.metrics import (
+from abel_edge.validation.metrics import (
     _sharpe,
     compute_all_metrics,
     detect_profile,
@@ -21,7 +21,7 @@ from causal_edge.validation.metrics import (
     validate,
     decide_keep_discard,
 )
-from causal_edge.validation.gate import validate_strategy
+from abel_edge.validation.gate import validate_strategy
 
 
 def _make_pnl(n=500, mean=0.001, std=0.02, seed=42):

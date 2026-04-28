@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from causal_edge.engine.trader import _load_engine
+from abel_edge.engine.trader import _load_engine
 
 
 def _clear_strategy_modules() -> None:
@@ -29,7 +29,7 @@ def test_load_engine_prefers_module_owned_wrapper(tmp_path):
     (base_dir / "engine.py").write_text(
         "\n".join(
             [
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "class BaseEngine(StrategyEngine):",
                 "    def compute_signals(self):",
@@ -59,7 +59,6 @@ def test_load_engine_prefers_module_owned_wrapper(tmp_path):
     sys.path.insert(0, str(project_root))
     _clear_strategy_modules()
     try:
-        os_cwd = str(project_root)
         import os
 
         os.chdir(project_root)
@@ -86,7 +85,7 @@ def test_load_engine_rejects_imported_engine_only(tmp_path):
     (base_dir / "engine.py").write_text(
         "\n".join(
             [
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "class BaseEngine(StrategyEngine):",
                 "    def compute_signals(self):",

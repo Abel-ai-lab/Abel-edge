@@ -19,8 +19,8 @@ import pandas as pd
 import pytest
 from scipy import stats as sp_stats
 
-from causal_edge.dashboard.components import compute_metrics as compute_dashboard_metrics
-from causal_edge.validation.metrics import (
+from abel_edge.dashboard.components import compute_metrics as compute_dashboard_metrics
+from abel_edge.validation.metrics import (
     _sharpe,
     _sortino,
     _dsr,
@@ -28,12 +28,9 @@ from causal_edge.validation.metrics import (
     _elapsed_years,
     _is_full_calendar_year,
     compute_all_metrics,
-    detect_profile,
     load_profile,
-    validate,
-    decide_keep_discard,
 )
-from causal_edge.validation.gate import validate_strategy
+from abel_edge.validation.gate import validate_strategy
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -187,7 +184,7 @@ class TestValidationDataSource:
 
 class TestCalendarYearCoverage:
     def test_tz_aware_dates_supported(self):
-        from causal_edge.validation.metrics import _is_full_calendar_year
+        from abel_edge.validation.metrics import _is_full_calendar_year
 
         year_dates = pd.date_range("2024-01-01", "2024-12-31", freq="D", tz="UTC")
         assert _is_full_calendar_year(pd.DatetimeIndex(year_dates)) is True

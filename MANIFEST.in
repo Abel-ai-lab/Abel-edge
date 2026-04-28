@@ -1,0 +1,11 @@
+include LICENSE
+include README.md
+include CHANGELOG.md
+include CAPABILITY.md
+recursive-include abel_edge *.html *.yaml *.md py.typed
+recursive-include examples *.json
+recursive-include strategies *.json
+exclude uv.lock
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * *.egg-info

@@ -1,11 +1,11 @@
-# CLAUDE.md — causal-edge development harness
+# CLAUDE.md — abel-edge development harness
 
 ## Constraints (enforced by tests/test_structure.py)
 
 1. **No file > 400 lines.** Split at 350. Enforced by `TestFileSizeLimit`.
 2. **Components are pure functions.** Input: arrays/dicts. Output: string (JSON or HTML). No side effects. Enforced by `TestComponentsRegistered`.
 3. **Templates have zero Python logic.** Only Jinja2 loops, conditionals, and component function calls.
-4. **strategies/ never imports causal_edge/ internals** (except base.py ABC). Enforced by `TestStrategiesStandalone`.
+4. **strategies/ never imports abel_edge/ internals** (except base.py ABC). Enforced by `TestStrategiesStandalone`.
 5. **strategies.yaml is the single source of truth.** Never hardcode strategy names, colors, or tickers.
 6. **Every subsystem has AGENTS.md** with "I want to..." decision tree. Enforced by `TestSubsystemAgentsMd` + `TestAgentsMdHasDecisionTree`.
 7. **All strategy engines must be importable.** Enforced by `TestEngineModuleImportable`.

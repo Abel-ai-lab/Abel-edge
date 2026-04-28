@@ -4,8 +4,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
-from causal_edge.validation.gate import validate_strategy
+from abel_edge.cli import main
+from abel_edge.validation.gate import validate_strategy
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "validation"

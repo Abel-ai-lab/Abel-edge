@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from causal_edge.engine.backtest import BacktestSettings, run_backtest
+from abel_edge.engine.backtest import BacktestSettings, run_backtest
 
 
 def test_run_backtest_matches_legacy_behavior_by_default():

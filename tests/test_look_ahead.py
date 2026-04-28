@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from causal_edge.validation.look_ahead import check_runtime, check_static
+from abel_edge.validation.look_ahead import check_runtime, check_static
 
 
 def test_t2_flags_rolling_without_shift() -> None:

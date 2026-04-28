@@ -2,10 +2,10 @@
 
 import os
 
-import causal_edge.plugins.abel.credentials as credentials_module
+import abel_edge.plugins.abel.credentials as credentials_module
 import pytest
-from causal_edge.plugins.abel.auth import login_with_oauth
-from causal_edge.plugins.abel.credentials import (
+from abel_edge.plugins.abel.auth import login_with_oauth
+from abel_edge.plugins.abel.credentials import (
     MissingAbelApiKeyError,
     persist_env_value,
     require_api_key,

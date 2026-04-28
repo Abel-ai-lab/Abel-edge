@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from causal_edge.validation.gate import validate_strategy
-from causal_edge.validation.metrics import compute_all_metrics, detect_profile, load_profile
+from abel_edge.validation.gate import validate_strategy
+from abel_edge.validation.metrics import compute_all_metrics, detect_profile, load_profile
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "validation"

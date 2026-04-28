@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class SMAEngine(StrategyEngine):

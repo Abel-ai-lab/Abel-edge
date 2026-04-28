@@ -9,8 +9,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
-from causal_edge.engine.ledger import read_trade_log
+from abel_edge.cli import main
+from abel_edge.engine.ledger import read_trade_log
 
 
 def _reset_strategy_modules() -> None:

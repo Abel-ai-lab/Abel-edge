@@ -6,7 +6,7 @@ Already have a CSV with `date` and simple-return `pnl` columns? Skip engine
 authoring and validate directly:
 
 ```bash
-causal-edge validate --csv my_backtest.csv
+abel-edge validate --csv my_backtest.csv
 ```
 
 Add `position` and `asset_return` columns when you want Position-Return IC
@@ -21,7 +21,7 @@ analysis too.
 | Feed Path | `examples/feed_overlay_demo/` | declared auxiliary feeds through `ctx.feed(name)` |
 | Causal | `examples/causal_demo/` | graph-shaped voting over named driver feeds |
 
-`causal-edge init` scaffolds the first three paths by default with local sample
+`abel-edge init` scaffolds the first three paths by default with local sample
 CSV data. `causal_demo` remains an optional repo example when you want a
 graph-shaped pattern.
 
@@ -30,14 +30,14 @@ graph-shaped pattern.
 1. Copy an example into `strategies/my_strategy/`.
 2. Declare primary `price_data` and any auxiliary `feeds` in `strategies.yaml`.
 3. Implement `compute_decisions(self, ctx)`.
-4. Run `causal-edge run --strategy my_strategy`.
-5. Run `causal-edge validate --strategy my_strategy`.
+4. Run `abel-edge run --strategy my_strategy`.
+5. Run `abel-edge validate --strategy my_strategy`.
 
 If you are iterating on one strategy workspace directly, use semantic
 preflight:
 
 ```bash
-causal-edge debug-evaluate --workdir strategies/my_strategy
+abel-edge debug-evaluate --workdir strategies/my_strategy
 ```
 
 ## Engine Interface
@@ -45,7 +45,7 @@ causal-edge debug-evaluate --workdir strategies/my_strategy
 New strategies should implement the branch-default decision contract:
 
 ```python
-from causal_edge.engine.base import StrategyEngine
+from abel_edge.engine.base import StrategyEngine
 
 
 class MyEngine(StrategyEngine):
@@ -147,7 +147,7 @@ of hand-compiling an already-effective position series.
 
 ## Standalone Vs Abel-alpha Branches
 
-`causal-edge init` gives you a standalone project with local sample data and a
+`abel-edge init` gives you a standalone project with local sample data and a
 few runnable examples.
 
 Inside an Abel-alpha branch workspace, the upstream branch flow should prepare

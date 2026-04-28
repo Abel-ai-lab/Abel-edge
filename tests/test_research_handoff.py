@@ -5,8 +5,8 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from causal_edge.cli import main
-from causal_edge.research.handoff import HANDOFF_CONTRACT
+from abel_edge.cli import main
+from abel_edge.research.handoff import HANDOFF_CONTRACT
 
 
 def _write_engine(path: Path, *, bias: float = 0.02) -> None:
@@ -16,7 +16,7 @@ def _write_engine(path: Path, *, bias: float = 0.02) -> None:
                 "import numpy as np",
                 "import pandas as pd",
                 "",
-                "from causal_edge.engine.base import StrategyEngine",
+                "from abel_edge.engine.base import StrategyEngine",
                 "",
                 "",
                 "class BranchEngine(StrategyEngine):",

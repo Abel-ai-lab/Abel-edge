@@ -14,5 +14,5 @@
     {"ticker": "SIRI", "field": "price", "type": "child", "lag": 3},
     {"ticker": "TVC", "field": "price", "type": "child", "lag": 2, "window": 8}
   ],
-  "note": "To discover causal parents for other assets, use Abel API: causal-edge discover <TICKER>"
+  "note": "To discover causal parents for other assets, use Abel API: abel-edge discover <TICKER>"
 }
