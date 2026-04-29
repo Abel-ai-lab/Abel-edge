@@ -102,8 +102,14 @@ def cache_covers_request(
     available_end = _as_timestamp((metadata.get("available_range") or {}).get("end"))
     requested_start = _as_timestamp(start)
     requested_end = _as_timestamp(end)
-    if requested_start is not None and (available_start is None or available_start > requested_start):
-        return False
+    cached_request = metadata.get("requested_range") or {}
+    cached_requested_start = _as_timestamp(cached_request.get("start"))
+    if requested_start is not None:
+        if available_start is None:
+            return False
+        if available_start > requested_start:
+            if cached_requested_start is None or cached_requested_start > requested_start:
+                return False
     if requested_end is not None and (available_end is None or available_end < requested_end):
         return False
     if requested_end is None and available_end is not None and not _is_recent_enough(available_end):
@@ -111,11 +117,22 @@ def cache_covers_request(
     return True
 
 
-def write_cached_bars(entry: CacheEntry, bars: pd.DataFrame) -> dict[str, Any]:
+def write_cached_bars(
+    entry: CacheEntry,
+    bars: pd.DataFrame,
+    *,
+    requested_start: object | None = None,
+    requested_end: object | None = None,
+) -> dict[str, Any]:
     normalized = _normalize_cached_bars(bars)
     entry.data_path.parent.mkdir(parents=True, exist_ok=True)
     normalized.to_csv(entry.data_path, index=False)
-    metadata = build_cache_metadata(entry, normalized)
+    metadata = build_cache_metadata(
+        entry,
+        normalized,
+        requested_start=requested_start,
+        requested_end=requested_end,
+    )
     entry.meta_path.write_text(
         json.dumps(metadata, indent=2, sort_keys=True),
         encoding="utf-8",
@@ -123,7 +140,13 @@ def write_cached_bars(entry: CacheEntry, bars: pd.DataFrame) -> dict[str, Any]:
     return metadata
 
 
-def build_cache_metadata(entry: CacheEntry, bars: pd.DataFrame) -> dict[str, Any]:
+def build_cache_metadata(
+    entry: CacheEntry,
+    bars: pd.DataFrame,
+    *,
+    requested_start: object | None = None,
+    requested_end: object | None = None,
+) -> dict[str, Any]:
     normalized = _normalize_cached_bars(bars)
     start = None
     end = None
@@ -141,6 +164,10 @@ def build_cache_metadata(entry: CacheEntry, bars: pd.DataFrame) -> dict[str, Any
         "available_range": {
             "start": start,
             "end": end,
+        },
+        "requested_range": {
+            "start": _format_request_bound(requested_start),
+            "end": _format_request_bound(requested_end),
         },
         "row_count": int(len(normalized)),
         "columns": list(normalized.columns),
@@ -168,6 +195,13 @@ def _sanitize_options(options: dict[str, Any]) -> dict[str, Any]:
             continue
         payload[str(key)] = value
     return payload
+
+
+def _format_request_bound(value: object | None) -> str | None:
+    timestamp = _as_timestamp(value)
+    if timestamp is None:
+        return None
+    return timestamp.date().isoformat()
 
 
 def _as_timestamp(value: object | None) -> pd.Timestamp | None:

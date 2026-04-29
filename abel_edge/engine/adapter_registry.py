@@ -172,7 +172,12 @@ class AbelDataFeedAdapter:
                     fields=fields,
                     config=request.options,
                 )
-                write_cached_bars(entry, bars)
+                write_cached_bars(
+                    entry,
+                    bars,
+                    requested_start=request.start,
+                    requested_end=request.end,
+                )
             except missing_api_key_error as exc:
                 raise AdapterRegistryError(str(exc)) from exc
 
