@@ -1,0 +1,123 @@
+# Abel Proof profile: Pure-Math Arbitrage (daily)
+#
+# For retail-capacity ($100k-$1M) closed-form mathematical-arbitrage strategies
+# without ML. Captures three classes of strategy that the default
+# `crypto_daily` and `equity_daily` profiles structurally exclude:
+#
+#   1. Yield-carry (funding rate, cash-and-carry, stablecoin) — constant-sign
+#      positions have IC ≈ 0 by Spearman construction; default IC≥0.02 gate
+#      excludes them despite being real arbitrage with verifiable yield.
+#   2. Long-only binary causal alpha (e.g. causal_foundation) — IC = 0 because
+#      positions take only {0, +1} on active days, which has no rank variation.
+#   3. Event-driven low-frequency (PEAD, index reconstitution) — most calendar
+#      bars are flat; per-bar IC is noise; performance must be measured per
+#      event with skew metrics rather than continuous IC.
+#
+# This profile DROPS gates that are structurally inapplicable to these classes,
+# KEEPS gates that genuinely catch fake alpha (DSR, permutation, year stability,
+# Calmar), and ADDS class-specific subgates so each strategy class can claim
+# admission only against the criteria its mechanism warrants.
+#
+# Provenance: 2026-04-28 abelian co-research campaign
+# (`abelian/runs/2026-04-28-pure-math-arb/`) found 0/9 candidates pass the
+# default gate at retail capacity in the 2020-2026 regime; the gate was
+# structurally biased against this strategy class.
+#
+# Strategy-generation guidance: when a candidate trade log declares a
+# `strategy_class` in {"yield_carry", "causal_residual", "event_driven",
+# "stat_arb", "vol_arb"}, the corresponding subgate applies in addition to
+# the universal gates. If `strategy_class` is unset, only universal gates apply.
+
+name: pure_math_arb_daily
+description: >
+  Profile for retail-capacity ($100k-$1M) pure-math (no-ML) arbitrage.
+  Drops Spearman position_ic gate (excludes long-only binary + yield carry
+  by construction). Drops 100%/30% absolute return floors (yield strategies
+  are stable 8-15% annual, not lottery). Adds Calmar (return/MaxDD) as a
+  primary metric. Tightens DSR (with K=trial_count) + permutation_p +
+  year-by-year stability — the gates that ACTUALLY catch fake alpha.
+  Class-specific subgates apply when `strategy_class` declared.
+
+# --- universal triangle ---
+metric_triangle:
+  optimize: lo_adjusted_sharpe       # auto: Lo for crypto, Sharpe for equity
+  guardrails:
+    - {metric: omega, tolerance: 0.10}    # KEEP — distribution shape (catches clipping)
+    - {metric: calmar, tolerance: 0.05}   # NEW — return/MaxDD risk-adjusted
+    # REMOVED: position_ic guardrail — structurally inapplicable to yield/binary
+
+anti_gaming:
+  return_floor: 0.05                  # 5% annual minimum (was 100% crypto / 30% equity)
+  sharpe_lo_ratio_max: 4.0            # was 2.5 / 3.0 — relaxed for low-Lo strategies
+  permutation_p_max: 0.01             # NEW — explicit gate (real alpha must clear)
+  active_days_min: 50                 # NEW — not single-event lottery
+  # REMOVED: position_ic_min, position_ic_stability_min
+
+# --- universal validation ---
+validation:
+  calendar_type: calendar_day         # daily bar default; auto-switch on detection
+  periods_per_year: 365               # crypto-style; auto 252 if equity_only universe
+  dsr_min: 0.90                       # KEEP — Bailey & Lopez de Prado 2014
+  dsr_K: trial_count                  # NEW — must equal actual trial count, not 300/500
+  drawdown_time_frac_max: 0.40        # was 0.35 — yield/event strategies recover slower
+  max_drawdown_duration_bars_max: 180 # was 91 — relaxed for yield (~6 months acceptable)
+  max_loss_years: 2                   # KEEP — real alpha doesn't connect 3+ loss years
+  lo_adjusted_min: 0.30               # was 1.0 (crypto) / 0.5 (equity) — relaxed for small alpha
+  omega_min: 1.0                      # KEEP
+  calmar_min: 0.30                    # NEW — annual return / |MaxDD| ≥ 0.3 (replaces return_floor)
+  max_dd: -0.35                       # was -0.20 (crypto) / -0.15 (equity) — relaxed for long-bias
+  permutation_p_max: 0.01             # NEW — duplicates anti_gaming for explicit clarity
+
+# --- class-specific subgates (apply when strategy_class declared in trade_log) ---
+subgates:
+
+  # Yield carry: funding rate, cash-and-carry, stablecoin depeg
+  # Position is constant-sign (long-only or short-only); IC ≈ 0 by construction.
+  # Real-money capture is the funding-spread minus costs.
+  yield_carry:
+    funding_capture_min: 0.04         # ≥ 4% net annual yield captured (after fees + funding)
+    leverage_max: 3.0                 # cap leverage (retail-realistic)
+    delta_neutrality_max: 0.10        # |position_long - position_short_hedge| ≤ 10% at any time
+    # IC and lo_adjusted_min auto-relaxed when this subgate engages
+
+  # Long-only binary causal alpha (e.g. causal_foundation)
+  # Position is {0, +1}; IC = 0 by Spearman.
+  # Substitute: causal mechanism must be statistically verified.
+  causal_residual:
+    causal_p_max: 0.05                # paired permutation on parent → child residual
+    half_life_max_days: 30            # OU half-life sanity (30d ≈ 1 month MR)
+    permutation_n_min: 200            # ≥ 200 shuffles for the causal p-value test
+    # MaxDD floor relaxed to -0.35 (already in universal validation); IC dropped
+
+  # Event-driven: PEAD, index reconstitution, FOMC drift
+  # Most calendar bars are flat; per-bar IC noisy. Edge concentrated per-event.
+  event_driven:
+    events_min: 50                    # ≥ 50 events in backtest (not single-window)
+    skew_min: 1.0                     # asymmetric payoff verified (positive skew)
+    hit_rate_per_event_min: 0.55      # ≥ 55% events directionally correct
+    # IC dropped (most bars flat); calmar > 0.3 and skew > 1 substitute
+
+  # Statistical arbitrage: cointegration pair / triplet trading
+  # Default profile applies; this subgate adds cointegration sanity checks.
+  stat_arb:
+    cointegration_p_max: 0.05         # ADF on residual ≤ 0.05 (PIT-rolling)
+    half_life_max_days: 30            # OU half-life ≤ 30 days
+    pair_count_min: 5                 # ≥ 5 simultaneous pairs (diversification)
+
+  # Volatility risk premium: short delta-hedged variance
+  # Crash-clustering risk; conventional Sharpe overstates.
+  vol_arb:
+    crash_max_dd: -0.15               # tight MaxDD on crash days separately
+    iv_rv_spread_min: 0.02            # ≥ 2% IV-RV spread captured
+    delta_neutrality_max: 0.05        # tight delta-hedging
+
+# --- footnotes for future profile maintainers ---
+# - DSR K=trial_count means: declare your real exploration count when calling
+#   validate_strategy(..., dsr_trials=K). Don't use the default 300/500.
+# - Permutation_p_max applies the same metric (causal_edge.validation
+#   .metrics.permutation_p) used by the parent profile but at tighter 0.01.
+# - Subgate engagement is by trade_log column `strategy_class` (string). If
+#   the column is absent, only universal gates apply (matching default behavior).
+# - Universal gates always apply; subgates are ADDITIVE, not substitutive.
+#   A yield_carry strategy must pass DSR, Lo (relaxed 0.30), Omega, MaxDD,
+#   loss-year count AND its own funding_capture_min.
