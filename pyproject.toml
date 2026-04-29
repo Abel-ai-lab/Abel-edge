@@ -54,7 +54,7 @@ Changelog = "https://github.com/Abel-ai-causality/Abel-edge/blob/main/CHANGELOG.
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["abel_edge*", "examples*", "strategies*"]
+include = ["abel_edge*", "causal_edge*", "examples*", "strategies*"]
 
 [tool.setuptools.package-data]
 "abel_edge" = [
