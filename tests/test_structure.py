@@ -7,6 +7,7 @@ Every assertion includes a 'Fix:' instruction.
 import ast
 import importlib
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,21 @@ REQUIRED_AGENTS_MD = [
     "abel_edge/plugins/AGENTS.md",
     "strategies/AGENTS.md",
 ]
+
+
+def _clear_strategy_modules() -> None:
+    for name in list(sys.modules):
+        if name == "strategies" or name.startswith("strategies."):
+            sys.modules.pop(name, None)
+    importlib.invalidate_caches()
+
+
+def _prefer_repo_imports() -> None:
+    root_str = str(ROOT)
+    while root_str in sys.path:
+        sys.path.remove(root_str)
+    sys.path.insert(0, root_str)
+
 
 LEGACY_OVERSIZED_FILES = {
     "abel_edge/cli.py",
@@ -71,6 +87,8 @@ class TestStrategyIdsUnique:
 
 class TestEngineModuleImportable:
     def test_engine_module_importable(self, strategies):
+        _prefer_repo_imports()
+        _clear_strategy_modules()
         for strat in strategies:
             module_path = strat["engine"]
             try:
