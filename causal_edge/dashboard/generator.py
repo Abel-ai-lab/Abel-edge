@@ -164,9 +164,13 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
     n_active = 0
     current_month = now.month
     current_year = now.year
-    portfolio_id = next(
-        (c["id"] for c in _strat_cfgs if c.get("asset") == "MULTI"), None
-    )
+    primary_id = settings.get("primary_portfolio_id")
+    valid_ids = {c["id"] for c in _strat_cfgs}
+    if primary_id not in valid_ids:
+        primary_id = next(
+            (c["id"] for c in _strat_cfgs if c.get("asset") == "MULTI"), None
+        )
+    portfolio_id = primary_id
 
     for s in strategies:
         if not s["has_data"]:
@@ -225,6 +229,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
     from causal_edge.dashboard.portfolio import build_recent_days
     recent_days, pnl_history = build_recent_days(
         strategies, _strat_cfgs, _load_trade_log,
+        primary_portfolio_id=primary_id,
     )
     if recent_days:
         recent_days[0]["spark"] = _sparkline(list(reversed(pnl_history)))
@@ -312,6 +317,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
     ledger = build_ledger(
         strategies, _strat_cfgs, _load_trade_log,
         since_date=since, n_days=ledger_days,
+        primary_portfolio_id=primary_id,
     )
 
     signals_flat.sort(key=lambda x: x["ytd_pnl"], reverse=True)
