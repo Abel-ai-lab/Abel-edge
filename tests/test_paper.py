@@ -3,6 +3,7 @@ import importlib
 import sys
 
 import pandas as pd
+import pytest
 from click.testing import CliRunner
 
 from abel_edge.config import load_config
@@ -190,6 +191,51 @@ def test_paper_appends_live_rows_with_close_fill_semantics(tmp_path):
             if column in paper_df.columns:
                 assert float(paper_df.iloc[-1][column]) != 999.0
         sys.path.pop(0)
+
+
+def test_paper_run_one_matches_golden_append_math(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        _write_strategy_project(root)
+        sys.path.insert(0, str(root))
+
+        try:
+            _write_bootstrap_log(
+                "data/trade_log_paper_demo.csv",
+                closes=[100.0, 110.0],
+                positions=[0.0, 1.0],
+            )
+            cfg = load_config()
+            strategy = next(item for item in cfg["strategies"] if item["id"] == "paper_demo")
+
+            result = paper_run_one(
+                strategy,
+                settings=cfg.get("settings"),
+                as_of="2026-01-04T00:00:00Z",
+            )
+
+            paper_df = read_trade_log("data/paper_log_paper_demo.csv")
+            live = paper_df[paper_df["source"] == "live"].reset_index(drop=True)
+            assert result["n_rows"] == 2
+            assert list(live["date"].dt.strftime("%Y-%m-%d")) == ["2026-01-03", "2026-01-04"]
+            assert list(live["close"]) == pytest.approx([90.0, 120.0])
+            assert list(live["position"]) == pytest.approx([1.0, 0.0])
+            assert list(live["next_position"]) == pytest.approx([0.0, 1.0])
+            assert list(live["asset_return"]) == pytest.approx([
+                90.0 / 110.0 - 1.0,
+                120.0 / 90.0 - 1.0,
+            ])
+            assert list(live["pnl"]) == pytest.approx([
+                1.0 * (90.0 / 110.0 - 1.0),
+                0.0 * (120.0 / 90.0 - 1.0),
+            ])
+            assert result["latest_snapshot"]["last_processed_date"] == "2026-01-04T00:00:00+00:00"
+            assert result["latest_snapshot"]["current_position"] == 0.0
+            assert result["latest_snapshot"]["next_position"] == 1.0
+            assert result["latest_snapshot"]["latest_close"] == 120.0
+        finally:
+            sys.path.pop(0)
 
 
 def test_paper_run_one_returns_latest_snapshot_for_each_strategy(tmp_path):
