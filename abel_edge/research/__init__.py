@@ -31,3 +31,16 @@ __all__ = [
     "load_strategy_handoff",
     "validate_strategy_handoff",
 ]
+from abel_edge.research.state_intent import (
+    STATE_INTENT_SCHEMA,
+    StateIntentEntry,
+    validate_state_intent,
+    validate_state_intent_path,
+)
+
+__all__ = [
+    "STATE_INTENT_SCHEMA",
+    "StateIntentEntry",
+    "validate_state_intent",
+    "validate_state_intent_path",
+]

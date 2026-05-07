@@ -94,6 +94,7 @@ def export_strategy_artifact_zip(
     edge_result_path: Path | str,
     trade_log_path: Path | str,
     edge_report_path: Path | str | None = None,
+    extra_source_map: dict[str, Path | str] | None = None,
 ) -> dict[str, Any]:
     """Write artifact.zip using the file list and hashes declared by manifest."""
 
@@ -105,6 +106,10 @@ def export_strategy_artifact_zip(
         trade_log_path=Path(trade_log_path),
         edge_report_path=Path(edge_report_path) if edge_report_path else None,
     )
+    if extra_source_map:
+        for artifact_path, source_path in extra_source_map.items():
+            validated_path = _validate_artifact_path(artifact_path)
+            source_map[validated_path] = Path(source_path)
     file_entries = _manifest_file_entries(manifest)
     _validate_required_artifact_paths(file_entries)
     resolved_files = _resolve_manifest_sources(file_entries, source_map)
@@ -129,6 +134,18 @@ def load_manifest(path: Path | str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("artifact manifest must be a JSON object")
     return payload
+
+
+def load_extra_source_map(path: Path | str | None) -> dict[str, Path]:
+    if path is None:
+        return {}
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("extra source map must be a JSON object")
+    normalized: dict[str, Path] = {}
+    for artifact_path, source_path in payload.items():
+        normalized[_validate_artifact_path(artifact_path)] = Path(str(source_path))
+    return normalized
 
 
 def canonical_manifest_bytes(manifest: dict[str, Any]) -> bytes:
@@ -197,7 +214,7 @@ def _resolve_manifest_sources(
         if source_path is None and artifact_path.startswith("strategy/"):
             source_path = _strategy_source_path_from_artifact_path(
                 artifact_path,
-                source_map["strategy/strategy.py"].parent,
+                source_map.get("__workdir__", source_map["strategy/strategy.py"].parent),
             )
         if source_path is None:
             raise ValueError(f"no export source registered for artifact path: {artifact_path}")
@@ -256,6 +273,7 @@ def _default_source_map(
     edge_report_path: Path | None,
 ) -> dict[str, Path]:
     source_map = {
+        "__workdir__": workdir,
         "strategy/strategy.py": workdir / "engine.py",
         "edge/edge-result.json": edge_result_path,
         "edge/trade-log.csv": trade_log_path,

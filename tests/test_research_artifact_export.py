@@ -15,6 +15,8 @@ from abel_edge.research.artifact_export import (
     sha256_file,
     write_backtest_trade_log_from_metric_input,
 )
+from abel_edge.research.state_intent import validate_state_intent
+from abel_edge.runtime_paths import runtime_paths
 
 
 def _write_sources(tmp_path: Path) -> dict[str, Path]:
@@ -147,6 +149,68 @@ def test_export_strategy_artifact_zip_validates_manifest_and_writes_zip(
             "runtime/data_manifest.json",
         ]
         assert json.loads(artifact.read("manifest.json")) == manifest
+
+
+def test_export_strategy_artifact_zip_accepts_extra_source_map_for_initial_state(
+    tmp_path: Path,
+) -> None:
+    paths = _write_sources(tmp_path)
+    state_file = tmp_path / "model.joblib"
+    state_file.write_text("model-state\n", encoding="utf-8")
+    manifest = _manifest(paths)
+    manifest["files"].append(_file_entry("runtime/initial-state/model.joblib", state_file))
+    output_zip = paths["outputs"] / "artifact.zip"
+
+    result = export_strategy_artifact_zip(
+        manifest,
+        output_zip_path=output_zip,
+        workdir=paths["workdir"],
+        edge_result_path=paths["edge_result"],
+        trade_log_path=paths["trade_log"],
+        edge_report_path=paths["edge_report"],
+        extra_source_map={"runtime/initial-state/model.joblib": state_file},
+    )
+
+    assert result["fileCount"] == 10
+    with ZipFile(output_zip) as artifact:
+        assert artifact.read("runtime/initial-state/model.joblib") == b"model-state\n"
+
+
+def test_runtime_paths_uses_explicit_paths_and_context_payload(tmp_path: Path) -> None:
+    paths = runtime_paths(
+        base_strategy=tmp_path / "strategy",
+        runtime=tmp_path / "runtime",
+        state=tmp_path / "state",
+        create=True,
+    )
+
+    assert paths.state.is_dir()
+    assert paths.as_context_payload()["state"] == str(paths.state)
+
+
+def test_validate_state_intent_accepts_declared_state_file(tmp_path: Path) -> None:
+    state_file = tmp_path / "model" / "latest.joblib"
+    state_file.parent.mkdir()
+    state_file.write_text("state\n", encoding="utf-8")
+
+    entries = validate_state_intent(
+        {
+            "schema": "abel-invest.state-intent/v1",
+            "entries": [
+                {
+                    "path": "model/latest.joblib",
+                    "role": "initial_state",
+                    "mutableInPaper": True,
+                    "requiredForSignal": True,
+                    "producedBy": "pytest",
+                }
+            ],
+        },
+        root=tmp_path,
+    )
+
+    assert entries[0].path == "model/latest.joblib"
+    assert entries[0].role == "initial_state"
 
 
 def test_export_strategy_artifact_zip_rejects_checksum_mismatch(tmp_path: Path) -> None:

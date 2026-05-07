@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Iterator
 
 import pandas as pd
 
+from abel_edge.runtime_paths import RuntimePaths, context_runtime_paths
 from abel_edge.engine.runtime_contract import (
     DecisionDraft,
     DecisionContractError,
@@ -53,6 +55,14 @@ class DecisionContext:
         self._target_frame_cache: dict[tuple[str, ...], pd.DataFrame] = {}
         self._feed_frame_cache: dict[tuple[str, tuple[str, ...]], pd.DataFrame] = {}
         self._trace: list[DecisionTraceEntry] = []
+
+    @property
+    def paths(self) -> RuntimePaths:
+        return context_runtime_paths(self.engine.context)
+
+    @property
+    def state_dir(self) -> Path:
+        return self.paths.state
 
     def decision_index(self) -> pd.DatetimeIndex:
         return pd.DatetimeIndex(self.target.series("close").index)
