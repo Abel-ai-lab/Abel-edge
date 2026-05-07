@@ -149,6 +149,12 @@ or inconsistent upstream handoffs with explicit reasons. `abel-edge` does not or
 experiments into sessions or branches; upstream tools such as `Abel-alpha` should own
 orchestration, process logs, and narrative summaries.
 
+When an upstream orchestrator knows the session-level effective exploration trial count,
+including parameter, threshold, filter, sizing, or window sweeps, it may pass
+`validation_context.dsr_trials.count` in `--context-json`. `abel-edge evaluate` uses that
+declared count for DSR and records `K_detail.source=alpha_context` plus the declared
+components; otherwise it falls back to the local `engine.py` AST estimate.
+
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow before
 running `abel-edge discover <TICKER>` or any workflow that triggers live Abel discovery:
 

@@ -98,7 +98,7 @@ def run_preflight(
         "warnings": list(semantic["warnings"]),
         "metrics": {},
         "triangle": {"ratio": 0, "rank": 0, "shape": 0},
-        "K": prepared["k_value"],
+        "K": prepared["dsr_trials"],
         "requested_window": {"start": start, "end": None},
         "effective_window": _effective_window(
             pd.DataFrame({"date": prepared["compiled"].decision_index})
@@ -107,12 +107,7 @@ def run_preflight(
         "implementation_contract": prepared["compiled"].output_mode,
         "active_days": semantic["signal"]["active_days"],
         "total_days": semantic["signal"]["total_days"],
-        "K_detail": {
-            "tickers": prepared["tickers"],
-            "lags": prepared["lags"],
-            "n_tickers": len(prepared["tickers"]),
-            "n_lags": len(prepared["lags"]),
-        },
+        "K_detail": _build_k_detail(prepared),
         "diagnostics": _build_preflight_diagnostics(semantic),
         "semantic": semantic,
     }
@@ -154,6 +149,11 @@ def run_evaluation(
             runtime_stage="semantic_preflight",
             signal=semantic["signal"],
         )
+        result["K"] = prepared["dsr_trials"]
+        result["requested_window"] = {"start": start, "end": None}
+        result["effective_window"] = _effective_window(pd.DataFrame({"date": dates}))
+        result["context_path"] = str(context_json.resolve()) if context_json is not None else None
+        result["K_detail"] = _build_k_detail(prepared)
         result["warnings"] = list(semantic["warnings"])
         result["semantic"] = semantic
         _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
@@ -179,29 +179,30 @@ def run_evaluation(
         csv_path = Path(handle.name)
 
     try:
-        result = validate_strategy(csv_path, dsr_trials=prepared["k_value"])
+        result = validate_strategy(csv_path, dsr_trials=prepared["dsr_trials"])
     except Exception as exc:
         csv_path.unlink(missing_ok=True)
-        return _error(
+        result = _error(
             f"abel-edge validation failed: {exc}",
             implementation_contract="engine",
             runtime_stage="validation",
         )
+        result["K"] = prepared["dsr_trials"]
+        result["requested_window"] = {"start": start, "end": None}
+        result["effective_window"] = _effective_window(frame)
+        result["context_path"] = str(context_json.resolve()) if context_json is not None else None
+        result["K_detail"] = _build_k_detail(prepared)
+        return result
 
     csv_path.unlink(missing_ok=True)
-    result["K"] = prepared["k_value"]
+    result["K"] = prepared["dsr_trials"]
     result["requested_window"] = {"start": start, "end": None}
     result["effective_window"] = _effective_window(frame)
     result["context_path"] = str(context_json.resolve()) if context_json is not None else None
     result["implementation_contract"] = compiled.output_mode
     result["active_days"] = int((frame["position"].abs() > 0.01).sum())
     result["total_days"] = int(len(frame))
-    result["K_detail"] = {
-        "tickers": prepared["tickers"],
-        "lags": prepared["lags"],
-        "n_tickers": len(prepared["tickers"]),
-        "n_lags": len(prepared["lags"]),
-    }
+    result["K_detail"] = _build_k_detail(prepared)
     result["diagnostics"] = _build_runtime_diagnostics(result, frame)
     result["semantic"] = semantic
     _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
@@ -345,10 +346,58 @@ def _prepare_engine_runtime(
         "engine": engine,
         "compiled": compiled,
         "k_value": k_value,
+        **_resolve_dsr_trials(research_context, engine_ast_k=k_value),
         "tickers": tickers,
         "lags": lags,
         "static_violations": static_violations,
     }
+
+
+def _resolve_dsr_trials(context: dict, *, engine_ast_k: int) -> dict:
+    validation_context = context.get("validation_context")
+    if isinstance(validation_context, dict):
+        declared = validation_context.get("dsr_trials")
+        if isinstance(declared, dict):
+            count = _positive_int(declared.get("count"))
+            if count is not None:
+                return {
+                    "dsr_trials": count,
+                    "dsr_trials_source": "alpha_context",
+                    "declared_dsr_trials": {
+                        key: declared[key]
+                        for key in ("count", "source", "method", "scope", "components")
+                        if key in declared
+                    },
+                }
+    return {
+        "dsr_trials": engine_ast_k,
+        "dsr_trials_source": "engine_ast",
+        "declared_dsr_trials": {},
+    }
+
+
+def _positive_int(value) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 1 else None
+    if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value.strip()):
+        return int(value)
+    return None
+
+
+def _build_k_detail(prepared: dict) -> dict:
+    detail = {
+        "source": prepared["dsr_trials_source"],
+        "engine_ast_k": prepared["k_value"],
+        "tickers": prepared["tickers"],
+        "lags": prepared["lags"],
+        "n_tickers": len(prepared["tickers"]),
+        "n_lags": len(prepared["lags"]),
+    }
+    if prepared["declared_dsr_trials"]:
+        detail["declared_dsr_trials"] = prepared["declared_dsr_trials"]
+    return detail
 
 
 def _build_semantic_result(*, compiled, engine, static_violations: list[str]) -> dict:
