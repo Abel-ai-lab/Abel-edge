@@ -23,6 +23,28 @@ REQUIRED_ARTIFACT_PATHS = {
     "runtime/dependencies.json",
     "runtime/data_manifest.json",
 }
+DENYLISTED_ARTIFACT_PARTS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    "__pycache__",
+    "outputs",
+    "rounds",
+    "venv",
+}
+DENYLISTED_ARTIFACT_FILENAMES = {
+    ".env",
+    "id_rsa",
+    "id_rsa.pub",
+}
+DENYLISTED_ARTIFACT_SUFFIXES = {
+    ".key",
+    ".pem",
+    ".pyc",
+    ".pyo",
+}
 
 
 def write_backtest_trade_log_from_metric_input(
@@ -172,6 +194,11 @@ def _resolve_manifest_sources(
             raise ValueError(f"duplicate artifact path in manifest: {artifact_path}")
         seen_paths.add(artifact_path)
         source_path = source_map.get(artifact_path)
+        if source_path is None and artifact_path.startswith("strategy/"):
+            source_path = _strategy_source_path_from_artifact_path(
+                artifact_path,
+                source_map["strategy/strategy.py"].parent,
+            )
         if source_path is None:
             raise ValueError(f"no export source registered for artifact path: {artifact_path}")
         if not source_path.is_file():
@@ -200,9 +227,25 @@ def _validate_artifact_path(value: Any) -> str:
     path = Path(artifact_path)
     if not artifact_path or path.is_absolute() or ".." in path.parts:
         raise ValueError(f"invalid artifact path: {artifact_path!r}")
+    if any(part in DENYLISTED_ARTIFACT_PARTS for part in path.parts):
+        raise ValueError(f"denylisted artifact path: {artifact_path}")
+    if path.name in DENYLISTED_ARTIFACT_FILENAMES or path.suffix in DENYLISTED_ARTIFACT_SUFFIXES:
+        raise ValueError(f"denylisted artifact file: {artifact_path}")
     if path.parts[0] == "manifest.json":
         raise ValueError("manifest.json is written by the exporter and cannot be listed")
     return artifact_path
+
+
+def _strategy_source_path_from_artifact_path(artifact_path: str, workdir: Path) -> Path:
+    relative = Path(artifact_path).relative_to("strategy")
+    source_path = workdir / relative
+    resolved_workdir = workdir.resolve()
+    resolved_source = source_path.resolve()
+    try:
+        resolved_source.relative_to(resolved_workdir)
+    except ValueError as exc:
+        raise ValueError(f"strategy artifact source escapes workdir: {artifact_path}") from exc
+    return source_path
 
 
 def _default_source_map(

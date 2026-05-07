@@ -29,6 +29,7 @@ def _write_sources(tmp_path: Path) -> dict[str, Path]:
         "    pass\n",
         encoding="utf-8",
     )
+    (workdir / "helper.py").write_text("VALUE = 1\n", encoding="utf-8")
     (workdir / "branch.yaml").write_text(
         "version: 2\nbranch_id: momentum_lead\ntarget: TSLA\n",
         encoding="utf-8",
@@ -76,6 +77,7 @@ def _manifest(paths: dict[str, Path]) -> dict:
         "schema": "abel-invest.strategy-artifact/v1",
         "files": [
             _file_entry("strategy/strategy.py", workdir / "engine.py"),
+            _file_entry("strategy/helper.py", workdir / "helper.py"),
             _file_entry("edge/edge-result.json", paths["edge_result"]),
             _file_entry("edge/trade-log.csv", paths["trade_log"]),
             _file_entry("edge/edge-validation.md", paths["edge_report"]),
@@ -131,11 +133,12 @@ def test_export_strategy_artifact_zip_validates_manifest_and_writes_zip(
     )
 
     assert result["artifactSha256"] == sha256_file(output_zip)
-    assert result["fileCount"] == 8
+    assert result["fileCount"] == 9
     with ZipFile(output_zip) as artifact:
         assert artifact.namelist() == [
             "manifest.json",
             "strategy/strategy.py",
+            "strategy/helper.py",
             "edge/edge-result.json",
             "edge/trade-log.csv",
             "edge/edge-validation.md",
@@ -152,6 +155,28 @@ def test_export_strategy_artifact_zip_rejects_checksum_mismatch(tmp_path: Path) 
     manifest["files"][1]["sha256"] = "0" * 64
 
     with pytest.raises(ValueError, match="checksum mismatch"):
+        export_strategy_artifact_zip(
+            manifest,
+            output_zip_path=paths["outputs"] / "artifact.zip",
+            workdir=paths["workdir"],
+            edge_result_path=paths["edge_result"],
+            trade_log_path=paths["trade_log"],
+            edge_report_path=paths["edge_report"],
+        )
+
+
+def test_export_strategy_artifact_zip_rejects_denylisted_paths(tmp_path: Path) -> None:
+    paths = _write_sources(tmp_path)
+    manifest = _manifest(paths)
+    manifest["files"].append(
+        {
+            "path": "strategy/__pycache__/helper.pyc",
+            "sha256": "0" * 64,
+            "bytes": 1,
+        }
+    )
+
+    with pytest.raises(ValueError, match="denylisted"):
         export_strategy_artifact_zip(
             manifest,
             output_zip_path=paths["outputs"] / "artifact.zip",
