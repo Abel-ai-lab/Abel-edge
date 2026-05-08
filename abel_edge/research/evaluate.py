@@ -868,18 +868,24 @@ def _context_selected_inputs(context: dict, *, target: str) -> list[str]:
         if text:
             values.append(text)
 
+    def add_input_item(item: object) -> None:
+        if isinstance(item, dict):
+            value = item.get("symbol") or item.get("name") or item.get("node_id")
+            if isinstance(value, str) and "." in value:
+                value = value.split(".", 1)[0]
+            add(value)
+        else:
+            add(item)
+
     raw_branch_selected = branch_spec.get("selected_inputs") or []
     if isinstance(raw_branch_selected, list):
         for item in raw_branch_selected:
-            add(item)
+            add_input_item(item)
 
     raw_manifest_selected = data_manifest.get("selected_inputs") or []
     if isinstance(raw_manifest_selected, list):
         for item in raw_manifest_selected:
-            if isinstance(item, dict):
-                add(item.get("node_id") or item.get("name") or item.get("symbol"))
-            else:
-                add(item)
+            add_input_item(item)
 
     for item in data_manifest.get("feeds") or []:
         if not isinstance(item, dict):

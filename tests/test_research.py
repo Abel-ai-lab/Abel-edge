@@ -761,7 +761,11 @@ class TestRunEvaluation:
         selected_inputs = research_evaluate._context_selected_inputs(
             {
                 "branch_spec": {
-                    "selected_inputs": ["IMOUSD", "SFIUSD", "IMOUSD"],
+                    "selected_inputs": [
+                        "IMOUSD",
+                        {"node_id": "SFIUSD.price", "symbol": "SFIUSD"},
+                        "IMOUSD",
+                    ],
                 },
                 "data_manifest": {
                     "selected_inputs": ["SFIUSD"],
