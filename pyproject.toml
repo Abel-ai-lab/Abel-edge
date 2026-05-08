@@ -1,6 +1,6 @@
 [project]
 name = "abel-edge"
-version = "0.8.0"
+version = "0.8.1"
 description = "Agent-native quant runtime with Abel validation and research handoffs"
 readme = "README.md"
 requires-python = ">=3.11"
