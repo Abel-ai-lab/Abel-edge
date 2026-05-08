@@ -18,6 +18,7 @@ from abel_edge.engine.loader import load_engine_from_file
 from abel_edge.engine.runtime_contract import DecisionContractError
 from abel_edge.engine.signal_contract import SignalContractError
 from abel_edge.research.handoff import build_strategy_handoff, write_strategy_handoff
+from abel_edge.runtime_paths import inject_runtime_paths, runtime_paths
 from abel_edge.validation.gate import validate_strategy
 
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD", "UTC", "D", "B"}
@@ -637,6 +638,15 @@ def _build_research_context(
             "profile": "daily",
         }
     research_context["_feeds"] = feeds
+    research_context = inject_runtime_paths(
+        research_context,
+        runtime_paths(
+            base_strategy=workspace,
+            runtime=workspace / "inputs",
+            state=workspace / ".abel-runtime" / "state",
+            create=True,
+        ),
+    )
     return research_context
 
 

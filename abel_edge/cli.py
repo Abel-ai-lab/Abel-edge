@@ -17,6 +17,7 @@ from abel_edge.cache_cli import warm_cache as warm_cache_command  # noqa: E402
 from abel_edge.cli_support import build_bars_loader  # noqa: E402
 from abel_edge.research.cli import debug_evaluate as debug_evaluate_command  # noqa: E402
 from abel_edge.research.cli import evaluate as evaluate_command  # noqa: E402
+from abel_edge.research.cli import export_artifact as export_artifact_command  # noqa: E402
 from abel_edge.research.cli import probe_data as probe_data_command  # noqa: E402
 from abel_edge.research.cli import verify_data as verify_data_command  # noqa: E402
 from abel_edge.research.cli import validate_handoff as validate_handoff_command  # noqa: E402
@@ -43,6 +44,7 @@ def main():
 
 
 main.add_command(evaluate_command)
+main.add_command(export_artifact_command)
 main.add_command(debug_evaluate_command)
 main.add_command(probe_data_command)
 main.add_command(verify_data_command)
