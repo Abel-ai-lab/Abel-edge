@@ -66,6 +66,11 @@ def evaluate(workdir, start, context_json, output_json, output_md, output_csv, o
 @click.option("--metric-csv", default=None, help="Metric input CSV from evaluate --output-csv")
 @click.option("--trade-log", required=True, help="Backtest trade log path to pack")
 @click.option("--output-zip", required=True, help="Destination artifact.zip path")
+@click.option(
+    "--extra-source-map",
+    default=None,
+    help="Optional JSON object mapping artifact paths to local source paths",
+)
 def export_artifact(
     workdir,
     manifest_json,
@@ -74,12 +79,14 @@ def export_artifact(
     metric_csv,
     trade_log,
     output_zip,
+    extra_source_map,
 ):
     """Export a hosted strategy artifact zip from edge-owned outputs."""
     import json
 
     from abel_edge.research.artifact_export import (
         export_strategy_artifact_zip,
+        load_extra_source_map,
         load_manifest,
         write_backtest_trade_log_from_metric_input,
     )
@@ -98,6 +105,9 @@ def export_artifact(
             edge_result_path=Path(edge_result),
             trade_log_path=Path(trade_log),
             edge_report_path=Path(edge_report) if edge_report else None,
+            extra_source_map=load_extra_source_map(Path(extra_source_map))
+            if extra_source_map
+            else None,
         )
     except Exception as exc:
         raise click.ClickException(str(exc)) from exc
