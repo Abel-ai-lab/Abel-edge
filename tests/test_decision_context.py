@@ -108,6 +108,23 @@ def test_batch_view_supports_feed_asof_and_inspection(tmp_path):
     assert "feed.asof_series" in surfaces
 
 
+def test_decision_context_exposes_runtime_state_dir(tmp_path):
+    context = _context_with_csv_feeds(tmp_path)
+    context["_runtime_paths"] = {
+        "base_strategy": str(tmp_path / "base" / "strategy"),
+        "runtime": str(tmp_path / "base" / "runtime"),
+        "state": str(tmp_path / "work" / "state"),
+    }
+
+    class StatePathEngine(StrategyEngine):
+        def compute_decisions(self, ctx):
+            assert ctx.state_dir == (tmp_path / "work" / "state").resolve()
+            close = ctx.target.series("close")
+            return ctx.decisions(close * 0)
+
+    StatePathEngine(context=context).compute_runtime_output()
+
+
 def test_point_view_supports_history_between_and_trace_point(tmp_path):
     class PointEngine(StrategyEngine):
         def compute_decisions(self, ctx):

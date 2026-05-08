@@ -58,6 +58,64 @@ def evaluate(workdir, start, context_json, output_json, output_md, output_csv, o
     raise SystemExit(0 if result.get("verdict") == "PASS" else 1)
 
 
+@click.command("export-artifact")
+@click.option("--workdir", default=".", show_default=True, help="Directory containing engine.py")
+@click.option("--manifest-json", required=True, help="Artifact manifest JSON path")
+@click.option("--edge-result", required=True, help="Edge result JSON path")
+@click.option("--edge-report", default=None, help="Optional edge validation markdown path")
+@click.option("--metric-csv", default=None, help="Metric input CSV from evaluate --output-csv")
+@click.option("--trade-log", required=True, help="Backtest trade log path to pack")
+@click.option("--output-zip", required=True, help="Destination artifact.zip path")
+@click.option(
+    "--extra-source-map",
+    default=None,
+    help="Optional JSON object mapping artifact paths to local source paths",
+)
+def export_artifact(
+    workdir,
+    manifest_json,
+    edge_result,
+    edge_report,
+    metric_csv,
+    trade_log,
+    output_zip,
+    extra_source_map,
+):
+    """Export a hosted strategy artifact zip from edge-owned outputs."""
+    import json
+
+    from abel_edge.research.artifact_export import (
+        export_strategy_artifact_zip,
+        load_extra_source_map,
+        load_manifest,
+        write_backtest_trade_log_from_metric_input,
+    )
+
+    try:
+        if metric_csv:
+            write_backtest_trade_log_from_metric_input(
+                Path(metric_csv),
+                Path(trade_log),
+            )
+        manifest = load_manifest(manifest_json)
+        result = export_strategy_artifact_zip(
+            manifest,
+            output_zip_path=Path(output_zip),
+            workdir=Path(workdir),
+            edge_result_path=Path(edge_result),
+            trade_log_path=Path(trade_log),
+            edge_report_path=Path(edge_report) if edge_report else None,
+            extra_source_map=load_extra_source_map(Path(extra_source_map))
+            if extra_source_map
+            else None,
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(json.dumps(result, indent=2, sort_keys=True))
+    raise SystemExit(0)
+
+
 @click.command("debug-evaluate")
 @click.option("--workdir", default=".", show_default=True, help="Directory containing engine.py")
 @click.option("--start", default=None, help="Optional backtest start date injected into research context")
