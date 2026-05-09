@@ -63,6 +63,29 @@ def _write_engine(path: Path, *, bias: float = 0.02, flat: bool = False) -> None
     )
 
 
+def _write_alpha_context(path: Path, *, count: int = 23) -> Path:
+    path.write_text(
+        json.dumps(
+            {
+                "validation_context": {
+                    "dsr_trials": {
+                        "count": count,
+                        "source": "abel-invest.session/v1",
+                        "method": "session_effective_exploration_trials_v1",
+                        "scope": "ticker_session_requested_window",
+                        "components": {
+                            "prior_effective_trials": max(count - 1, 0),
+                            "current_round_trials": 1,
+                        },
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _write_start_aware_engine(path: Path) -> None:
     path.write_text(
         "\n".join(
@@ -446,6 +469,62 @@ class TestRunEvaluation:
         assert result["K"] >= 1
         assert result["profile"] == "equity_daily"
         assert result["implementation_contract"] == "legacy_signal_contract"
+
+    def test_context_dsr_trials_overrides_engine_ast_k(self, tmp_path):
+        _write_engine(tmp_path / "engine.py")
+        context_path = _write_alpha_context(tmp_path / "alpha-context.json", count=23)
+
+        result = run_evaluation(tmp_path, context_json=context_path)
+
+        assert result["verdict"] == "PASS"
+        assert result["K"] == 23
+        assert result["metrics"]["dsr_trials_used"] == 23
+        assert result["K_detail"]["source"] == "alpha_context"
+        assert result["K_detail"]["engine_ast_k"] == 1
+        declared = result["K_detail"]["declared_dsr_trials"]
+        assert declared["count"] == 23
+        assert declared["components"]["current_round_trials"] == 1
+
+    def test_preflight_context_dsr_trials_overrides_engine_ast_k(self, tmp_path):
+        _write_engine(tmp_path / "engine.py")
+        context_path = _write_alpha_context(tmp_path / "alpha-context.json", count=17)
+
+        result = run_preflight(tmp_path, context_json=context_path)
+
+        assert result["verdict"] == "PASS"
+        assert result["K"] == 17
+        assert result["K_detail"]["source"] == "alpha_context"
+        assert result["K_detail"]["declared_dsr_trials"]["count"] == 17
+
+    def test_context_dsr_trials_survives_semantic_error(self, tmp_path):
+        engine = tmp_path / "engine.py"
+        engine.write_text(
+            "\n".join(
+                [
+                    "import numpy as np",
+                    "import pandas as pd",
+                    "from abel_edge.engine.base import StrategyEngine",
+                    "",
+                    "class BranchEngine(StrategyEngine):",
+                    "    def compute_signals(self):",
+                    "        dates = pd.date_range('2024-01-01', periods=10, freq='D', tz='UTC')",
+                    "        positions = np.ones(10)",
+                    "        prices = np.linspace(100.0, 110.0, 10)",
+                    "        return positions, dates, prices",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        context_path = _write_alpha_context(tmp_path / "alpha-context.json", count=9)
+
+        result = run_evaluation(tmp_path, context_json=context_path)
+
+        assert result["verdict"] == "ERROR"
+        assert result["diagnostics"]["runtime_stage"] == "semantic_preflight"
+        assert result["K"] == 9
+        assert result["K_detail"]["source"] == "alpha_context"
+        assert result["context_path"] == str(context_path.resolve())
 
     def test_decision_context_engine_passes_and_records_trace(self, tmp_path):
         _write_decision_context_engine(tmp_path / "engine.py")
