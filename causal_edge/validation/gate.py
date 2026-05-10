@@ -48,7 +48,8 @@ def validate_strategy(
         triangle: {ratio, rank, shape} — the three leverage-invariant dims
         profile: profile name used
     """
-    df = pd.read_csv(trade_log, parse_dates=["date"])
+    df = pd.read_csv(trade_log)
+    df["date"] = pd.to_datetime(df["date"], utc=True, format="mixed")
     if "source" in df.columns:
         source = df["source"].astype(str).str.lower()
         backtest_df = df[source != "live"].copy()
