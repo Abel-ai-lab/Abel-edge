@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-05-12
+
+### Changed
+- Return floor validation now uses a 5% annualized threshold for daily profiles while preserving the HFT total-return threshold.
+- Trade-log, validation, and dashboard cumulative PnL accounting now use simple cumulative returns.
+
 ## [0.8.0] - 2026-04-28
 
 ### Changed
