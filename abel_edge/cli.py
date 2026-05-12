@@ -333,6 +333,7 @@ def validate(strategy, verbose, csv_path, dsr_trials, export_path, config):
                         "lo_adjusted",
                         "sortino",
                         "total_return",
+                        "annual_return",
                         "max_dd",
                         "calmar",
                         "dsr",

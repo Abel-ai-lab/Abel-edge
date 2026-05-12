@@ -31,9 +31,16 @@ def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
         failures.append(
             f"T15 MaxDD {abs(metrics['max_dd']) * 100:.1f}% > {abs(v['max_dd']) * 100:.0f}%"
         )
-    if metrics["total_return"] < ag.get("return_floor", 1.0):
+    return_floor = ag.get("return_floor", 1.0)
+    if ag.get("return_floor_annualized", False):
+        observed_return = metrics.get("annual_return", metrics.get("total_return", 0.0))
+        failure_label = "Annualized return floor"
+    else:
+        observed_return = metrics["total_return"]
+        failure_label = "Return floor"
+    if observed_return < return_floor:
         failures.append(
-            f"Return floor {metrics['total_return'] * 100:+.1f}% < +{ag['return_floor'] * 100:.0f}%"
+            f"{failure_label} {observed_return * 100:+.2f}% < +{return_floor * 100:.2f}%"
         )
     if (
         metrics["sharpe"] > 0

@@ -116,7 +116,6 @@ class TestDashboardMetrics:
         crypto = compute_dashboard_metrics(pnl, periods_per_year=365)
         assert crypto["sharpe"] != pytest.approx(daily["sharpe"], rel=1e-12)
 
-
 class TestValidationDataSource:
     def test_validate_strategy_ignores_live_rows_in_mixed_trade_log(self, tmp_path):
         dates = pd.date_range("2024-01-01", periods=35, freq="D", tz="UTC")
@@ -261,6 +260,8 @@ class TestComputeAllMetrics:
             "lo_adjusted",
             "sortino",
             "total_return",
+            "annual_return",
+            "elapsed_years",
             "max_dd",
             "calmar",
             "dsr",
@@ -344,12 +345,11 @@ class TestComputeAllMetrics:
         pnl = np.array([0.02] * 20 + [-0.01] + [0.003] * 39)
         m = compute_all_metrics(pnl, dates, profile=load_profile("hft"))
         naive_years = len(dates) / load_profile("hft")["validation"]["periods_per_year"]
-        naive_ann_return = (np.cumprod(1.0 + pnl)[-1] ** (1.0 / naive_years)) - 1.0
+        naive_ann_return = np.sum(pnl) / naive_years
         naive_calmar = naive_ann_return / abs(m["max_dd"])
         assert _elapsed_years(dates, periods_per_year=252) < naive_years
         assert m["calmar"] > 0.0
         assert m["calmar"] > naive_calmar
-
 
 class TestCalendarYearDetection:
     def test_equity_business_day_tolerance_allows_boundary_holidays(self):

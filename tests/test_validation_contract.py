@@ -139,7 +139,8 @@ def test_export_output_matches_current_report_contract(tmp_path) -> None:
     exported = export_path.read_text(encoding="utf-8")
     assert "ABEL PROOF VALIDATION REPORT" in exported
     assert "ic_unsupported_no_position     4/5  FAIL" in exported
-    assert "Return floor +4.1% < +30%" in exported
+    assert "Annualized return floor" in exported
+    assert "< +5.00%" in exported
     assert "Report exported to" in result.output
 
 

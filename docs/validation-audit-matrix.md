@@ -24,7 +24,7 @@ The engine and validation pipeline relies on this bar-by-bar timing relationship
 price[t-1], price[t] -> asset_return[t]
 information through t-1 -> position[t]
 position[t] * asset_return[t] -> pnl[t]
-cumprod(1 + pnl[:t]) - 1 -> cum_return[t]
+sum(pnl[:t]) -> cum_return[t]
 ```
 
 This implies:

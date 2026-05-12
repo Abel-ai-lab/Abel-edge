@@ -810,12 +810,16 @@ def _metric_failure_facts(result: dict) -> list[dict]:
                 }
             )
             continue
-        if text.startswith("Return floor"):
+        if text.startswith("Return floor") or text.startswith("Annualized return floor"):
+            metric = "annual_return" if text.startswith("Annualized") else "total_return"
+            threshold = None
+            if match := re.search(r"< \+([0-9.]+)%", text):
+                threshold = float(match.group(1)) / 100.0
             facts.append(
                 {
-                    "metric": "total_return",
-                    "observed": metrics.get("total_return", 0),
-                    "threshold": None,
+                    "metric": metric,
+                    "observed": metrics.get(metric, 0),
+                    "threshold": threshold,
                     "comparison": "lt",
                     "profile": result.get("profile", "unknown"),
                     "message": text,

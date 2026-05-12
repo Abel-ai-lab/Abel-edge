@@ -110,7 +110,7 @@ def compute_all_metrics(
     if positions is not None:
         positions = np.nan_to_num(positions, nan=0.0, posinf=0.0, neginf=0.0)
 
-    equity = np.cumprod(1.0 + pnl)
+    equity = 1.0 + np.cumsum(pnl)
     cum_return = equity - 1.0
     peak_equity = np.maximum.accumulate(equity)
     dd = (equity / peak_equity) - 1.0
@@ -123,11 +123,7 @@ def compute_all_metrics(
     max_dd = float(np.min(dd))
     total_return = float(cum_return[-1])
     elapsed_years = _elapsed_years(dates, periods_per_year=periods_per_year)
-    ann_return = (
-        (equity[-1] ** (1.0 / elapsed_years) - 1.0)
-        if elapsed_years > 0 and equity[-1] > 0
-        else 0.0
-    )
+    ann_return = total_return / elapsed_years if elapsed_years > 0 else 0.0
     calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
@@ -151,7 +147,7 @@ def compute_all_metrics(
         year_dates = dates[mask]
         year_pnl = pnl[mask]
         yearly_sharpes[yr] = _sharpe(year_pnl, periods_per_year=periods_per_year)
-        total_year_pnl = float(np.cumprod(1.0 + year_pnl)[-1] - 1.0)
+        total_year_pnl = float(np.sum(year_pnl))
         yearly_pnl[yr] = total_year_pnl
         if _is_full_calendar_year(year_dates, validation_cfg):
             full_years_count += 1
@@ -209,6 +205,8 @@ def compute_all_metrics(
         "lo_adjusted": lo_adjusted,
         "sortino": sortino,
         "total_return": total_return,
+        "annual_return": ann_return,
+        "elapsed_years": elapsed_years,
         "max_dd": max_dd,
         "calmar": calmar,
         "dsr": dsr,

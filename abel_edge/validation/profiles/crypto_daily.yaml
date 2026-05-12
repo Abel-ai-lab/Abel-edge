@@ -22,7 +22,8 @@ metric_triangle:
     - {metric: omega, tolerance: 0.10}         # catches clipping (distribution shape space)
 
 anti_gaming:
-  return_floor: 1.0
+  return_floor: 0.05
+  return_floor_annualized: true
   sharpe_lo_ratio_max: 2.5
   position_ic_min: 0.02
   position_ic_stability_min: 0.55

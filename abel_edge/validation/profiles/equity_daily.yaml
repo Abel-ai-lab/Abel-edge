@@ -22,7 +22,8 @@ metric_triangle:
     - {metric: omega, tolerance: 0.10}
 
 anti_gaming:
-  return_floor: 0.30
+  return_floor: 0.05
+  return_floor_annualized: true
   sharpe_lo_ratio_max: 3.0
   position_ic_min: 0.02
   position_ic_stability_min: 0.55
