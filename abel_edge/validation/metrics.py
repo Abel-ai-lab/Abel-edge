@@ -112,7 +112,7 @@ def compute_all_metrics(
 
     equity = 1.0 + np.cumsum(pnl)
     cum_return = equity - 1.0
-    peak_equity = np.maximum.accumulate(equity)
+    peak_equity = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
     dd = (equity / peak_equity) - 1.0
     std = np.std(pnl, ddof=1)
     validation_cfg = (profile or {}).get("validation", {})

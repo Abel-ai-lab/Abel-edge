@@ -67,7 +67,7 @@ def compute_metrics(pnl: np.ndarray, *, periods_per_year: int = 252) -> dict:
     std = np.std(pnl, ddof=1) if len(pnl) > 1 else 0.0
     sharpe = float(np.mean(pnl) / std * np.sqrt(periods_per_year)) if std > 0 else 0
     equity = 1.0 + cum
-    peak = np.maximum.accumulate(equity)
+    peak = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
     dd = (peak - equity) / peak
     max_dd = float(np.max(dd)) if len(dd) > 0 else 0
     active = pnl[np.abs(pnl) > 1e-10]
@@ -194,7 +194,7 @@ def position_chart(dates, positions, name: str, color: str) -> str:
 def drawdown_chart(dates, cum_pnl, name: str) -> str:
     """Drawdown chart. Returns JSON string."""
     equity = 1.0 + np.array(cum_pnl, dtype=float)
-    peak = np.maximum.accumulate(equity)
+    peak = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
     dd_pct = (peak - equity) / peak
     fig = go.Figure()
     fig.add_trace(go.Scatter(
