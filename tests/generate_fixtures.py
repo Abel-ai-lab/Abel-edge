@@ -33,7 +33,7 @@ def generate_positive_daily() -> None:
     dates = _bdays("2020-01-02", n)
 
     # Small positive pnl each day: mean ~0.003, std ~0.0002 → always positive
-    # With n=110: total_return ≈ prod(1+0.003)^110 - 1 ≈ 0.39 → passes return_floor 0.30
+    # With n=110: total_return ≈ sum(pnl) ≈ 0.33 → passes 5% annualized return_floor.
     pnl = 0.003 + rng.randn(n) * 0.0002
     pnl = np.abs(pnl)  # ensure strictly positive
 
@@ -150,14 +150,13 @@ def generate_ic_unsupported_no_position() -> None:
     dates = _bdays("2020-01-02", n)
 
     # We need total_return ~0.041.
-    # total_return = prod(1 + pnl_i) - 1
-    # For small daily returns: total_return ≈ sum(pnl_i)
+    # total_return = sum(pnl_i)
     # Target sum ≈ 0.041, so mean pnl ≈ 0.041/210 ≈ 0.000195
     # Need mix of positive and negative (omega must not be applicable → wait, test says omega_applicable is False)
     # Actually test says omega_applicable is False. Let's check: omega_applicable = len(losses) > 0 and loss_mass > 1e-12
     # If omega_applicable is False, it means either no losses or loss_mass is negligible.
     # But test also says verdict=FAIL, score="4/5". Let's check what fails:
-    # With equity_daily: return_floor = 0.30, total_return = 0.041 < 0.30 → 1 failure
+    # With equity_daily: annualized return_floor = 0.05 and this falls just below it → 1 failure
     # score = (total - failures) / total, "4/5" means total=5, failures=1
     # _count_total: base 4 + sharpe_lo_ratio = 5 (no loss_years, no omega, no IC, no IC_stability)
     # So we need: loss_years_applicable=False, omega_applicable=False, position_ic_applicable=False
@@ -165,21 +164,16 @@ def generate_ic_unsupported_no_position() -> None:
     # But then only 1 failure (return_floor), giving 4/5. Perfect.
     # All-positive pnl with total_return ~0.041
 
-    # target: prod(1+pnl_i) = 1.041
+    # target: sum(pnl_i) = 0.041
     # Use small positive daily returns
     target_total = 1.041
-    # daily_return such that target_total^(1/n) - 1
-    mean_daily = target_total ** (1.0 / n) - 1  # ~0.000191
+    mean_daily = (target_total - 1.0) / n
     pnl = mean_daily + rng.randn(n) * 0.00005
     pnl = np.abs(pnl)  # ensure all positive → omega_applicable=False
 
-    # Adjust to hit exact total_return
-    # Scale pnl to hit target. For small values, scaling linearly is close enough.
-    # More precisely: we want prod(1 + pnl_i * s) = 1.041
-    # For small pnl, log(1+x) ≈ x, so sum(pnl*s) ≈ 0.041, s = 0.041/sum(pnl)
-    scale = np.log(1.041) / np.sum(np.log(1.0 + pnl))
-    # Apply scaling: pnl_new = (1+pnl)^scale - 1
-    pnl_scaled = (1.0 + pnl) ** scale - 1.0
+    # Adjust to hit exact simple total_return.
+    scale = (target_total - 1.0) / np.sum(pnl)
+    pnl_scaled = pnl * scale
 
     # Asset returns for detect_profile (equity_daily requires ann_vol <= 0.60)
     asset_return = rng.randn(n) * 0.01 + 0.001

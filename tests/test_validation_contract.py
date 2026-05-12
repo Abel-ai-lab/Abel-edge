@@ -106,6 +106,22 @@ def test_validate_cli_accepts_dsr_trials_override() -> None:
     assert "dsr_trials_used      17.0000" in result.output
 
 
+def test_validate_cli_rejects_non_positive_dsr_trials() -> None:
+    runner = CliRunner()
+    result = runner.invoke(
+        main,
+        [
+            "validate",
+            "--csv",
+            str(FIXTURES / "ic_unsupported_no_position.csv"),
+            "--dsr-trials",
+            "0",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "0 is not in the range" in result.output
+
+
 def test_export_output_matches_current_report_contract(tmp_path) -> None:
     export_path = tmp_path / "report.txt"
     runner = CliRunner()
@@ -123,7 +139,8 @@ def test_export_output_matches_current_report_contract(tmp_path) -> None:
     exported = export_path.read_text(encoding="utf-8")
     assert "ABEL PROOF VALIDATION REPORT" in exported
     assert "ic_unsupported_no_position     4/5  FAIL" in exported
-    assert "Return floor +4.1% < +30%" in exported
+    assert "Annualized return floor" in exported
+    assert "< +5.00%" in exported
     assert "Report exported to" in result.output
 
 

@@ -228,7 +228,7 @@ class TestValidateStrategyIntegration:
                 "asset_return": pnl,
                 "pnl": pnl,
                 "position": _make_positions(pnl),
-                "cum_return": np.cumprod(1.0 + pnl) - 1.0,
+                "cum_return": np.cumsum(pnl),
                 "source": "backfill",
             }
         )

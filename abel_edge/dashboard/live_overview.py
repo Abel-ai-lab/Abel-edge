@@ -87,7 +87,7 @@ def build_live_overview(
             if len(live_df) == 0:
                 continue
         live_df["signal_position"] = live_df.apply(_signal_position, axis=1)
-        live_df["live_cum_return"] = (1.0 + live_df["pnl"].astype(float)).cumprod() - 1.0
+        live_df["live_cum_return"] = live_df["pnl"].astype(float).cumsum()
         tracked.append({"strategy": strategy, "df": live_df})
 
         for _, row in live_df.iterrows():

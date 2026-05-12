@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from typing import Callable
 
-import numpy as np
 import pandas as pd
 
 
@@ -106,9 +105,7 @@ def build_ledger(strategies: list[dict], strat_cfgs: list[dict],
             recent = df.tail(max(n_days * 2, 60)).copy().reset_index(drop=True)
         if len(recent) == 0:
             continue
-        # live_cum stored as compounded total return (exp(log_cum) - 1) so
-        # the ledger "Cum" column shows real performance, not log underreport.
-        recent["live_cum"] = np.exp(recent["pnl"].cumsum()) - 1.0
+        recent["live_cum"] = recent["pnl"].astype(float).cumsum()
         strat_rows[s["id"]] = {
             "name": s["name"],
             "color": s["color"],

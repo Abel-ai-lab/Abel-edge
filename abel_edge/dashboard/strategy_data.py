@@ -178,7 +178,7 @@ def _build_tracking_payload(
         if preload is not None and len(preload) > 0
         else paper_df.copy()
     )
-    cum_return = np.cumprod(1.0 + pnl) - 1.0
+    cum_return = np.cumsum(pnl)
 
     # Skip price_overlay when trade log already has asset_return — the fallback
     # path calls compute_signals() (30+ min on DR family ML).
@@ -336,7 +336,7 @@ def prepare_strategy(s_cfg: dict, settings: dict | None = None, bars_loader=None
         if "position" in backtest_df.columns
         else np.zeros(len(pnl))
     )
-    cum_return = np.cumprod(1.0 + pnl) - 1.0
+    cum_return = np.cumsum(pnl)
     profile_name = detect_profile(pnl, dates, asset_returns=asset_returns)
     profile = load_profile(profile_name)
     periods_per_year = profile.get("validation", {}).get("periods_per_year", 252)

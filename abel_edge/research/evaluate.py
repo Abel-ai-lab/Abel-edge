@@ -96,7 +96,7 @@ def run_preflight(
         "verdict": semantic["verdict"],
         "score": "semantic",
         "failures": list(semantic["failures"]),
-        "warnings": list(semantic["warnings"]),
+        "warnings": list(semantic["warnings"]) + list(prepared["dsr_trial_warnings"]),
         "metrics": {},
         "triangle": {"ratio": 0, "rank": 0, "shape": 0},
         "K": prepared["dsr_trials"],
@@ -155,7 +155,7 @@ def run_evaluation(
         result["effective_window"] = _effective_window(pd.DataFrame({"date": dates}))
         result["context_path"] = str(context_json.resolve()) if context_json is not None else None
         result["K_detail"] = _build_k_detail(prepared)
-        result["warnings"] = list(semantic["warnings"])
+        result["warnings"] = list(semantic["warnings"]) + list(prepared["dsr_trial_warnings"])
         result["semantic"] = semantic
         _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
         _attach_runtime_facts(result)
@@ -193,6 +193,7 @@ def run_evaluation(
         result["effective_window"] = _effective_window(frame)
         result["context_path"] = str(context_json.resolve()) if context_json is not None else None
         result["K_detail"] = _build_k_detail(prepared)
+        result["warnings"] = list(prepared["dsr_trial_warnings"])
         return result
 
     csv_path.unlink(missing_ok=True)
@@ -204,6 +205,7 @@ def run_evaluation(
     result["active_days"] = int((frame["position"].abs() > 0.01).sum())
     result["total_days"] = int(len(frame))
     result["K_detail"] = _build_k_detail(prepared)
+    result["warnings"] = list(result.get("warnings", [])) + list(prepared["dsr_trial_warnings"])
     result["diagnostics"] = _build_runtime_diagnostics(result, frame)
     result["semantic"] = semantic
     _attach_semantic_artifacts(result, semantic=semantic, engine=engine)
@@ -355,6 +357,7 @@ def _prepare_engine_runtime(
 
 
 def _resolve_dsr_trials(context: dict, *, engine_ast_k: int) -> dict:
+    warnings: list[str] = []
     validation_context = context.get("validation_context")
     if isinstance(validation_context, dict):
         declared = validation_context.get("dsr_trials")
@@ -364,15 +367,28 @@ def _resolve_dsr_trials(context: dict, *, engine_ast_k: int) -> dict:
                 return {
                     "dsr_trials": count,
                     "dsr_trials_source": "alpha_context",
+                    "dsr_trial_warnings": [],
                     "declared_dsr_trials": {
                         key: declared[key]
                         for key in ("count", "source", "method", "scope", "components")
                         if key in declared
                     },
                 }
+        elif declared is not None:
+            warnings.append(
+                "Ignored invalid validation_context.dsr_trials; using engine_ast fallback estimate."
+            )
+        if isinstance(declared, dict) and declared.get("count") is not None:
+            warnings.append(
+                "Ignored invalid validation_context.dsr_trials.count; using engine_ast fallback estimate."
+            )
+    warnings.append(
+        "DSR trials source is engine_ast fallback estimate; pass validation_context.dsr_trials.count for audit-grade DSR accounting."
+    )
     return {
         "dsr_trials": engine_ast_k,
         "dsr_trials_source": "engine_ast",
+        "dsr_trial_warnings": warnings,
         "declared_dsr_trials": {},
     }
 
@@ -398,6 +414,8 @@ def _build_k_detail(prepared: dict) -> dict:
     }
     if prepared["declared_dsr_trials"]:
         detail["declared_dsr_trials"] = prepared["declared_dsr_trials"]
+    if prepared["dsr_trial_warnings"]:
+        detail["warnings"] = list(prepared["dsr_trial_warnings"])
     return detail
 
 
@@ -792,12 +810,16 @@ def _metric_failure_facts(result: dict) -> list[dict]:
                 }
             )
             continue
-        if text.startswith("Return floor"):
+        if text.startswith("Return floor") or text.startswith("Annualized return floor"):
+            metric = "annual_return" if text.startswith("Annualized") else "total_return"
+            threshold = None
+            if match := re.search(r"< \+([0-9.]+)%", text):
+                threshold = float(match.group(1)) / 100.0
             facts.append(
                 {
-                    "metric": "total_return",
-                    "observed": metrics.get("total_return", 0),
-                    "threshold": None,
+                    "metric": metric,
+                    "observed": metrics.get(metric, 0),
+                    "threshold": threshold,
                     "comparison": "lt",
                     "profile": result.get("profile", "unknown"),
                     "message": text,
@@ -868,18 +890,24 @@ def _context_selected_inputs(context: dict, *, target: str) -> list[str]:
         if text:
             values.append(text)
 
+    def add_input_item(item: object) -> None:
+        if isinstance(item, dict):
+            value = item.get("symbol") or item.get("name") or item.get("node_id")
+            if isinstance(value, str) and "." in value:
+                value = value.split(".", 1)[0]
+            add(value)
+        else:
+            add(item)
+
     raw_branch_selected = branch_spec.get("selected_inputs") or []
     if isinstance(raw_branch_selected, list):
         for item in raw_branch_selected:
-            add(item)
+            add_input_item(item)
 
     raw_manifest_selected = data_manifest.get("selected_inputs") or []
     if isinstance(raw_manifest_selected, list):
         for item in raw_manifest_selected:
-            if isinstance(item, dict):
-                add(item.get("node_id") or item.get("name") or item.get("symbol"))
-            else:
-                add(item)
+            add_input_item(item)
 
     for item in data_manifest.get("feeds") or []:
         if not isinstance(item, dict):

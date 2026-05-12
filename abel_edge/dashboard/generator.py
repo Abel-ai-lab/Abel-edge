@@ -294,7 +294,7 @@ def _build_portfolio(strategies: list[dict], settings: dict) -> dict:
         lp = live["pnl"].values.astype(float)
         lpos = live["position"].values.astype(float) if "position" in live.columns else np.zeros(len(lp))
         cum = np.cumsum(lp)
-        eq = np.exp(cum)
+        eq = 1.0 + cum
         peak = np.maximum.accumulate(eq)
         dd = (peak - eq) / peak
         max_dd = float(np.max(dd)) if len(dd) > 0 else 0

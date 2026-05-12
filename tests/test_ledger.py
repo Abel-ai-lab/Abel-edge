@@ -43,6 +43,21 @@ def test_append_trade_rows_prefer_live_over_same_day_backfill(tmp_path) -> None:
     assert float(df.iloc[-1]["pnl"]) == 0.05
 
 
+def test_write_trade_log_cum_return_uses_simple_interest(tmp_path) -> None:
+    path = tmp_path / "log.csv"
+    dates = pd.to_datetime(["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"], utc=True)
+    write_trade_log(
+        dates,
+        np.array([0.10, 0.10]),
+        np.array([0.10, 0.10]),
+        np.array([1.0, 1.0]),
+        path,
+    )
+
+    df = read_trade_log(path)
+    assert float(df.iloc[-1]["cum_return"]) == 0.20
+
+
 def test_write_trade_log_preserves_existing_live_rows(tmp_path) -> None:
     path = tmp_path / "log.csv"
     dates = pd.to_datetime(["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"], utc=True)
@@ -145,7 +160,7 @@ def test_validate_strategy_surfaces_runtime_r1_failure(tmp_path) -> None:
             "asset_return": asset_returns,
             "pnl": pnl,
             "position": positions,
-            "cum_return": np.cumprod(1.0 + pnl) - 1.0,
+            "cum_return": np.cumsum(pnl),
             "source": ["backfill"] * n,
         }
     ).to_csv(path, index=False)

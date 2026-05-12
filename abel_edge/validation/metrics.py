@@ -16,6 +16,7 @@ Anti-gaming:
 """
 
 import os
+from numbers import Integral
 
 import numpy as np
 import pandas as pd
@@ -109,9 +110,9 @@ def compute_all_metrics(
     if positions is not None:
         positions = np.nan_to_num(positions, nan=0.0, posinf=0.0, neginf=0.0)
 
-    equity = np.cumprod(1.0 + pnl)
+    equity = 1.0 + np.cumsum(pnl)
     cum_return = equity - 1.0
-    peak_equity = np.maximum.accumulate(equity)
+    peak_equity = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
     dd = (equity / peak_equity) - 1.0
     std = np.std(pnl, ddof=1)
     validation_cfg = (profile or {}).get("validation", {})
@@ -122,11 +123,7 @@ def compute_all_metrics(
     max_dd = float(np.min(dd))
     total_return = float(cum_return[-1])
     elapsed_years = _elapsed_years(dates, periods_per_year=periods_per_year)
-    ann_return = (
-        (equity[-1] ** (1.0 / elapsed_years) - 1.0)
-        if elapsed_years > 0 and equity[-1] > 0
-        else 0.0
-    )
+    ann_return = total_return / elapsed_years if elapsed_years > 0 else 0.0
     calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
@@ -134,7 +131,9 @@ def compute_all_metrics(
     cf = 1 + 2 * rho1 * (1 - 1 / periods_per_year)
     lo_adjusted = sharpe * np.sqrt(1 / cf) if cf > 0 else sharpe
 
-    dsr_trials_used = dsr_trials if dsr_trials is not None else validation_cfg.get("dsr_K", 300)
+    dsr_trials_used = _positive_dsr_trials(
+        dsr_trials if dsr_trials is not None else validation_cfg.get("dsr_K", 300)
+    )
     dsr = _dsr(pnl, T, K=dsr_trials_used, periods_per_year=periods_per_year)
 
     # Year-by-year stability: count only full calendar years with negative total PnL.
@@ -148,7 +147,7 @@ def compute_all_metrics(
         year_dates = dates[mask]
         year_pnl = pnl[mask]
         yearly_sharpes[yr] = _sharpe(year_pnl, periods_per_year=periods_per_year)
-        total_year_pnl = float(np.cumprod(1.0 + year_pnl)[-1] - 1.0)
+        total_year_pnl = float(np.sum(year_pnl))
         yearly_pnl[yr] = total_year_pnl
         if _is_full_calendar_year(year_dates, validation_cfg):
             full_years_count += 1
@@ -206,6 +205,8 @@ def compute_all_metrics(
         "lo_adjusted": lo_adjusted,
         "sortino": sortino,
         "total_return": total_return,
+        "annual_return": ann_return,
+        "elapsed_years": elapsed_years,
         "max_dd": max_dd,
         "calmar": calmar,
         "dsr": dsr,
@@ -307,18 +308,49 @@ def _is_full_calendar_year(
 
 def _dsr(pnl, T, K=300, periods_per_year=252):
     """Deflated Sharpe Ratio (Bailey & Lopez de Prado 2014)."""
+    K = _positive_dsr_trials(K)
+    sample_size = int(T)
+    if sample_size < 2:
+        return 0.0
+
+    pnl = np.asarray(pnl, dtype=float)
     std = np.std(pnl, ddof=1)
-    if std == 0:
-        return 0
-    sr_d = (np.mean(pnl) / std) * np.sqrt(periods_per_year)
+    if not np.isfinite(std) or std <= 1e-12:
+        return 0.0
+
+    sr = float(np.mean(pnl) / std)
+    if not np.isfinite(sr):
+        return 0.0
     skew = float(sp_stats.skew(pnl))
     raw_kurt = float(sp_stats.kurtosis(pnl, fisher=False))
+    if not np.isfinite(skew) or not np.isfinite(raw_kurt):
+        return 0.0
+
+    sr_variance_term = 1 - skew * sr + ((raw_kurt - 1) / 4) * sr**2
+    sr_std = np.sqrt(max(sr_variance_term, 1e-20) / (sample_size - 1))
+    if not np.isfinite(sr_std) or sr_std <= 0:
+        return 0.0
+
     gamma = 0.5772
-    z1 = sp_stats.norm.ppf(1 - 1 / K)
-    z2 = sp_stats.norm.ppf(1 - 1 / (K * np.e))
-    emax = ((1 - gamma) * z1 + gamma * z2) / np.sqrt(T)
-    var_sr = (1 / T) * (1 - skew * sr_d + (raw_kurt / 4) * sr_d**2)
-    return float(sp_stats.norm.cdf((sr_d - emax) / np.sqrt(max(var_sr, 1e-20))))
+    expected_max_z = 0.0
+    if K > 1:
+        z1 = sp_stats.norm.ppf(1 - 1 / K)
+        z2 = sp_stats.norm.ppf(1 - 1 / (K * np.e))
+        expected_max_z = (1 - gamma) * z1 + gamma * z2
+    sr_star = sr_std * expected_max_z
+    dsr = float(sp_stats.norm.cdf((sr - sr_star) / sr_std))
+    if not np.isfinite(dsr):
+        return 0.0
+    return float(np.clip(dsr, 0.0, 1.0))
+
+
+def _positive_dsr_trials(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError("DSR trials must be a positive integer")
+    parsed = int(value)
+    if parsed < 1:
+        raise ValueError("DSR trials must be a positive integer")
+    return parsed
 
 
 def _bootstrap_sharpe(pnl, n_boot=1000):

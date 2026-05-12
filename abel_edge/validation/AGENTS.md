@@ -14,7 +14,8 @@ Three leverage-invariant dimensions:
 ### Understand the live contract
 
 - denominators are applicability-based, not legacy `20/21` style scores
-- DSR accepts optional declared exploration counts through `dsr_trials`
+- DSR accepts optional positive declared exploration counts through `dsr_trials`
+- `engine_ast` DSR K is a fallback estimate, not full search-width accounting
 - deferred gates and removed profile keys live in `deferred_registry.yaml`
 - audit timing and comparability notes live in `docs/validation-audit-matrix.md`
 
@@ -28,7 +29,7 @@ Three leverage-invariant dimensions:
 
 | Code | Fix |
 |------|-----|
-| T6 DSR | Reduce search breadth or declare realistic `dsr_trials` |
+| T6 DSR | Reduce search breadth or declare realistic positive `dsr_trials` |
 | T14 LossYrs | Split regimes or reduce exposure in unstable years |
 | T15-Lo | Reduce persistence or serially correlated exposure patterns |
 | T15-Omega | Stop clipping PnL; clip features or position intent instead |
