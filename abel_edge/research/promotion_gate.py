@@ -31,6 +31,7 @@ def build_promotion_gate_report(
     refactor: dict[str, Any] | None = None,
     state_entries: Iterable[Any] = (),
     behavior_equivalence: dict[str, Any] | None = None,
+    paper_dry_run: dict[str, Any] | None = None,
     checks: Iterable[dict[str, Any]] | None = None,
     created_at: str | None = None,
 ) -> dict[str, Any]:
@@ -49,6 +50,7 @@ def build_promotion_gate_report(
             original_source_sha256=original_source_sha256,
             promoted_source_sha256=promoted_source_sha256,
             behavior_equivalence=behavior_equivalence,
+            paper_dry_run=paper_dry_run,
         )
     )
     status = _rollup_status(gate_checks)
@@ -77,6 +79,7 @@ def _default_checks(
     original_source_sha256: str,
     promoted_source_sha256: str,
     behavior_equivalence: dict[str, Any] | None,
+    paper_dry_run: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
     if behavior_equivalence is None:
         if original_source_sha256 == promoted_source_sha256:
@@ -89,6 +92,12 @@ def _default_checks(
                 "status": PROMOTION_GATE_STATUS_PASSED,
                 "method": "declared_promotion_scope",
             }
+
+    if paper_dry_run is None:
+        paper_dry_run = {
+            "status": PROMOTION_GATE_STATUS_PASSED,
+            "method": "source_round_edge_result",
+        }
 
     return [
         _gate("artifact_contract", "manifest_file_list_and_hashes"),
@@ -104,7 +113,16 @@ def _default_checks(
                 if key not in {"status", "method"}
             },
         ),
-        _gate("paper_dry_run", "artifact_export_contract"),
+        _gate(
+            "paper_dry_run",
+            str(paper_dry_run.get("method") or "declared"),
+            status=str(paper_dry_run.get("status") or PROMOTION_GATE_STATUS_PASSED),
+            details={
+                key: value
+                for key, value in paper_dry_run.items()
+                if key not in {"status", "method"}
+            },
+        ),
         _gate("security_static", "safe_paths_and_no_secret_sources"),
     ]
 
