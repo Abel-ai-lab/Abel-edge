@@ -29,6 +29,11 @@ def test_build_promotion_gate_report_for_auto_adapter() -> None:
             "method": "state_path_adapter_static_scope",
             "replacements": [{"path": "model/latest.joblib"}],
         },
+        paper_dry_run={
+            "status": "passed",
+            "method": "promoted_metric_input_replay",
+            "rowCount": 252,
+        },
         created_at="2026-05-08T00:00:00Z",
     )
 
@@ -50,6 +55,9 @@ def test_build_promotion_gate_report_for_auto_adapter() -> None:
         item for item in report["gates"] if item["name"] == "behavior_equivalence"
     )
     assert behavior_gate["method"] == "state_path_adapter_static_scope"
+    dry_run_gate = next(item for item in report["gates"] if item["name"] == "paper_dry_run")
+    assert dry_run_gate["method"] == "promoted_metric_input_replay"
+    assert dry_run_gate["details"]["rowCount"] == 252
 
 
 def test_build_promotion_gate_report_rejects_missing_gate() -> None:
