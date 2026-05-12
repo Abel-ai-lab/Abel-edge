@@ -16,6 +16,7 @@ Anti-gaming:
 """
 
 import os
+from numbers import Integral
 
 import numpy as np
 import pandas as pd
@@ -134,7 +135,9 @@ def compute_all_metrics(
     cf = 1 + 2 * rho1 * (1 - 1 / periods_per_year)
     lo_adjusted = sharpe * np.sqrt(1 / cf) if cf > 0 else sharpe
 
-    dsr_trials_used = dsr_trials if dsr_trials is not None else validation_cfg.get("dsr_K", 300)
+    dsr_trials_used = _positive_dsr_trials(
+        dsr_trials if dsr_trials is not None else validation_cfg.get("dsr_K", 300)
+    )
     dsr = _dsr(pnl, T, K=dsr_trials_used, periods_per_year=periods_per_year)
 
     # Year-by-year stability: count only full calendar years with negative total PnL.
@@ -307,18 +310,49 @@ def _is_full_calendar_year(
 
 def _dsr(pnl, T, K=300, periods_per_year=252):
     """Deflated Sharpe Ratio (Bailey & Lopez de Prado 2014)."""
+    K = _positive_dsr_trials(K)
+    sample_size = int(T)
+    if sample_size < 2:
+        return 0.0
+
+    pnl = np.asarray(pnl, dtype=float)
     std = np.std(pnl, ddof=1)
-    if std == 0:
-        return 0
-    sr_d = (np.mean(pnl) / std) * np.sqrt(periods_per_year)
+    if not np.isfinite(std) or std <= 1e-12:
+        return 0.0
+
+    sr = float(np.mean(pnl) / std)
+    if not np.isfinite(sr):
+        return 0.0
     skew = float(sp_stats.skew(pnl))
     raw_kurt = float(sp_stats.kurtosis(pnl, fisher=False))
+    if not np.isfinite(skew) or not np.isfinite(raw_kurt):
+        return 0.0
+
+    sr_variance_term = 1 - skew * sr + ((raw_kurt - 1) / 4) * sr**2
+    sr_std = np.sqrt(max(sr_variance_term, 1e-20) / (sample_size - 1))
+    if not np.isfinite(sr_std) or sr_std <= 0:
+        return 0.0
+
     gamma = 0.5772
-    z1 = sp_stats.norm.ppf(1 - 1 / K)
-    z2 = sp_stats.norm.ppf(1 - 1 / (K * np.e))
-    emax = ((1 - gamma) * z1 + gamma * z2) / np.sqrt(T)
-    var_sr = (1 / T) * (1 - skew * sr_d + (raw_kurt / 4) * sr_d**2)
-    return float(sp_stats.norm.cdf((sr_d - emax) / np.sqrt(max(var_sr, 1e-20))))
+    expected_max_z = 0.0
+    if K > 1:
+        z1 = sp_stats.norm.ppf(1 - 1 / K)
+        z2 = sp_stats.norm.ppf(1 - 1 / (K * np.e))
+        expected_max_z = (1 - gamma) * z1 + gamma * z2
+    sr_star = sr_std * expected_max_z
+    dsr = float(sp_stats.norm.cdf((sr - sr_star) / sr_std))
+    if not np.isfinite(dsr):
+        return 0.0
+    return float(np.clip(dsr, 0.0, 1.0))
+
+
+def _positive_dsr_trials(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError("DSR trials must be a positive integer")
+    parsed = int(value)
+    if parsed < 1:
+        raise ValueError("DSR trials must be a positive integer")
+    return parsed
 
 
 def _bootstrap_sharpe(pnl, n_boot=1000):

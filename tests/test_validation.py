@@ -31,6 +31,7 @@ from abel_edge.validation.metrics import (
     load_profile,
 )
 from abel_edge.validation.gate import validate_strategy
+from abel_edge.validation.gate_logic import validate
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -202,29 +203,38 @@ class TestDSR:
     def test_zero_std(self):
         assert _dsr(np.zeros(100), 100) == 0
 
-    def test_periods_per_year_changes_result(self):
+    def test_k_one_is_probabilistic_not_forced_to_one(self):
         pnl = _make_pnl(mean=0.0004, std=0.02, n=252, seed=7)
-        assert _dsr(pnl, 252, K=50, periods_per_year=252) != pytest.approx(
+        dsr = _dsr(pnl, 252, K=1)
+        assert 0.0 <= dsr <= 1.0
+        assert dsr != pytest.approx(1.0, abs=1e-12)
+
+    @pytest.mark.parametrize("k", [0, -1])
+    def test_rejects_invalid_k(self, k):
+        pnl = _make_pnl(mean=0.0004, std=0.02, n=252, seed=7)
+        with pytest.raises(ValueError, match="DSR trials must be a positive integer"):
+            _dsr(pnl, 252, K=k)
+
+    def test_periods_per_year_does_not_change_dsr_scale(self):
+        pnl = _make_pnl(mean=0.0004, std=0.02, n=252, seed=7)
+        assert _dsr(pnl, 252, K=50, periods_per_year=252) == pytest.approx(
             _dsr(pnl, 252, K=50, periods_per_year=365), rel=1e-12
         )
 
-    def test_uses_raw_kurtosis_convention(self):
+    def test_matches_reference_formula(self):
         pnl = _make_pnl(mean=0.0004, std=0.02, n=252, seed=7)
         std = np.std(pnl, ddof=1)
-        sr_d = (np.mean(pnl) / std) * np.sqrt(252)
+        sr = np.mean(pnl) / std
         skew = float(sp_stats.skew(pnl))
         raw_kurt = float(sp_stats.kurtosis(pnl, fisher=False))
-        excess_kurt = float(sp_stats.kurtosis(pnl))
         gamma = 0.5772
         z1 = sp_stats.norm.ppf(1 - 1 / 50)
         z2 = sp_stats.norm.ppf(1 - 1 / (50 * np.e))
-        emax = ((1 - gamma) * z1 + gamma * z2) / np.sqrt(252)
-        raw_var = (1 / 252) * (1 - skew * sr_d + (raw_kurt / 4) * sr_d**2)
-        excess_var = (1 / 252) * (1 - skew * sr_d + (excess_kurt / 4) * sr_d**2)
-        expected = float(sp_stats.norm.cdf((sr_d - emax) / np.sqrt(max(raw_var, 1e-20))))
-        excess_based = float(sp_stats.norm.cdf((sr_d - emax) / np.sqrt(max(excess_var, 1e-20))))
+        expected_max_z = (1 - gamma) * z1 + gamma * z2
+        sr_std = np.sqrt((1 - skew * sr + ((raw_kurt - 1) / 4) * sr**2) / (252 - 1))
+        sr_star = sr_std * expected_max_z
+        expected = float(sp_stats.norm.cdf((sr - sr_star) / sr_std))
         assert _dsr(pnl, 252, K=50, periods_per_year=252) == pytest.approx(expected, rel=1e-12)
-        assert expected != pytest.approx(excess_based, rel=1e-12)
 
 
 class TestBootstrap:
@@ -278,6 +288,14 @@ class TestComputeAllMetrics:
         ]
         for key in required_keys:
             assert key in m, f"Missing key: {key}"
+
+    def test_gate_rejects_non_finite_dsr(self, good_strategy):
+        pnl, dates, pos = good_strategy
+        m = compute_all_metrics(pnl, dates, pos, asset_returns=pnl)
+        m["dsr"] = float("nan")
+        passed, failures = validate(m, load_profile("equity_daily"))
+        assert passed is False
+        assert any("T6 DSR invalid" in item for item in failures)
 
     def test_sharpe_positive_for_good_strategy(self, good_strategy):
         pnl, dates, pos = good_strategy

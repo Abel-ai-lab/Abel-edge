@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from numbers import Real
+
 
 def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
     """Run validation gate. Returns (passed, list_of_failures)."""
@@ -9,7 +12,10 @@ def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
     ag = profile.get("anti_gaming", {})
     failures = []
 
-    if metrics["dsr"] < v.get("dsr_min", 0.90):
+    dsr = metrics.get("dsr")
+    if isinstance(dsr, bool) or not isinstance(dsr, Real) or not math.isfinite(float(dsr)):
+        failures.append("T6 DSR invalid")
+    elif dsr < v.get("dsr_min", 0.90):
         failures.append(f"T6 DSR {metrics['dsr']:.1%} < {v['dsr_min']:.0%}")
     if metrics.get("loss_years_applicable", False) and metrics["loss_years"] > v.get(
         "max_loss_years", 2

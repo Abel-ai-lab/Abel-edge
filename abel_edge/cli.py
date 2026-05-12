@@ -264,7 +264,7 @@ def tracking(config, strategy, output):
 )
 @click.option(
     "--dsr-trials",
-    type=int,
+    type=click.IntRange(min=1),
     default=None,
     help="Declared strategy exploration count used by DSR (overrides profile default)",
 )

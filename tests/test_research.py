@@ -469,6 +469,8 @@ class TestRunEvaluation:
         assert result["K"] >= 1
         assert result["profile"] == "equity_daily"
         assert result["implementation_contract"] == "legacy_signal_contract"
+        assert result["K_detail"]["source"] == "engine_ast"
+        assert any("engine_ast fallback estimate" in item for item in result["warnings"])
 
     def test_context_dsr_trials_overrides_engine_ast_k(self, tmp_path):
         _write_engine(tmp_path / "engine.py")
@@ -476,7 +478,7 @@ class TestRunEvaluation:
 
         result = run_evaluation(tmp_path, context_json=context_path)
 
-        assert result["verdict"] == "PASS"
+        assert result["verdict"] != "ERROR"
         assert result["K"] == 23
         assert result["metrics"]["dsr_trials_used"] == 23
         assert result["K_detail"]["source"] == "alpha_context"
@@ -484,6 +486,7 @@ class TestRunEvaluation:
         declared = result["K_detail"]["declared_dsr_trials"]
         assert declared["count"] == 23
         assert declared["components"]["current_round_trials"] == 1
+        assert not any("engine_ast fallback estimate" in item for item in result["warnings"])
 
     def test_preflight_context_dsr_trials_overrides_engine_ast_k(self, tmp_path):
         _write_engine(tmp_path / "engine.py")

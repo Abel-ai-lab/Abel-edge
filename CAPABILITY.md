@@ -37,13 +37,15 @@ result = validate_strategy("backtest.csv")  # needs: date, pnl columns
 
 Or CLI: `abel-edge validate --csv backtest.csv --verbose`
 
-If you know how many strategy variants you actually explored, declare it explicitly:
+If you know how many strategy variants you actually explored, declare the positive
+integer count explicitly:
 
 ```bash
 abel-edge validate --csv backtest.csv --dsr-trials 47
 ```
 
-When omitted, DSR falls back to the profile's default exploration-count prior.
+When omitted from standalone validation, DSR falls back to the profile's default
+exploration-count prior. Non-positive trial counts are rejected.
 
 For real-price strategies, `abel-edge run` now defaults to Abel price APIs.
 Set `price_data.adapter: csv` on a strategy to use a local bars file, or load a
@@ -141,19 +143,21 @@ abel-edge evaluate --workdir strategies/my_strategy --output-json edge-result.js
 abel-edge validate-handoff edge-handoff.json
 ```
 
-`abel-edge evaluate` reuses the audited validation contract, derives `K` from discovered
-tickers and lags, auto-detects the validation profile, and can optionally persist raw JSON,
-a markdown report, plus an edge-owned handoff JSON. The result also records the requested
-start date and effective start/end window. `abel-edge validate-handoff` rejects malformed
-or inconsistent upstream handoffs with explicit reasons. `abel-edge` does not organize
-experiments into sessions or branches; upstream tools such as `Abel-alpha` should own
-orchestration, process logs, and narrative summaries.
+`abel-edge evaluate` reuses the audited validation contract, auto-detects the
+validation profile, and can optionally persist raw JSON, a markdown report, plus
+an edge-owned handoff JSON. The result also records the requested start date and
+effective start/end window. `abel-edge validate-handoff` rejects malformed or
+inconsistent upstream handoffs with explicit reasons. `abel-edge` does not
+organize experiments into sessions or branches; upstream tools such as
+`Abel-alpha` should own orchestration, process logs, and narrative summaries.
 
 When an upstream orchestrator knows the session-level effective exploration trial count,
 including parameter, threshold, filter, sizing, or window sweeps, it may pass
 `validation_context.dsr_trials.count` in `--context-json`. `abel-edge evaluate` uses that
 declared count for DSR and records `K_detail.source=alpha_context` plus the declared
-components; otherwise it falls back to the local `engine.py` AST estimate.
+components. Otherwise it falls back to the local `engine.py` AST estimate from
+discovered ticker strings and lag calls, records `K_detail.source=engine_ast`, and
+emits a warning because this fallback is not full search-width accounting.
 
 If you do not already have an Abel API key, install `causal-abel` and complete its OAuth flow before
 running `abel-edge discover <TICKER>` or any workflow that triggers live Abel discovery:
