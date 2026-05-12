@@ -156,7 +156,7 @@ def test_export_strategy_artifact_zip_accepts_extra_source_map_for_initial_state
 ) -> None:
     paths = _write_sources(tmp_path)
     state_file = tmp_path / "model.joblib"
-    state_file.write_text("model-state\n", encoding="utf-8")
+    state_file.write_bytes(b"model-state\n")
     manifest = _manifest(paths)
     manifest["files"].append(_file_entry("runtime/initial-state/model.joblib", state_file))
     output_zip = paths["outputs"] / "artifact.zip"
