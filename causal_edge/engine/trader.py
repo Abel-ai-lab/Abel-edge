@@ -2,9 +2,35 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
 import click
 import numpy as np
 import pandas as pd
+
+
+def _make_pit_snapshot_id(sid: str, as_of: str | None = None) -> str:
+    """Generate a PIT snapshot id for this paper-run invocation.
+
+    Format: <date>_<sid>_<run_id_short>. Deterministic per (date, sid, run_id).
+    Stored in cache/pit/<this_id>/<ticker>.csv by lib/data.py when env var
+    ABEL_PIT_RECORD_SNAPSHOT_ID is set.
+
+    The data layer (e.g. trading-internal/lib/data.py) is responsible for
+    actually creating the snapshot dir + writing files. causal_edge only
+    SIGNALS via env var that snapshotting is desired.
+    """
+    if as_of:
+        date_part = pd.to_datetime(as_of, utc=True).strftime("%Y-%m-%d")
+    else:
+        date_part = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    run_id_env = os.environ.get("CAUSAL_EDGE_RUN_ID", "")
+    run_id_short = run_id_env.split("-")[-1][:8] if run_id_env else "manual"
+    return f"{date_part}_{sid}_{run_id_short}"
 
 from causal_edge.engine.backtest import BacktestSettings, run_backtest
 from causal_edge.engine.feed_contract import FeedContractError
@@ -28,6 +54,33 @@ def _compute_validated_signals(engine, strategy_cfg: dict):
         raise click.ClickException(f"{engine.__class__.__name__}: {exc}") from exc
 
 
+def _canonical_config_hash(strategy_cfg: dict, settings: dict | None) -> str:
+    payload = {
+        "settings": settings or {},
+        "strategy": strategy_cfg,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _data_version(dates: pd.DatetimeIndex, prices: np.ndarray, idx: int) -> str:
+    idx = int(idx)
+    cutoff_dates = pd.DatetimeIndex(dates[: idx + 1]).astype("int64").to_numpy()
+    cutoff_prices = np.asarray(prices[: idx + 1], dtype=np.float64)
+    h = hashlib.sha256()
+    h.update(str(idx + 1).encode())
+    h.update(b"\0dates\0")
+    h.update(cutoff_dates.tobytes())
+    h.update(b"\0prices\0")
+    h.update(cutoff_prices.tobytes())
+    return h.hexdigest()
+
+
 def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
     """Run a single strategy and write its trade log.
 
@@ -46,6 +99,29 @@ def run_one(strategy_cfg: dict, *, settings: dict | None = None) -> dict:
     engine = engine_cls(context=strategy_cfg)
 
     positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
+    if len(dates) == 0:
+        log_path = Path(trade_log_path)
+        if log_path.exists():
+            try:
+                existing = read_trade_log(log_path)
+            except Exception:  # noqa: BLE001
+                existing = pd.DataFrame()
+            if len(existing) > 0:
+                log_path.touch()
+                return {
+                    "id": sid,
+                    "n_days": len(existing),
+                    "trade_log": trade_log_path,
+                    "skipped": True,
+                    "reason": "empty signal output; preserved existing trade log",
+                }
+        return {
+            "id": sid,
+            "n_days": 0,
+            "trade_log": trade_log_path,
+            "skipped": True,
+            "reason": "empty signal output",
+        }
 
     execution_cfg = (settings or {}).get("execution") or {}
     result = run_backtest(
@@ -134,7 +210,19 @@ def paper_run_one(
     engine_cls = _load_engine(engine_path)
     engine = engine_cls(context=strategy_cfg)
 
-    positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
+    # 2026-05-12 PIT A3: wrap compute_signals in RECORD mode. The data
+    # layer (lib/data.py) detects ABEL_PIT_RECORD_SNAPSHOT_ID and writes
+    # a snapshot of each fetched ticker to cache/pit/<sid>/. Resulting
+    # snapshot_id is persisted into each live row's pit_snapshot_id column.
+    pit_snapshot_id = _make_pit_snapshot_id(sid, as_of=as_of)
+    os.environ["ABEL_PIT_RECORD_SNAPSHOT_ID"] = pit_snapshot_id
+    try:
+        positions, dates, prices = _compute_validated_signals(engine, strategy_cfg)
+    finally:
+        # Always clear env var to avoid leaking RECORD mode to subsequent
+        # strategy runs OR research scripts.
+        os.environ.pop("ABEL_PIT_RECORD_SNAPSHOT_ID", None)
+    dates = pd.DatetimeIndex(dates)
     if as_of is not None:
         cutoff = pd.to_datetime(as_of, utc=True)
         mask = dates <= cutoff
@@ -143,7 +231,18 @@ def paper_run_one(
         dates = dates[mask]
 
     if len(dates) == 0:
-        raise click.ClickException(f"No bars available for strategy '{sid}'.")
+        try:
+            _, _, last_row = _resolve_paper_state(strategy_cfg)
+        except click.ClickException as exc:
+            raise click.ClickException(f"No bars available for strategy '{sid}'.") from exc
+        return {
+            "id": sid,
+            "n_rows": 0,
+            "trade_log": paper_log_path,
+            "last_date": str(pd.to_datetime(last_row["date"], utc=True).date()),
+            "skipped": True,
+            "reason": "empty signal output; preserved existing paper log",
+        }
 
     returns = np.zeros_like(prices, dtype=float)
     if len(prices) > 1:
@@ -169,6 +268,7 @@ def paper_run_one(
 
     rows = []
     date_to_index = {ts: idx for idx, ts in enumerate(dates)}
+    config_hash = _canonical_config_hash(strategy_cfg, settings)
     for ts in new_dates:
         idx = date_to_index[ts]
         signal = _ensure_paper_signal(engine, as_of=ts)
@@ -182,6 +282,12 @@ def paper_run_one(
                 "pnl": float(carry_position * returns[idx]),
                 "next_position": next_position,
                 "source": "live",
+                "live_origin": "cron_live",
+                "config_hash": config_hash,
+                "data_version": _data_version(dates, prices, idx),
+                # PIT A3: persists snapshot id so engine_purity can later
+                # reproduce this row bit-exact via PIT data.
+                "pit_snapshot_id": pit_snapshot_id,
             }
         )
         carry_position = next_position
@@ -218,7 +324,13 @@ def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
     for s_cfg in strategies:
         result = run_one(s_cfg, settings=config.get("settings"))
         results.append(result)
-        click.echo(f"    → {result['n_days']} days written to {result['trade_log']}")
+        if result.get("skipped"):
+            click.echo(
+                f"    → skipped {result['id']}: {result.get('reason')} "
+                f"({result['n_days']} existing rows at {result['trade_log']})"
+            )
+        else:
+            click.echo(f"    → {result['n_days']} days written to {result['trade_log']}")
 
     return results
 
