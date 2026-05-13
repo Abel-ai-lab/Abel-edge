@@ -10,6 +10,8 @@ import click
 from abel_edge.engine.adapter_registry import FeedLoadRequest, resolve_adapter
 from abel_edge.engine.cache import cache_entry_for_request, load_cached_metadata, resolve_cache_root
 
+WARM_CACHE_MAX_CACHE_AGE_SECONDS = 86400
+
 
 def warm_cache_payload(
     *,
@@ -33,6 +35,7 @@ def warm_cache_payload(
             options["env_path"] = env_path
         if path:
             options["path"] = path
+        options["max_cache_age_seconds"] = WARM_CACHE_MAX_CACHE_AGE_SECONDS
         request = FeedLoadRequest(
             adapter=adapter_name,
             kind="bars",

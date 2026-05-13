@@ -8,13 +8,19 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 
 CACHE_ROOT_ENV = "ABEL_EDGE_CACHE_ROOT"
 DEFAULT_CACHE_ROOT = Path(".cache/market_data")
-_OPTION_EXCLUDE = {"env_path", "fields", "force", "cache_root"}
+_OPTION_EXCLUDE = {
+    "env_path",
+    "fields",
+    "force",
+    "cache_root",
+    "max_cache_age_seconds",
+}
 
 
 @dataclass(frozen=True)
@@ -95,9 +101,23 @@ def cache_covers_request(
     *,
     start: object | None,
     end: object | None,
+    required_columns: Iterable[str] | None = None,
+    max_cache_age_seconds: int | float | None = None,
 ) -> bool:
     if not metadata:
         return False
+    if required_columns is not None:
+        cached_columns = {str(column) for column in metadata.get("columns") or []}
+        required = {str(column) for column in required_columns}
+        if not required.issubset(cached_columns):
+            return False
+    if max_cache_age_seconds is not None:
+        updated_at = _as_timestamp(metadata.get("updated_at"))
+        if updated_at is None:
+            return False
+        max_age = pd.Timedelta(seconds=float(max_cache_age_seconds))
+        if pd.Timestamp.now(tz=UTC) - updated_at > max_age:
+            return False
     available_start = _as_timestamp((metadata.get("available_range") or {}).get("start"))
     available_end = _as_timestamp((metadata.get("available_range") or {}).get("end"))
     requested_start = _as_timestamp(start)
@@ -111,8 +131,6 @@ def cache_covers_request(
             if cached_requested_start is None or cached_requested_start > requested_start:
                 return False
     if requested_end is not None and (available_end is None or available_end < requested_end):
-        return False
-    if requested_end is None and available_end is not None and not _is_recent_enough(available_end):
         return False
     return True
 

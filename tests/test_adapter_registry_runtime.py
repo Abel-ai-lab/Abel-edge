@@ -2,15 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import importlib
+import json
 import sys
 from pathlib import Path
 
 from click.testing import CliRunner
+import pandas as pd
 import pytest
 
 from abel_edge.cli import main
 from abel_edge.config import load_config
+from abel_edge.engine.adapter_registry import AbelDataFeedAdapter, FeedLoadRequest
+from abel_edge.engine.cache import cache_entry_for_request, load_cached_metadata, write_cached_bars
 from abel_edge.engine.ledger import read_trade_log
 
 
@@ -194,3 +199,141 @@ strategies:
         finally:
             sys.path.pop(0)
             _reset_modules()
+
+
+def test_abel_bars_adapter_refreshes_close_only_cache_with_full_ohlcv(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
+        calls.append(
+            {
+                "symbols": symbols,
+                "start": start,
+                "end": end,
+                "timeframe": timeframe,
+                "limit": limit,
+                "fields": fields,
+                "config": config,
+            }
+        )
+        return pd.DataFrame(
+            {
+                "timestamp": ["2020-01-02T00:00:00Z"],
+                "symbol": ["AAPL"],
+                "open": [99.0],
+                "high": [101.0],
+                "low": [98.0],
+                "close": [100.0],
+                "volume": [1000.0],
+            }
+        )
+
+    import abel_edge.plugins.abel.prices as prices_module
+
+    monkeypatch.setattr(prices_module, "fetch_bars", fake_fetch_bars)
+    request = FeedLoadRequest(
+        adapter="abel",
+        kind="bars",
+        symbol="AAPL",
+        field=None,
+        timeframe="1d",
+        start="2020-01-01",
+        end=None,
+        limit=10,
+        profile="daily",
+        options={"fields": ["close"], "cache_root": str(tmp_path)},
+        strategy_id=None,
+        feed_name="primary",
+    )
+    entry = cache_entry_for_request(
+        adapter="abel",
+        symbol="AAPL",
+        timeframe="1d",
+        profile="daily",
+        options=request.options,
+        cache_root=tmp_path,
+    )
+    write_cached_bars(
+        entry,
+        pd.DataFrame(
+            {
+                "timestamp": ["2020-01-02T00:00:00Z"],
+                "symbol": ["AAPL"],
+                "close": [100.0],
+            }
+        ),
+        requested_start="2020-01-01",
+    )
+
+    frame = AbelDataFeedAdapter().load(request)
+    metadata = load_cached_metadata(entry)
+
+    assert calls[0]["fields"] == ["open", "high", "low", "close", "volume"]
+    assert list(frame.columns) == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+    assert metadata["columns"] == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+
+
+def test_abel_bars_adapter_refreshes_stale_cache_confirmation(tmp_path, monkeypatch):
+    calls = []
+
+    def fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
+        calls.append({"symbols": symbols, "fields": fields})
+        return pd.DataFrame(
+            {
+                "timestamp": ["2020-01-03T00:00:00Z"],
+                "symbol": ["AAPL"],
+                "open": [100.0],
+                "high": [102.0],
+                "low": [99.0],
+                "close": [101.0],
+                "volume": [1100.0],
+            }
+        )
+
+    import abel_edge.plugins.abel.prices as prices_module
+
+    monkeypatch.setattr(prices_module, "fetch_bars", fake_fetch_bars)
+    request = FeedLoadRequest(
+        adapter="abel",
+        kind="bars",
+        symbol="AAPL",
+        field=None,
+        timeframe="1d",
+        start="2020-01-01",
+        end=None,
+        limit=10,
+        profile="daily",
+        options={"cache_root": str(tmp_path), "max_cache_age_seconds": 1},
+        strategy_id=None,
+        feed_name="primary",
+    )
+    entry = cache_entry_for_request(
+        adapter="abel",
+        symbol="AAPL",
+        timeframe="1d",
+        profile="daily",
+        options=request.options,
+        cache_root=tmp_path,
+    )
+    metadata = write_cached_bars(
+        entry,
+        pd.DataFrame(
+            {
+                "timestamp": ["2020-01-02T00:00:00Z"],
+                "symbol": ["AAPL"],
+                "open": [99.0],
+                "high": [101.0],
+                "low": [98.0],
+                "close": [100.0],
+                "volume": [1000.0],
+            }
+        ),
+        requested_start="2020-01-01",
+    )
+    metadata["updated_at"] = (datetime.now(tz=UTC) - timedelta(days=1)).isoformat()
+    entry.meta_path.write_text(json.dumps(metadata), encoding="utf-8")
+
+    frame = AbelDataFeedAdapter().load(request)
+
+    assert calls
+    assert float(frame.iloc[-1]["close"]) == 101.0
