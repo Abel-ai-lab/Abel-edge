@@ -18,6 +18,9 @@ from abel_edge.engine.cache import (
 )
 from abel_edge.engine.feed_contract import FeedContractError
 
+ABEL_BAR_FIELDS = ["open", "high", "low", "close", "volume"]
+ABEL_BAR_CACHE_COLUMNS = ["timestamp", "symbol", *ABEL_BAR_FIELDS]
+
 
 @dataclass(frozen=True)
 class FeedLoadRequest:
@@ -149,6 +152,7 @@ class AbelDataFeedAdapter:
             cached_metadata,
             start=request.start,
             end=request.end,
+            required_columns=ABEL_BAR_CACHE_COLUMNS if request.kind == "bars" else None,
         ):
             cached = load_cached_bars(entry)
             if cached is not None:
@@ -169,7 +173,7 @@ class AbelDataFeedAdapter:
                     end=request.end,
                     timeframe=request.timeframe or "1d",
                     limit=effective_limit,
-                    fields=fields,
+                    fields=ABEL_BAR_FIELDS if request.kind == "bars" else fields,
                     config=request.options,
                 )
                 write_cached_bars(
