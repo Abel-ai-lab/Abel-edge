@@ -14,7 +14,13 @@ import pandas as pd
 
 CACHE_ROOT_ENV = "ABEL_EDGE_CACHE_ROOT"
 DEFAULT_CACHE_ROOT = Path(".cache/market_data")
-_OPTION_EXCLUDE = {"env_path", "fields", "force", "cache_root"}
+_OPTION_EXCLUDE = {
+    "env_path",
+    "fields",
+    "force",
+    "cache_root",
+    "max_cache_age_seconds",
+}
 
 
 @dataclass(frozen=True)

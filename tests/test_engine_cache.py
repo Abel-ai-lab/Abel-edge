@@ -116,3 +116,25 @@ def test_cache_max_age_uses_metadata_updated_at():
         end=None,
         max_cache_age_seconds=86400,
     )
+
+
+def test_cache_key_ignores_max_cache_age_option(tmp_path):
+    base = cache_entry_for_request(
+        adapter="abel",
+        symbol="AAPL",
+        timeframe="1d",
+        profile="daily",
+        options={},
+        cache_root=tmp_path,
+    )
+    with_max_age = cache_entry_for_request(
+        adapter="abel",
+        symbol="AAPL",
+        timeframe="1d",
+        profile="daily",
+        options={"max_cache_age_seconds": 86400},
+        cache_root=tmp_path,
+    )
+
+    assert with_max_age.key == base.key
+    assert with_max_age.data_path == base.data_path

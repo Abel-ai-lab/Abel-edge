@@ -153,6 +153,7 @@ class AbelDataFeedAdapter:
             start=request.start,
             end=request.end,
             required_columns=ABEL_BAR_CACHE_COLUMNS if request.kind == "bars" else None,
+            max_cache_age_seconds=_max_cache_age_seconds(request.options),
         ):
             cached = load_cached_bars(entry)
             if cached is not None:
@@ -222,3 +223,14 @@ def _csv_series_frame(df: pd.DataFrame, request: FeedLoadRequest) -> pd.DataFram
     if "symbol" not in frame.columns and request.symbol:
         frame["symbol"] = request.symbol
     return frame
+
+
+def _max_cache_age_seconds(options: dict[str, object]) -> float | None:
+    raw = options.get("max_cache_age_seconds")
+    if raw is None or raw == "":
+        return None
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
