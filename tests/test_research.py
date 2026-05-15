@@ -709,6 +709,50 @@ class TestRunEvaluation:
         assert context["_runtime_profile"]["target"] == "SONY"
         assert context["_execution_constraints"]["long_only"] is False
 
+    def test_context_json_preserves_injected_grandma_runtime_contract(self, tmp_path):
+        context_path = tmp_path / "context.json"
+        context_path.write_text(
+            json.dumps(
+                {
+                    "ticker": "TSLA",
+                    "_runtime_profile": {
+                        "profile": "daily",
+                        "target": "TSLA",
+                        "validation_profile": "grandma_daily",
+                        "execution_delay_bars": 2,
+                    },
+                    "_execution_constraints": {
+                        "long_only": False,
+                        "position_bounds": [-1.0, 1.0],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        context = research_evaluate._build_research_context(
+            workspace=tmp_path,
+            start=None,
+            context_json=context_path,
+        )
+
+        assert context["_runtime_profile"]["validation_profile"] == "grandma_daily"
+        assert context["_runtime_profile"]["execution_delay_bars"] == 2
+        assert context["_execution_constraints"]["position_bounds"] == [-1.0, 1.0]
+
+    def test_evaluation_uses_context_validation_profile(self, tmp_path):
+        _write_engine(tmp_path / "engine.py")
+        context_path = tmp_path / "context.json"
+        context_path.write_text(
+            json.dumps({"validation_context": {"profile": "grandma_daily"}}),
+            encoding="utf-8",
+        )
+
+        result = run_evaluation(tmp_path, context_json=context_path)
+
+        assert result["verdict"] == "PASS"
+        assert result["profile"] == "grandma_daily"
+
     def test_preflight_keeps_static_checks_as_warnings(self, tmp_path):
         engine = tmp_path / "engine.py"
         engine.write_text(

@@ -148,7 +148,7 @@ def validate_strategy(
 
     # Extract triangle
     mt = prof.get("metric_triangle", {})
-    opt_key = {"lo_adjusted_sharpe": "lo_adjusted", "sharpe": "sharpe"}.get(
+    opt_key = {"lo_adjusted_sharpe": "lo_adjusted", "sharpe": "sharpe", "total_return": "total_return"}.get(
         mt.get("optimize", "lo_adjusted_sharpe"), "lo_adjusted"
     )
     triangle = {
@@ -258,6 +258,9 @@ def print_validation_report(results: dict) -> None:
 
 def _count_total(metrics: dict, profile: dict) -> int:
     """Count total applicable validation checks."""
+    if profile.get("validation", {}).get("contract") == "grandma":
+        return 3
+
     # Drawdown-time metrics remain diagnostic-only and no longer add gate slots.
     count = 4  # DSR, Lo, MaxDD, PnL floor
     if metrics.get("loss_years_applicable", False):

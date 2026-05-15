@@ -1,0 +1,24 @@
+# Abel Proof profile: Grandma Daily
+# Conservative daily profile for simple-return strategies with no leverage.
+
+name: grandma_daily
+description: >
+  Profile for grandma-mode daily strategies. This contract prioritizes simple
+  total return and drawdown efficiency, while requiring executed exposure to be
+  unlevered. Standard DSR, Sharpe, Position IC, and Omega gates are intentionally
+  not live gates for this profile.
+
+metric_triangle:
+  optimize: total_return
+  guardrails: []
+
+anti_gaming: {}
+
+validation:
+  contract: grandma
+  calendar_type: business_day
+  periods_per_year: 252
+  total_return_min: 0.0
+  pnl_to_maxdd_min: 1.5
+  max_abs_position_max: 1.0
+  dsr_K: 1

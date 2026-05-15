@@ -3,12 +3,28 @@ from __future__ import annotations
 from pathlib import Path
 
 from click.testing import CliRunner
+import pandas as pd
 
 from abel_edge.cli import main
 from abel_edge.validation.gate import validate_strategy
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "validation"
+
+
+def _write_grandma_csv(path: Path, *, position: float = 1.0) -> None:
+    dates = pd.bdate_range("2024-01-02", periods=60)
+    pnl = [0.005] * 60
+    pnl[10] = -0.02
+    frame = pd.DataFrame(
+        {
+            "date": dates,
+            "pnl": pnl,
+            "position": [position] * 60,
+            "asset_return": [value / position for value in pnl],
+        }
+    )
+    frame.to_csv(path, index=False)
 
 
 def test_csv_insufficient_rows_contract() -> None:
@@ -18,6 +34,29 @@ def test_csv_insufficient_rows_contract() -> None:
     assert result["profile"] == "unknown"
     assert result["triangle"] == {"ratio": 0, "rank": 0, "shape": 0}
     assert result["failures"] == ["Insufficient data: 20 rows (need 30+)"]
+
+
+def test_grandma_daily_profile_passes_simple_return_with_no_leverage(tmp_path: Path) -> None:
+    csv_path = tmp_path / "grandma-pass.csv"
+    _write_grandma_csv(csv_path, position=1.0)
+
+    result = validate_strategy(csv_path, profile="grandma_daily")
+
+    assert result["verdict"] == "PASS"
+    assert result["score"] == "3/3"
+    assert result["profile"] == "grandma_daily"
+    assert result["metrics"]["pnl_to_maxdd"] >= 1.5
+    assert result["metrics"]["max_abs_position"] <= 1.0
+
+
+def test_grandma_daily_profile_rejects_levered_position(tmp_path: Path) -> None:
+    csv_path = tmp_path / "grandma-levered.csv"
+    _write_grandma_csv(csv_path, position=1.25)
+
+    result = validate_strategy(csv_path, profile="grandma_daily")
+
+    assert result["verdict"] == "FAIL"
+    assert any("Grandma leverage" in item for item in result["failures"])
 
 
 def test_csv_without_position_has_current_conditional_denominator() -> None:

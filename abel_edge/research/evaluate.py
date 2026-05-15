@@ -180,7 +180,11 @@ def run_evaluation(
         csv_path = Path(handle.name)
 
     try:
-        result = validate_strategy(csv_path, dsr_trials=prepared["dsr_trials"])
+        result = validate_strategy(
+            csv_path,
+            profile=prepared.get("validation_profile") or None,
+            dsr_trials=prepared["dsr_trials"],
+        )
     except Exception as exc:
         csv_path.unlink(missing_ok=True)
         result = _error(
@@ -350,6 +354,7 @@ def _prepare_engine_runtime(
         "compiled": compiled,
         "k_value": k_value,
         **_resolve_dsr_trials(research_context, engine_ast_k=k_value),
+        "validation_profile": _resolve_validation_profile(research_context),
         "tickers": tickers,
         "lags": lags,
         "static_violations": static_violations,
@@ -391,6 +396,21 @@ def _resolve_dsr_trials(context: dict, *, engine_ast_k: int) -> dict:
         "dsr_trial_warnings": warnings,
         "declared_dsr_trials": {},
     }
+
+
+def _resolve_validation_profile(context: dict) -> str | None:
+    validation_context = context.get("validation_context")
+    if isinstance(validation_context, dict):
+        for key in ("profile", "validation_profile"):
+            value = str(validation_context.get(key) or "").strip()
+            if value:
+                return value
+    runtime_profile = context.get("_runtime_profile")
+    if isinstance(runtime_profile, dict):
+        value = str(runtime_profile.get("validation_profile") or "").strip()
+        if value:
+            return value
+    return None
 
 
 def _positive_int(value) -> int | None:
@@ -623,26 +643,33 @@ def _build_research_context(
         "workdir": str(workspace.resolve()),
         "requested_window": {"start": start, "end": None},
     }
-    data_contract = research_context.get("_data_contract")
-    if not isinstance(data_contract, dict):
-        data_contract = {}
-    data_contract["profile"] = "daily"
+    data_contract = {"profile": "daily"}
+    injected_data_contract = research_context.get("_data_contract")
+    if isinstance(injected_data_contract, dict):
+        data_contract.update(injected_data_contract)
     research_context["_data_contract"] = data_contract
     ticker = (
         research_context.get("ticker")
         or (research_context.get("discovery") or {}).get("ticker")
         or ((research_context.get("branch_spec") or {}).get("target"))
     )
-    research_context["_runtime_profile"] = {
+    runtime_profile = {
         "profile": "daily",
         "target": str(ticker or "").strip().upper() or None,
         "decision_event": "bar_close",
         "execution_delay_bars": 1,
         "return_basis": "close_to_close",
     }
-    research_context["_execution_constraints"] = {
-        "long_only": False,
-    }
+    injected_runtime_profile = research_context.get("_runtime_profile")
+    if isinstance(injected_runtime_profile, dict):
+        runtime_profile.update(injected_runtime_profile)
+    runtime_profile["target"] = str(runtime_profile.get("target") or ticker or "").strip().upper() or None
+    research_context["_runtime_profile"] = runtime_profile
+    execution_constraints = {"long_only": False}
+    injected_execution_constraints = research_context.get("_execution_constraints")
+    if isinstance(injected_execution_constraints, dict):
+        execution_constraints.update(injected_execution_constraints)
+    research_context["_execution_constraints"] = execution_constraints
     feeds = research_context.get("_feeds")
     if not isinstance(feeds, dict):
         feeds = {}
