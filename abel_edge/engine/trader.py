@@ -6,6 +6,7 @@ import click
 import pandas as pd
 
 from abel_edge.engine.backtest import BacktestSettings, run_backtest
+from abel_edge.engine.base import StrategyEngine
 from abel_edge.engine.feed_contract import FeedContractError
 from abel_edge.engine.ledger import write_trade_log
 from abel_edge.engine.loader import load_engine_from_import_path
@@ -93,6 +94,10 @@ def _ensure_paper_signal(engine, *, as_of):
     return signal
 
 
+def _uses_default_paper_signal(engine) -> bool:
+    return type(engine).get_paper_signal is StrategyEngine.get_paper_signal
+
+
 def paper_run_one(
     strategy_cfg: dict,
     *,
@@ -109,6 +114,11 @@ def paper_run_one(
     compiled = _compute_runtime_output(engine, strategy_cfg)
     dates = compiled.decision_index
     prices = compiled.close_prices
+    signal_lookup = None
+    if not _uses_default_paper_signal(engine):
+        def signal_lookup(ts):
+            return _ensure_paper_signal(engine, as_of=ts)
+
     try:
         return append_paper_decision_rows(
             strategy_cfg,
@@ -117,7 +127,7 @@ def paper_run_one(
             positions=compiled.positions,
             next_positions=compiled.next_position,
             as_of=as_of,
-            signal_lookup=lambda ts: _ensure_paper_signal(engine, as_of=ts),
+            signal_lookup=signal_lookup,
         )
     except (FileNotFoundError, ValueError) as e:
         raise click.ClickException(str(e)) from e
