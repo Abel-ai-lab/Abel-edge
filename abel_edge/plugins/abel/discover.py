@@ -41,7 +41,7 @@ def discover_graph_payload(
         raise MissingAbelApiKeyError(
             f"{e} Optionally set ABEL_CAP_BASE_URL to target a non-default CAP endpoint."
         ) from e
-    abel = client or AbelClient()
+    abel = client or AbelClient(env_path=env_path)
     limit = min(max(limit, 1), 20)
 
     if mode == "all":

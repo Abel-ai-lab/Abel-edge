@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import shutil
 import subprocess
 import sys
@@ -90,9 +91,10 @@ class AbelClient:
         self,
         *,
         cap_base_url: str | None = None,
+        env_path: str | Path = ".env",
         session: requests.Session | None = None,
     ) -> None:
-        self.cap_base_url = (cap_base_url or resolve_cap_base_url()).rstrip("/")
+        self.cap_base_url = (cap_base_url or resolve_cap_base_url(env_path=env_path)).rstrip("/")
         self.session = session or requests.Session()
 
     def _post_json(self, *, url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:

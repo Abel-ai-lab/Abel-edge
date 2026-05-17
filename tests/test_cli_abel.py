@@ -103,6 +103,9 @@ def test_login_reports_shared_auth_reuse(monkeypatch):
 
 def test_discover_ethusd_parents(monkeypatch, tmp_path):
     class StubClient:
+        def __init__(self, **_kwargs):
+            pass
+
         def discover_parents(self, *, node_id, limit, api_key):
             assert node_id == "ETHUSD"
             assert limit == 20
@@ -124,6 +127,9 @@ def test_discover_ethusd_parents(monkeypatch, tmp_path):
 
 def test_discover_ethusd_markov_blanket(monkeypatch, tmp_path):
     class StubClient:
+        def __init__(self, **_kwargs):
+            pass
+
         def markov_blanket(self, *, node_id, limit, api_key):
             assert node_id == "ETHUSD"
             assert limit == 12
@@ -147,6 +153,9 @@ def test_discover_ethusd_markov_blanket(monkeypatch, tmp_path):
 
 def test_discover_json_preserves_target_node_and_field_aware_items(monkeypatch, tmp_path):
     class StubClient:
+        def __init__(self, **_kwargs):
+            pass
+
         def discover_parents(self, *, node_id, limit, api_key):
             assert node_id == "ETHUSD.price"
             return [{"node_id": "BTCUSD.price"}]
@@ -187,6 +196,9 @@ def test_discover_missing_api_key_fails(monkeypatch, tmp_path):
 
 def test_discover_uses_causal_abel_skill_auth_file(monkeypatch, tmp_path):
     class StubClient:
+        def __init__(self, **_kwargs):
+            pass
+
         def discover_parents(self, *, node_id, limit, api_key):
             assert node_id == "ETHUSD"
             assert api_key == "abel_skill"

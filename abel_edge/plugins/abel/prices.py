@@ -26,7 +26,7 @@ def fetch_bars(
         raise MissingAbelApiKeyError(
             f"{e} Or set price_data.adapter to 'csv' for local bar data."
         ) from e
-    abel = client or AbelClient()
+    abel = client or AbelClient(env_path=env_path)
     payload = abel.fetch_bars(
         symbols=symbols,
         start=start,
