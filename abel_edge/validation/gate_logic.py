@@ -9,6 +9,9 @@ from numbers import Real
 def validate(metrics: dict, profile: dict) -> tuple[bool, list[str]]:
     """Run validation gate. Returns (passed, list_of_failures)."""
     v = profile.get("validation", {})
+    if v.get("contract") == "grandma":
+        return _validate_grandma(metrics, v)
+
     ag = profile.get("anti_gaming", {})
     failures = []
 
@@ -68,7 +71,7 @@ def decide_keep_discard(current: dict, baseline: dict, profile: dict) -> str:
     mt = profile.get("metric_triangle", {})
     v = profile.get("validation", {})
 
-    opt_key = {"lo_adjusted_sharpe": "lo_adjusted", "sharpe": "sharpe"}.get(
+    opt_key = {"lo_adjusted_sharpe": "lo_adjusted", "sharpe": "sharpe", "total_return": "total_return"}.get(
         mt.get("optimize", "lo_adjusted_sharpe"), "lo_adjusted"
     )
     if current.get(opt_key, 0) <= baseline.get(opt_key, 0):
@@ -94,3 +97,32 @@ def decide_keep_discard(current: dict, baseline: dict, profile: dict) -> str:
         return "DISCARD"
 
     return "KEEP"
+
+
+def _validate_grandma(metrics: dict, validation_cfg: dict) -> tuple[bool, list[str]]:
+    failures = []
+    total_return = metrics.get("total_return")
+    min_return = float(validation_cfg.get("total_return_min", 0.0))
+    if isinstance(total_return, bool) or not isinstance(total_return, Real) or not math.isfinite(float(total_return)):
+        failures.append("Grandma return invalid")
+    elif float(total_return) <= min_return:
+        failures.append(f"Grandma return {float(total_return) * 100:+.2f}% <= +{min_return * 100:.2f}%")
+
+    ratio = metrics.get("pnl_to_maxdd")
+    ratio_min = float(validation_cfg.get("pnl_to_maxdd_min", 1.5))
+    if isinstance(ratio, bool) or not isinstance(ratio, Real) or not math.isfinite(float(ratio)):
+        failures.append("Grandma PnL/MaxDD invalid")
+    elif float(ratio) + 1e-12 < ratio_min:
+        failures.append(f"Grandma PnL/MaxDD {float(ratio):.2f} < {ratio_min:.2f}")
+
+    max_position = float(validation_cfg.get("max_abs_position_max", 1.0))
+    if not metrics.get("position_exposure_applicable", False):
+        failures.append("Grandma leverage evidence missing position column")
+    else:
+        observed = metrics.get("max_abs_position")
+        if isinstance(observed, bool) or not isinstance(observed, Real) or not math.isfinite(float(observed)):
+            failures.append("Grandma leverage invalid")
+        elif float(observed) > max_position + 1e-12:
+            failures.append(f"Grandma leverage {float(observed):.2f} > {max_position:.2f}")
+
+    return len(failures) == 0, failures
