@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-05-19
+
+### Added
+- Added the `grandma_daily` validation profile for simple-return, unlevered daily strategies.
+- Added `pnl_to_maxdd`, `position_exposure_applicable`, and `max_abs_position` validation metrics.
+
+### Changed
+- Research evaluation now honors validation profiles supplied through `validation_context` or `_runtime_profile`.
+- Research context construction now preserves injected data, runtime, and execution contract fields.
+
 ## [0.8.3] - 2026-05-12
 
 ### Changed
