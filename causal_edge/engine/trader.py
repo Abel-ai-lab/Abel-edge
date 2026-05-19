@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -336,7 +337,25 @@ def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
 
 
 def paper_run_all(config: dict, strategy_id: str | None = None, as_of=None) -> list[dict]:
+    """Run paper-trade emission for all (or one) strategies.
+
+    Batch resilience policy (added 2026-05-19, codex peer-reviewed):
+      - Single-strategy mode (`strategy_id` set): fail-hard on first exception.
+        Caller (operator / `cli paper --strategy X`) wants the trace.
+      - All-mode (`strategy_id` is None): each strategy runs in isolation;
+        a single failure does NOT halt subsequent strategies. Failures are
+        appended to `data/paper_failures.jsonl` (one JSON-line per failure
+        with id, error_type, message, traceback, timestamp). After all
+        strategies have been attempted, raises `click.ClickException` if any
+        failed, so cron exits non-zero and alerting fires.
+
+    Rationale: prior behavior had one stale-ticker exception (RELI in
+    hood_xasset_stab) silently killing all downstream strategies in the same
+    cron batch (5/14-5/18 lost rows for abel_portfolio family + sp_recon_v2
+    + eth_call_overlay). Batch should be resilient; cron should still be noisy.
+    """
     strategies = config["strategies"]
+    single_strategy_mode = strategy_id is not None
     if strategy_id:
         strategies = [s for s in strategies if s["id"] == strategy_id]
         if not strategies:
@@ -345,13 +364,29 @@ def paper_run_all(config: dict, strategy_id: str | None = None, as_of=None) -> l
                 f"Available: {[s['id'] for s in config['strategies']]}"
             )
 
-    results = []
+    results: list[dict] = []
+    failures: list[dict] = []
     for s_cfg in strategies:
-        result = paper_run_one(
-            s_cfg,
-            settings=config.get("settings"),
-            as_of=as_of,
-        )
+        sid = s_cfg.get("id", "<unknown>")
+        try:
+            result = paper_run_one(
+                s_cfg,
+                settings=config.get("settings"),
+                as_of=as_of,
+            )
+        except Exception as exc:
+            if single_strategy_mode:
+                raise
+            failures.append({
+                "strategy": sid,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "traceback": traceback.format_exc(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            click.echo(f"    → FAILED {sid}: {type(exc).__name__}: {exc}")
+            continue
+
         results.append(result)
         if result["n_rows"] == 0:
             click.echo(f"    → no new closed bars for {result['id']}")
@@ -361,4 +396,21 @@ def paper_run_all(config: dict, strategy_id: str | None = None, as_of=None) -> l
                 f"through {result['last_date']}"
             )
 
+    if failures:
+        _write_paper_failures(failures)
+        raise click.ClickException(
+            f"{len(failures)} strategies failed during paper batch; "
+            f"see data/paper_failures.jsonl. IDs: "
+            f"{[f['strategy'] for f in failures]}"
+        )
+
     return results
+
+
+def _write_paper_failures(failures: list[dict]) -> None:
+    """Append failure records to data/paper_failures.jsonl (one JSON per line)."""
+    path = Path("data/paper_failures.jsonl")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        for rec in failures:
+            f.write(json.dumps(rec) + "\n")
