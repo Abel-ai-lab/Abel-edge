@@ -158,7 +158,7 @@ def generate_ic_unsupported_no_position() -> None:
     # But test also says verdict=FAIL, score="4/5". Let's check what fails:
     # With equity_daily: annualized return_floor = 0.05 and this falls just below it → 1 failure
     # score = (total - failures) / total, "4/5" means total=5, failures=1
-    # _count_total: base 4 + sharpe_lo_ratio = 5 (no loss_years, no omega, no IC, no IC_stability)
+    # Gate explanation: base 4 + sharpe_lo_ratio = 5 (no loss_years, no omega, no IC, no IC_stability)
     # So we need: loss_years_applicable=False, omega_applicable=False, position_ic_applicable=False
     # omega_applicable=False means no negative pnl (all positive or zero)
     # But then only 1 failure (return_floor), giving 4/5. Perfect.

@@ -16,11 +16,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from abel_edge.validation.gate_explain import explain_metric_gates
 from abel_edge.validation.metrics import (
     compute_all_metrics,
     detect_profile,
     load_profile,
-    validate,
 )
 
 
@@ -142,9 +142,10 @@ def validate_strategy(
             asset_returns=asset_returns,
         )
 
-    # Run validation gate
-    passed, failures = validate(metrics, prof)
-    score_failures = list(failures)
+    gate_explanation = explain_metric_gates(metrics, prof)
+    passed = bool(gate_explanation["passed"])
+    failures = list(gate_explanation["failures"])
+    score = str(gate_explanation["score"])
 
     # Extract triangle
     mt = prof.get("metric_triangle", {})
@@ -164,12 +165,9 @@ def validate_strategy(
         passed = False
     warnings.extend(runtime_warnings)
 
-    # Count applicable tests
-    total_tests = _count_total(metrics, prof)
-
     return {
         "verdict": "PASS" if passed else "FAIL",
-        "score": f"{total_tests - len(score_failures)}/{total_tests}",
+        "score": score,
         "failures": failures,
         "warnings": warnings,
         "metrics": metrics,
@@ -254,22 +252,3 @@ def print_validation_report(results: dict) -> None:
         print()
         print("  All strategies pass. Share your report card.")
         print("    Export → abel-edge validate --export report.txt")
-
-
-def _count_total(metrics: dict, profile: dict) -> int:
-    """Count total applicable validation checks."""
-    if profile.get("validation", {}).get("contract") == "grandma":
-        return 3
-
-    # Drawdown-time metrics remain diagnostic-only and no longer add gate slots.
-    count = 4  # DSR, Lo, MaxDD, PnL floor
-    if metrics.get("loss_years_applicable", False):
-        count += 1  # LossYrs
-    if metrics.get("omega_applicable", False):
-        count += 1  # Omega
-    count += 1  # Sharpe/Lo ratio
-    if metrics.get("position_ic_applicable", False):
-        count += 1  # PositionIC min
-    if metrics.get("position_ic_stability_applicable", False):
-        count += 1  # PositionIC stability
-    return count

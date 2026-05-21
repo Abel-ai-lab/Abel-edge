@@ -12,7 +12,8 @@ The audited live validation contract uses applicable-gate denominators
 rather than the older fixed 20/21-style narrative.
 """
 
+from abel_edge.validation.gate_explain import explain_metric_gates
 from abel_edge.validation.metrics import compute_all_metrics, validate
 from abel_edge.validation.gate import validate_strategy
 
-__all__ = ["compute_all_metrics", "validate", "validate_strategy"]
+__all__ = ["compute_all_metrics", "explain_metric_gates", "validate", "validate_strategy"]

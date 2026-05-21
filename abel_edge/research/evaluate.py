@@ -19,7 +19,9 @@ from abel_edge.engine.runtime_contract import DecisionContractError
 from abel_edge.engine.signal_contract import SignalContractError
 from abel_edge.research.handoff import build_strategy_handoff, write_strategy_handoff
 from abel_edge.runtime_paths import inject_runtime_paths, runtime_paths
+from abel_edge.validation.gate_explain import explain_metric_gates
 from abel_edge.validation.gate import validate_strategy
+from abel_edge.validation.metrics import load_profile
 
 NON_TICKERS = {"SPY", "QQQ", "IWM", "TLT", "GLD", "UTC", "D", "B"}
 TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}(USD)?$|^[A-Z0-9]{2,10}$|^[A-Z]{2,5}-[A-Z]{1,2}$")
@@ -774,84 +776,30 @@ def _format_failures(failures: list[str]) -> str:
 
 def _metric_failure_facts(result: dict) -> list[dict]:
     metrics = result.get("metrics") if isinstance(result.get("metrics"), dict) else {}
+    if not metrics:
+        return []
+    profile_name = str(result.get("profile") or "unknown")
+    try:
+        explanation = explain_metric_gates(metrics, load_profile(profile_name))
+    except Exception:
+        return []
     facts: list[dict] = []
-    for message in result.get("failures") or []:
-        text = str(message or "")
-        if match := re.search(r"T15 MaxDD ([0-9.]+)% > ([0-9.]+)%", text):
-            facts.append(
-                {
-                    "metric": "max_dd",
-                    "observed": float(match.group(1)) / 100.0,
-                    "threshold": float(match.group(2)) / 100.0,
-                    "comparison": "abs_gt",
-                    "profile": result.get("profile", "unknown"),
-                    "message": text,
-                }
-            )
-            continue
-        if match := re.search(r"T15 Lo (-?[0-9.]+) < (-?[0-9.]+)", text):
-            facts.append(
-                {
-                    "metric": "lo_adjusted",
-                    "observed": float(match.group(1)),
-                    "threshold": float(match.group(2)),
-                    "comparison": "lt",
-                    "profile": result.get("profile", "unknown"),
-                    "message": text,
-                }
-            )
-            continue
-        if match := re.search(r"T15 Omega (-?[0-9.]+) < (-?[0-9.]+)", text):
-            facts.append(
-                {
-                    "metric": "omega",
-                    "observed": float(match.group(1)),
-                    "threshold": float(match.group(2)),
-                    "comparison": "lt",
-                    "profile": result.get("profile", "unknown"),
-                    "message": text,
-                }
-            )
-            continue
-        if match := re.search(r"PositionIC (-?[0-9.]+) < (-?[0-9.]+)", text):
-            facts.append(
-                {
-                    "metric": "position_ic",
-                    "observed": float(match.group(1)),
-                    "threshold": float(match.group(2)),
-                    "comparison": "lt",
-                    "profile": result.get("profile", "unknown"),
-                    "message": text,
-                }
-            )
-            continue
-        if match := re.search(r"PositionIC stab ([0-9.]+)% < ([0-9.]+)%", text):
-            facts.append(
-                {
-                    "metric": "position_ic_stability",
-                    "observed": float(match.group(1)) / 100.0,
-                    "threshold": float(match.group(2)) / 100.0,
-                    "comparison": "lt",
-                    "profile": result.get("profile", "unknown"),
-                    "message": text,
-                }
-            )
-            continue
-        if text.startswith("Return floor") or text.startswith("Annualized return floor"):
-            metric = "annual_return" if text.startswith("Annualized") else "total_return"
-            threshold = None
-            if match := re.search(r"< \+([0-9.]+)%", text):
-                threshold = float(match.group(1)) / 100.0
-            facts.append(
-                {
-                    "metric": metric,
-                    "observed": metrics.get(metric, 0),
-                    "threshold": threshold,
-                    "comparison": "lt",
-                    "profile": result.get("profile", "unknown"),
-                    "message": text,
-                }
-            )
+    for check in explanation["failed_checks"]:
+        fact = {
+            "id": check["id"],
+            "metric": check["metric"],
+            "observed_metric": check.get("observed_metric", check["metric"]),
+            "observed": check.get("observed"),
+            "threshold": check.get("threshold"),
+            "comparison": check.get("comparison"),
+            "profile": explanation.get("profile", profile_name),
+            "message": check.get("message"),
+        }
+        if "compatibility_fallback" in check:
+            fact["compatibility_fallback"] = check["compatibility_fallback"]
+        if check.get("invalid"):
+            fact["invalid"] = True
+        facts.append(fact)
     return facts
 
 
