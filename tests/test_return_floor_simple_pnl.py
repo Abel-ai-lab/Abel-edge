@@ -8,6 +8,7 @@ import pytest
 
 from abel_edge.dashboard.components import compute_metrics as compute_dashboard_metrics
 from abel_edge.dashboard.components import drawdown_chart
+from abel_edge.validation import explain_metric_gates
 from abel_edge.validation.gate_logic import validate
 from abel_edge.validation.metrics import compute_all_metrics, load_profile
 
@@ -72,6 +73,59 @@ def test_daily_return_floor_uses_annualized_simple_return():
     )
     assert passed is False
     assert "Annualized return floor +4.90% < +5.00%" in failures
+
+
+def test_explain_metric_gates_marks_old_annual_return_fallback():
+    metrics = _passing_metrics(total_return=0.04)
+    metrics.pop("annual_return")
+
+    explanation = explain_metric_gates(metrics, load_profile("equity_daily"))
+    return_floor = next(
+        check for check in explanation["checks"] if check["id"] == "return_floor"
+    )
+
+    assert explanation["passed"] is False
+    assert explanation["score"] == "4/5"
+    assert return_floor["metric"] == "annual_return"
+    assert return_floor["observed_metric"] == "total_return"
+    assert return_floor["observed"] == pytest.approx(0.04)
+    assert return_floor["threshold"] == pytest.approx(0.05)
+    assert return_floor["compatibility_fallback"] == "annual_return_missing_total_return"
+    assert return_floor["passed"] is False
+    assert return_floor["message"] == "Annualized return floor +4.00% < +5.00%"
+    assert explanation["failures"] == ["Annualized return floor +4.00% < +5.00%"]
+
+
+def test_explain_metric_gates_allows_old_annual_return_fallback_to_pass():
+    metrics = _passing_metrics(total_return=0.08)
+    metrics.pop("annual_return")
+
+    explanation = explain_metric_gates(metrics, load_profile("equity_daily"))
+    return_floor = next(
+        check for check in explanation["checks"] if check["id"] == "return_floor"
+    )
+
+    assert explanation["passed"] is True
+    assert return_floor["passed"] is True
+    assert return_floor["observed_metric"] == "total_return"
+    assert return_floor["compatibility_fallback"] == "annual_return_missing_total_return"
+    assert return_floor["message"] == "Annualized return floor +8.00% >= +5.00%"
+
+
+def test_explain_metric_gates_uses_new_annual_return_without_fallback():
+    explanation = explain_metric_gates(
+        _passing_metrics(total_return=0.40, annual_return=0.049),
+        load_profile("equity_daily"),
+    )
+    return_floor = next(
+        check for check in explanation["checks"] if check["id"] == "return_floor"
+    )
+
+    assert explanation["passed"] is False
+    assert return_floor["observed_metric"] == "annual_return"
+    assert "compatibility_fallback" not in return_floor
+    assert return_floor["observed"] == pytest.approx(0.049)
+    assert return_floor["message"] == "Annualized return floor +4.90% < +5.00%"
 
 
 def test_hft_return_floor_stays_total_return_based():
