@@ -559,6 +559,7 @@ class StrategyEngine(ABC):
         limit: int | None = None,
         fields: list[str] | None = None,
     ) -> pd.DataFrame:
+        start, limit = self._apply_paper_data_window(start=start, limit=limit)
         return load_declared_feed(
             self,
             name,
@@ -568,6 +569,24 @@ class StrategyEngine(ABC):
             limit=limit,
             fields=fields,
         )
+
+    def _apply_paper_data_window(self, *, start=None, limit: int | None = None):
+        window = (self.context or {}).get("_paper_data_window")
+        if not isinstance(window, dict):
+            return start, limit
+        window_start = window.get("start")
+        window_limit = window.get("limit")
+        if window_start is not None:
+            if start is None:
+                start = window_start
+            else:
+                current = pd.to_datetime(start, utc=True)
+                boundary = pd.to_datetime(window_start, utc=True)
+                start = boundary if boundary > current else start
+        if window_limit is not None:
+            window_limit = int(window_limit)
+            limit = window_limit if limit is None else min(int(limit), window_limit)
+        return start, limit
 
     def load_bars(
         self,
