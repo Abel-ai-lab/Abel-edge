@@ -305,14 +305,22 @@ def paper_run_one(
 def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
     """Run all strategies (or one specific strategy) from config.
 
-    Args:
-        config: Loaded config dict from load_config()
-        strategy_id: If set, run only this strategy
+    Batch resilience policy (added 2026-05-27, parallels paper_run_all):
+      - Single-strategy mode (`strategy_id` set): fail-hard on first exception.
+      - All-mode (`strategy_id` is None): per-strategy try/except. A single
+        StaleDataError or other failure does NOT halt subsequent strategies.
+        Failures appended to `data/run_failures.jsonl` (id, error_type,
+        message, traceback, ts). After all attempted, raises
+        `click.ClickException` if any failed → cron exit non-zero → alert.
 
-    Returns:
-        List of result dicts from run_one()
+    Rationale: prior behavior had one stale-ticker exception in
+    abel_ensemble_stable (yaml line 15, ROCKUSD) silently killing strategies
+    16-30 in cli run. They never wrote fresh trade_log rows even though their
+    own engines were healthy. The cli paper path was already isolated 2026-05-19;
+    cli run lacked the same protection until today.
     """
     strategies = config["strategies"]
+    single_strategy_mode = strategy_id is not None
     if strategy_id:
         strategies = [s for s in strategies if s["id"] == strategy_id]
         if not strategies:
@@ -321,9 +329,25 @@ def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
                 f"Available: {[s['id'] for s in config['strategies']]}"
             )
 
-    results = []
+    results: list[dict] = []
+    failures: list[dict] = []
     for s_cfg in strategies:
-        result = run_one(s_cfg, settings=config.get("settings"))
+        sid = s_cfg.get("id", "<unknown>")
+        try:
+            result = run_one(s_cfg, settings=config.get("settings"))
+        except Exception as exc:
+            if single_strategy_mode:
+                raise
+            failures.append({
+                "strategy": sid,
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "traceback": traceback.format_exc(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
+            click.echo(f"    → FAILED {sid}: {type(exc).__name__}: {exc}")
+            continue
+
         results.append(result)
         if result.get("skipped"):
             click.echo(
@@ -333,7 +357,24 @@ def run_all(config: dict, strategy_id: str | None = None) -> list[dict]:
         else:
             click.echo(f"    → {result['n_days']} days written to {result['trade_log']}")
 
+    if failures:
+        _write_run_failures(failures)
+        raise click.ClickException(
+            f"{len(failures)} strategies failed during run batch; "
+            f"see data/run_failures.jsonl. IDs: "
+            f"{[f['strategy'] for f in failures]}"
+        )
+
     return results
+
+
+def _write_run_failures(failures: list[dict]) -> None:
+    """Append failure records to data/run_failures.jsonl (one JSON per line)."""
+    path = Path("data/run_failures.jsonl")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as f:
+        for rec in failures:
+            f.write(json.dumps(rec) + "\n")
 
 
 def paper_run_all(config: dict, strategy_id: str | None = None, as_of=None) -> list[dict]:
