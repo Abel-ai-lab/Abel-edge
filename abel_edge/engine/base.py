@@ -80,6 +80,42 @@ class StrategyEngine(ABC):
         limit: int | None = None,
     ) -> DecisionContext:
         """Construct the branch-visible decision context."""
+        return self._decision_context(
+            start=start,
+            end=end,
+            limit=limit,
+            apply_paper_window=True,
+        )
+
+    def paper_bootstrap_context(
+        self,
+        *,
+        start=None,
+        end=None,
+        limit: int | None = None,
+    ) -> DecisionContext:
+        """Construct a context for hosted paper startup-state bootstrap reads.
+
+        Daily paper execution may apply ``paperExecutionProfile.history`` to
+        bound market-data reads. Startup-state bootstrap can need a different
+        range to reconstruct a correct cutover state, so this helper keeps the
+        same runtime feeds and paths while bypassing the daily paper window.
+        """
+        return self._decision_context(
+            start=start,
+            end=end,
+            limit=limit,
+            apply_paper_window=False,
+        )
+
+    def _decision_context(
+        self,
+        *,
+        start=None,
+        end=None,
+        limit: int | None = None,
+        apply_paper_window: bool,
+    ) -> DecisionContext:
         return DecisionContext(
             self,
             runtime_profile=self.runtime_profile(),
@@ -87,6 +123,7 @@ class StrategyEngine(ABC):
             start=self.research_requested_start() if start is None else start,
             end=end,
             limit=limit,
+            apply_paper_window=apply_paper_window,
         )
 
     def uses_decision_contract(self) -> bool:
@@ -536,6 +573,7 @@ class StrategyEngine(ABC):
         timeframe: str | None = None,
         limit: int | None = None,
         fields: list[str] | None = None,
+        apply_paper_window: bool = True,
     ) -> pd.DataFrame:
         bars = self._runtime_load_feed(
             "primary",
@@ -544,6 +582,7 @@ class StrategyEngine(ABC):
             timeframe=timeframe,
             limit=limit,
             fields=fields,
+            apply_paper_window=apply_paper_window,
         )
         if symbols is None:
             return bars
@@ -558,13 +597,17 @@ class StrategyEngine(ABC):
         timeframe: str | None = None,
         limit: int | None = None,
         fields: list[str] | None = None,
+        apply_paper_window: bool = True,
     ) -> pd.DataFrame:
-        start, limit = self._apply_paper_data_window(start=start, limit=limit)
-        request_end = self._paper_data_request_end(end=end)
-        request_limit = self._paper_data_request_limit(
-            limit=limit,
-            request_end=request_end,
-        )
+        request_end = None
+        request_limit = None
+        if apply_paper_window:
+            start, limit = self._apply_paper_data_window(start=start, limit=limit)
+            request_end = self._paper_data_request_end(end=end)
+            request_limit = self._paper_data_request_limit(
+                limit=limit,
+                request_end=request_end,
+            )
         return load_declared_feed(
             self,
             name,

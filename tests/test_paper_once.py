@@ -57,6 +57,51 @@ class DirectSignalEngine(StrategyEngine):
 """.strip()
 
 
+BOOTSTRAP_CONTEXT_ENGINE_CODE = """
+from __future__ import annotations
+
+import pandas as pd
+
+from abel_edge.engine.base import StrategyEngine
+
+
+class BootstrapContextEngine(StrategyEngine):
+    calls = []
+
+    def compute_decisions(self, ctx):
+        raise AssertionError("paper_run_one direct mode must not compile full output")
+
+    def build_paper_initial_state(self, *, cutover_as_of=None):
+        ctx = self.paper_bootstrap_context(start="2026-01-01T00:00:00Z", end=cutover_as_of)
+        close = ctx.target.series("close")
+        type(self).calls.append(
+            (
+                "bootstrap",
+                str(close.index[0].date()),
+                str(close.index[-1].date()),
+                len(close),
+            )
+        )
+        return {"rows": len(close)}
+
+    def get_paper_signal(self, *, as_of=None):
+        ctx = self.decision_context(end=as_of)
+        close = ctx.target.series("close")
+        type(self).calls.append(
+            (
+                "daily",
+                str(close.index[0].date()),
+                str(close.index[-1].date()),
+                len(close),
+            )
+        )
+        return {
+            "next_position": 1.0 if float(close.iloc[-1]) >= 120.0 else 0.0,
+            "data_latest_timestamp": str(close.index[-1]),
+        }
+""".strip()
+
+
 def _clear_strategy_modules() -> None:
     for name in list(sys.modules):
         if name == "strategies" or name.startswith("strategies."):
@@ -363,5 +408,52 @@ def test_paper_history_fixed_lookback_limits_direct_signal_reads(tmp_path):
             assert result["execution_mode"] == "direct_paper_signal"
             assert result["paper_history_boundary"]["boundary"] == "fixed_lookback"
             assert result["n_rows"] == 2
+        finally:
+            sys.path.pop(0)
+
+
+def test_paper_bootstrap_context_bypasses_daily_history_window(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        _write_project(
+            root,
+            package_name="bootstrap_context",
+            engine_code=BOOTSTRAP_CONTEXT_ENGINE_CODE,
+            profile_yaml="""
+      history:
+        boundary: fixed_lookback
+        lookbackBars: 1
+        feeds:
+          - ETHUSD
+""".rstrip(),
+        )
+        sys.path.insert(0, str(root))
+
+        try:
+            _write_bootstrap_log(
+                "data/trade_log_bootstrap_context.csv",
+                dates=["2026-01-23T00:00:00Z"],
+                closes=[122.0],
+                positions=[1.0],
+                next_positions=[1.0],
+            )
+            cfg = load_config()
+            strategy = cfg["strategies"][0]
+            strategy["_paper_data_window"] = {
+                "boundary": "fixed_lookback",
+                "limit": SYSTEM_LOOKBACK_PADDING_BARS + 1,
+                "source": "paper_execution_profile",
+            }
+            engine_module = importlib.import_module("strategies.bootstrap_context.engine")
+            engine = engine_module.BootstrapContextEngine(context=strategy)
+
+            engine.build_paper_initial_state(cutover_as_of="2026-01-25T00:00:00Z")
+            engine.get_paper_signal(as_of="2026-01-25T00:00:00Z")
+
+            assert engine_module.BootstrapContextEngine.calls == [
+                ("bootstrap", "2026-01-01", "2026-01-25", 25),
+                ("daily", "2026-01-05", "2026-01-25", SYSTEM_LOOKBACK_PADDING_BARS + 1),
+            ]
         finally:
             sys.path.pop(0)
