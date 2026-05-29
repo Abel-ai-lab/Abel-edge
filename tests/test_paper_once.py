@@ -2,194 +2,29 @@ from pathlib import Path
 import importlib
 import sys
 
-import pandas as pd
 from click.testing import CliRunner
 
 from abel_edge.config import load_config
-from abel_edge.engine.ledger import read_trade_log, write_trade_log
+from abel_edge.engine.ledger import read_trade_log
 from abel_edge.engine.trader import SYSTEM_LOOKBACK_PADDING_BARS, paper_run_one
-
-
-DECISION_ENGINE_CODE = """
-from __future__ import annotations
-
-import pandas as pd
-
-from abel_edge.engine.base import StrategyEngine
-
-
-class CountingDecisionEngine(StrategyEngine):
-    calls = []
-
-    def compute_decisions(self, ctx):
-        close = ctx.target.series("close")
-        type(self).calls.append((str(close.index[0].date()), str(close.index[-1].date()), len(close)))
-        next_position = pd.Series(
-            [idx * 0.25 for idx in range(len(close))],
-            index=close.index,
-        )
-        return ctx.decisions(next_position)
-""".strip()
-
-
-DIRECT_SIGNAL_ENGINE_CODE = """
-from __future__ import annotations
-
-import pandas as pd
-
-from abel_edge.engine.base import StrategyEngine
-
-
-class DirectSignalEngine(StrategyEngine):
-    calls = []
-
-    def compute_decisions(self, ctx):
-        raise AssertionError("paper_run_one direct mode must not compile full output")
-
-    def get_paper_signal(self, *, as_of=None):
-        bars = self.load_bars(end=as_of).sort_values("timestamp")
-        last = bars.iloc[-1]
-        type(self).calls.append((str(pd.to_datetime(last["timestamp"], utc=True).date()), len(bars)))
-        return {
-            "next_position": 1.0 if float(last["close"]) >= 120.0 else 0.0,
-            "data_latest_timestamp": str(pd.to_datetime(last["timestamp"], utc=True)),
-        }
-""".strip()
-
-
-BOOTSTRAP_CONTEXT_ENGINE_CODE = """
-from __future__ import annotations
-
-import pandas as pd
-
-from abel_edge.engine.base import StrategyEngine
-
-
-class BootstrapContextEngine(StrategyEngine):
-    calls = []
-
-    def compute_decisions(self, ctx):
-        raise AssertionError("paper_run_one direct mode must not compile full output")
-
-    def build_paper_initial_state(self, *, cutover_as_of=None):
-        ctx = self.paper_bootstrap_context(start="2026-01-01T00:00:00Z", end=cutover_as_of)
-        close = ctx.target.series("close")
-        type(self).calls.append(
-            (
-                "bootstrap",
-                str(close.index[0].date()),
-                str(close.index[-1].date()),
-                len(close),
-            )
-        )
-        return {"rows": len(close)}
-
-    def get_paper_signal(self, *, as_of=None):
-        ctx = self.decision_context(end=as_of)
-        close = ctx.target.series("close")
-        type(self).calls.append(
-            (
-                "daily",
-                str(close.index[0].date()),
-                str(close.index[-1].date()),
-                len(close),
-            )
-        )
-        return {
-            "next_position": 1.0 if float(close.iloc[-1]) >= 120.0 else 0.0,
-            "data_latest_timestamp": str(close.index[-1]),
-        }
-""".strip()
-
-
-def _clear_strategy_modules() -> None:
-    for name in list(sys.modules):
-        if name == "strategies" or name.startswith("strategies."):
-            sys.modules.pop(name, None)
-    importlib.invalidate_caches()
-
-
-def _daily_price_csv(*, days: int = 25) -> str:
-    rows = ["timestamp,close"]
-    start = pd.Timestamp("2026-01-01T00:00:00Z")
-    for idx in range(days):
-        ts = start + pd.Timedelta(days=idx)
-        rows.append(f"{ts.isoformat()},{100 + idx}")
-    return "\n".join(rows) + "\n"
-
-
-def _write_project(
-    root: Path,
-    *,
-    package_name: str,
-    engine_code: str,
-    profile_yaml: str | None = None,
-    days: int = 25,
-) -> None:
-    _clear_strategy_modules()
-    strategy_dir = root / "strategies" / package_name
-    strategy_dir.mkdir(parents=True)
-    (root / "strategies" / "__init__.py").write_text("", encoding="utf-8")
-    (strategy_dir / "__init__.py").write_text("", encoding="utf-8")
-    (strategy_dir / "engine.py").write_text(engine_code, encoding="utf-8")
-    (root / "data").mkdir()
-    (root / "data" / "ethusd.csv").write_text(_daily_price_csv(days=days), encoding="utf-8")
-    profile_block = f"\n    paper_execution_profile:\n{profile_yaml}" if profile_yaml else ""
-    (root / "strategies.yaml").write_text(
-        f"""
-settings:
-  price_data:
-    default_source: csv
-    default_timeframe: 1d
-strategies:
-  - id: {package_name}
-    name: "{package_name}"
-    asset: ETHUSD
-    color: "#2563EB"
-    engine: strategies.{package_name}.engine
-    trade_log: data/trade_log_{package_name}.csv
-    paper_log: data/paper_log_{package_name}.csv
-    price_data:
-      source: csv
-      path: data/ethusd.csv{profile_block}
-""".strip()
-        + "\n",
-        encoding="utf-8",
-    )
-
-
-def _write_bootstrap_log(
-    path: str,
-    *,
-    dates: list[str],
-    closes: list[float],
-    positions: list[float],
-    next_positions: list[float] | None = None,
-) -> None:
-    parsed = pd.to_datetime(dates, utc=True)
-    returns = [0.0]
-    returns.extend(closes[idx] / closes[idx - 1] - 1.0 for idx in range(1, len(closes)))
-    pnl = [position * value for position, value in zip(positions, returns)]
-    write_trade_log(
-        parsed,
-        returns,
-        pnl,
-        positions,
-        path,
-        close_prices=closes,
-        next_positions=next_positions,
-    )
+from tests.paper_once_fixtures import (
+    BOOTSTRAP_CONTEXT_ENGINE_CODE,
+    DECISION_ENGINE_CODE,
+    DIRECT_SIGNAL_ENGINE_CODE,
+    write_bootstrap_log,
+    write_project,
+)
 
 
 def test_paper_run_one_default_signal_computes_once_and_rolls_position(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
-        _write_project(root, package_name="decision_once", engine_code=DECISION_ENGINE_CODE, days=4)
+        write_project(root, package_name="decision_once", engine_code=DECISION_ENGINE_CODE, days=4)
         sys.path.insert(0, str(root))
 
         try:
-            _write_bootstrap_log(
+            write_bootstrap_log(
                 "data/trade_log_decision_once.csv",
                 dates=["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"],
                 closes=[100.0, 110.0],
@@ -224,11 +59,11 @@ def test_paper_run_one_direct_signal_does_not_compile_full_output(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
-        _write_project(root, package_name="direct_signal", engine_code=DIRECT_SIGNAL_ENGINE_CODE, days=4)
+        write_project(root, package_name="direct_signal", engine_code=DIRECT_SIGNAL_ENGINE_CODE, days=4)
         sys.path.insert(0, str(root))
 
         try:
-            _write_bootstrap_log(
+            write_bootstrap_log(
                 "data/trade_log_direct_signal.csv",
                 dates=["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"],
                 closes=[100.0, 101.0],
@@ -263,7 +98,7 @@ def test_paper_history_fixed_lookback_limits_compiled_recompute(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
-        _write_project(
+        write_project(
             root,
             package_name="decision_profile",
             engine_code=DECISION_ENGINE_CODE,
@@ -278,7 +113,7 @@ def test_paper_history_fixed_lookback_limits_compiled_recompute(tmp_path):
         sys.path.insert(0, str(root))
 
         try:
-            _write_bootstrap_log(
+            write_bootstrap_log(
                 "data/trade_log_decision_profile.csv",
                 dates=["2026-01-23T00:00:00Z"],
                 closes=[122.0],
@@ -320,7 +155,7 @@ def test_paper_history_origin_anchored_limits_compiled_recompute(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
-        _write_project(
+        write_project(
             root,
             package_name="decision_origin",
             engine_code=DECISION_ENGINE_CODE,
@@ -335,7 +170,7 @@ def test_paper_history_origin_anchored_limits_compiled_recompute(tmp_path):
         sys.path.insert(0, str(root))
 
         try:
-            _write_bootstrap_log(
+            write_bootstrap_log(
                 "data/trade_log_decision_origin.csv",
                 dates=["2026-01-23T00:00:00Z"],
                 closes=[122.0],
@@ -370,7 +205,7 @@ def test_paper_history_fixed_lookback_limits_direct_signal_reads(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
-        _write_project(
+        write_project(
             root,
             package_name="direct_profile",
             engine_code=DIRECT_SIGNAL_ENGINE_CODE,
@@ -385,7 +220,7 @@ def test_paper_history_fixed_lookback_limits_direct_signal_reads(tmp_path):
         sys.path.insert(0, str(root))
 
         try:
-            _write_bootstrap_log(
+            write_bootstrap_log(
                 "data/trade_log_direct_profile.csv",
                 dates=["2026-01-23T00:00:00Z"],
                 closes=[122.0],
@@ -416,7 +251,7 @@ def test_paper_bootstrap_context_bypasses_daily_history_window(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
         root = Path.cwd()
-        _write_project(
+        write_project(
             root,
             package_name="bootstrap_context",
             engine_code=BOOTSTRAP_CONTEXT_ENGINE_CODE,
@@ -431,7 +266,7 @@ def test_paper_bootstrap_context_bypasses_daily_history_window(tmp_path):
         sys.path.insert(0, str(root))
 
         try:
-            _write_bootstrap_log(
+            write_bootstrap_log(
                 "data/trade_log_bootstrap_context.csv",
                 dates=["2026-01-23T00:00:00Z"],
                 closes=[122.0],
