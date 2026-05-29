@@ -101,6 +101,7 @@ def cache_covers_request(
     *,
     start: object | None,
     end: object | None,
+    limit: int | None = None,
     required_columns: Iterable[str] | None = None,
     max_cache_age_seconds: int | float | None = None,
 ) -> bool:
@@ -132,6 +133,19 @@ def cache_covers_request(
                 return False
     if requested_end is not None and (available_end is None or available_end < requested_end):
         return False
+    if limit is not None:
+        try:
+            requested_limit = int(limit)
+            row_count = int(metadata.get("row_count") or 0)
+            cached_requested_limit = int((cached_request or {}).get("limit") or 0)
+        except (TypeError, ValueError):
+            return False
+        if (
+            requested_limit > 0
+            and row_count < requested_limit
+            and cached_requested_limit < requested_limit
+        ):
+            return False
     return True
 
 
@@ -141,6 +155,7 @@ def write_cached_bars(
     *,
     requested_start: object | None = None,
     requested_end: object | None = None,
+    requested_limit: int | None = None,
 ) -> dict[str, Any]:
     normalized = _normalize_cached_bars(bars)
     entry.data_path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,6 +165,7 @@ def write_cached_bars(
         normalized,
         requested_start=requested_start,
         requested_end=requested_end,
+        requested_limit=requested_limit,
     )
     entry.meta_path.write_text(
         json.dumps(metadata, indent=2, sort_keys=True),
@@ -164,6 +180,7 @@ def build_cache_metadata(
     *,
     requested_start: object | None = None,
     requested_end: object | None = None,
+    requested_limit: int | None = None,
 ) -> dict[str, Any]:
     normalized = _normalize_cached_bars(bars)
     start = None
@@ -186,6 +203,7 @@ def build_cache_metadata(
         "requested_range": {
             "start": _format_request_bound(requested_start),
             "end": _format_request_bound(requested_end),
+            "limit": int(requested_limit) if requested_limit is not None else None,
         },
         "row_count": int(len(normalized)),
         "columns": list(normalized.columns),

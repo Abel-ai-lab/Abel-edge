@@ -10,7 +10,7 @@ PROMOTION_GATE_SCHEMA = "abel-invest.promotion-gate/v1"
 PROMOTION_GATE_STATUS_PASSED = "passed"
 PROMOTION_GATE_STATUS_FAILED = "failed"
 PROMOTION_GATE_STATUS_UNSUPPORTED = "unsupported"
-PROMOTION_MODES = {"zero_change", "auto_adapter", "agent_refactor"}
+PROMOTION_MODES = {"zero_change", "auto_adapter", "agent_paper_contract"}
 PROMOTION_GATE_NAMES = (
     "artifact_contract",
     "runtime_contract",
@@ -28,7 +28,7 @@ def build_promotion_gate_report(
     promoted_source_sha256: str,
     patch_sha256: str | None = None,
     adapter: dict[str, Any] | None = None,
-    refactor: dict[str, Any] | None = None,
+    contract: dict[str, Any] | None = None,
     state_entries: Iterable[Any] = (),
     behavior_equivalence: dict[str, Any] | None = None,
     paper_dry_run: dict[str, Any] | None = None,
@@ -69,8 +69,8 @@ def build_promotion_gate_report(
     }
     if adapter:
         report["promotion"]["adapter"] = dict(adapter)
-    if refactor:
-        report["promotion"]["refactor"] = dict(refactor)
+    if contract:
+        report["promotion"]["contract"] = dict(contract)
     return report
 
 

@@ -30,9 +30,10 @@ def test_write_cached_bars_records_requested_range(tmp_path):
         bars,
         requested_start="2020-01-01",
         requested_end=None,
+        requested_limit=200,
     )
 
-    assert metadata["requested_range"] == {"start": "2020-01-01", "end": None}
+    assert metadata["requested_range"] == {"start": "2020-01-01", "end": None, "limit": 200}
 
 
 def test_cache_covers_partial_history_when_request_boundary_was_probed():
@@ -91,6 +92,28 @@ def test_cache_accepts_required_columns_when_present():
         end=None,
         required_columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"],
     )
+
+
+def test_cache_rejects_existing_entry_with_too_few_rows_for_limit():
+    metadata = {
+        "available_range": {"start": "2020-01-10", "end": "2020-02-01"},
+        "requested_range": {"start": None, "end": "2020-02-01"},
+        "row_count": 20,
+    }
+
+    assert cache_covers_request(metadata, start=None, end="2020-02-01", limit=20)
+    assert not cache_covers_request(metadata, start=None, end="2020-02-01", limit=21)
+
+
+def test_cache_accepts_short_history_when_cached_request_used_same_limit():
+    metadata = {
+        "available_range": {"start": "2020-01-10", "end": "2020-02-01"},
+        "requested_range": {"start": None, "end": "2020-02-01", "limit": 30},
+        "row_count": 20,
+    }
+
+    assert cache_covers_request(metadata, start=None, end="2020-02-01", limit=30)
+    assert not cache_covers_request(metadata, start=None, end="2020-02-01", limit=31)
 
 
 def test_cache_max_age_uses_metadata_updated_at():

@@ -44,6 +44,7 @@ class DecisionContext:
         start=None,
         end=None,
         limit: int | None = None,
+        apply_paper_window: bool = True,
     ) -> None:
         self.engine = engine
         self.runtime_profile = runtime_profile
@@ -51,6 +52,7 @@ class DecisionContext:
         self.start = start
         self.end = end
         self.limit = limit
+        self.apply_paper_window = apply_paper_window
         self.target = _DecisionTargetView(self)
         self._target_frame_cache: dict[tuple[str, ...], pd.DataFrame] = {}
         self._feed_frame_cache: dict[tuple[str, tuple[str, ...]], pd.DataFrame] = {}
@@ -195,6 +197,7 @@ class DecisionContext:
                 end=self.end,
                 limit=self.limit,
                 fields=list(requested_fields),
+                apply_paper_window=self.apply_paper_window,
             )
             target = self.runtime_profile.target
             if target and "symbol" in frame.columns:
@@ -218,6 +221,7 @@ class DecisionContext:
                 end=self.end,
                 limit=self.limit,
                 fields=list(requested_fields),
+                apply_paper_window=self.apply_paper_window,
             )
             if frame.empty:
                 raise DecisionContractError(f"Feed '{name}' returned no rows for the active context.")

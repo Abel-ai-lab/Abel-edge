@@ -80,6 +80,42 @@ class StrategyEngine(ABC):
         limit: int | None = None,
     ) -> DecisionContext:
         """Construct the branch-visible decision context."""
+        return self._decision_context(
+            start=start,
+            end=end,
+            limit=limit,
+            apply_paper_window=True,
+        )
+
+    def paper_bootstrap_context(
+        self,
+        *,
+        start=None,
+        end=None,
+        limit: int | None = None,
+    ) -> DecisionContext:
+        """Construct a context for hosted paper startup-state bootstrap reads.
+
+        Daily paper execution may apply ``paperExecutionProfile.history`` to
+        bound market-data reads. Startup-state bootstrap can need a different
+        range to reconstruct a correct cutover state, so this helper keeps the
+        same runtime feeds and paths while bypassing the daily paper window.
+        """
+        return self._decision_context(
+            start=start,
+            end=end,
+            limit=limit,
+            apply_paper_window=False,
+        )
+
+    def _decision_context(
+        self,
+        *,
+        start=None,
+        end=None,
+        limit: int | None = None,
+        apply_paper_window: bool,
+    ) -> DecisionContext:
         return DecisionContext(
             self,
             runtime_profile=self.runtime_profile(),
@@ -87,6 +123,7 @@ class StrategyEngine(ABC):
             start=self.research_requested_start() if start is None else start,
             end=end,
             limit=limit,
+            apply_paper_window=apply_paper_window,
         )
 
     def uses_decision_contract(self) -> bool:
@@ -536,6 +573,7 @@ class StrategyEngine(ABC):
         timeframe: str | None = None,
         limit: int | None = None,
         fields: list[str] | None = None,
+        apply_paper_window: bool = True,
     ) -> pd.DataFrame:
         bars = self._runtime_load_feed(
             "primary",
@@ -544,6 +582,7 @@ class StrategyEngine(ABC):
             timeframe=timeframe,
             limit=limit,
             fields=fields,
+            apply_paper_window=apply_paper_window,
         )
         if symbols is None:
             return bars
@@ -558,16 +597,77 @@ class StrategyEngine(ABC):
         timeframe: str | None = None,
         limit: int | None = None,
         fields: list[str] | None = None,
+        apply_paper_window: bool = True,
     ) -> pd.DataFrame:
+        request_end = None
+        request_limit = None
+        if apply_paper_window:
+            start, limit = self._apply_paper_data_window(start=start, limit=limit)
+            request_end = self._paper_data_request_end(end=end)
+            request_limit = self._paper_data_request_limit(
+                limit=limit,
+                request_end=request_end,
+            )
         return load_declared_feed(
             self,
             name,
             start=start,
             end=end,
+            request_end=request_end,
+            request_limit=request_limit,
             timeframe=timeframe,
             limit=limit,
             fields=fields,
         )
+
+    def _apply_paper_data_window(self, *, start=None, limit: int | None = None):
+        window = (self.context or {}).get("_paper_data_window")
+        if not isinstance(window, dict):
+            return start, limit
+        window_start = window.get("start")
+        window_limit = window.get("limit")
+        if window_start is not None:
+            if start is None:
+                start = window_start
+            else:
+                current = pd.to_datetime(start, utc=True)
+                boundary = pd.to_datetime(window_start, utc=True)
+                start = boundary if boundary > current else start
+        if window_limit is not None:
+            window_limit = int(window_limit)
+            limit = window_limit if limit is None else min(int(limit), window_limit)
+        return start, limit
+
+    def _paper_data_request_end(self, *, end=None):
+        """Return an adapter/cache horizon while preserving the caller-visible end."""
+        if end is None:
+            return None
+        window = (self.context or {}).get("_paper_data_window")
+        if not isinstance(window, dict):
+            return None
+        cache_end = window.get("cache_end")
+        if cache_end is None:
+            return None
+        try:
+            visible_end = pd.to_datetime(end, utc=True)
+            horizon = pd.to_datetime(cache_end, utc=True)
+        except (TypeError, ValueError):
+            return cache_end
+        return cache_end if horizon > visible_end else None
+
+    def _paper_data_request_limit(self, *, limit: int | None, request_end=None) -> int | None:
+        if limit is None or request_end is None:
+            return None
+        window = (self.context or {}).get("_paper_data_window")
+        if not isinstance(window, dict):
+            return None
+        try:
+            extra_bars = int(window.get("cache_extra_bars") or 0)
+        except (TypeError, ValueError):
+            extra_bars = 0
+        if extra_bars <= 0:
+            return None
+        return int(limit) + extra_bars
 
     def load_bars(
         self,

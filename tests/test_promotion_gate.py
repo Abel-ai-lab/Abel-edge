@@ -77,29 +77,29 @@ def test_build_promotion_gate_report_rejects_missing_gate() -> None:
         )
 
 
-def test_build_promotion_gate_report_for_agent_refactor() -> None:
+def test_build_promotion_gate_report_for_agent_paper_contract() -> None:
     report = build_promotion_gate_report(
-        promotion_mode="agent_refactor",
+        promotion_mode="agent_paper_contract",
         original_source_sha256="a" * 64,
         promoted_source_sha256="b" * 64,
         patch_sha256="c" * 64,
-        refactor={
-            "kind": "agent_assisted",
-            "summary": "Refactored dynamic state path construction to ctx.state_dir.",
+        contract={
+            "kind": "hosted_paper_contract",
+            "summary": "Declared stateful hosted paper contract.",
             "patchPath": "edge/promotion.patch",
-            "reportPath": "edge/refactor-report.json",
+            "reportPath": "edge/paper-contract-report.json",
         },
         behavior_equivalence={
             "status": "passed",
-            "method": "agent_refactor_state_path_scope",
+            "method": "agent_declared_hosted_paper_contract",
         },
         created_at="2026-05-08T00:00:00Z",
     )
 
     assert report["status"] == "passed"
-    assert report["promotion"]["mode"] == "agent_refactor"
-    assert report["promotion"]["refactor"]["kind"] == "agent_assisted"
+    assert report["promotion"]["mode"] == "agent_paper_contract"
+    assert report["promotion"]["contract"]["kind"] == "hosted_paper_contract"
     behavior_gate = next(
         item for item in report["gates"] if item["name"] == "behavior_equivalence"
     )
-    assert behavior_gate["method"] == "agent_refactor_state_path_scope"
+    assert behavior_gate["method"] == "agent_declared_hosted_paper_contract"
