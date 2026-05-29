@@ -560,11 +560,18 @@ class StrategyEngine(ABC):
         fields: list[str] | None = None,
     ) -> pd.DataFrame:
         start, limit = self._apply_paper_data_window(start=start, limit=limit)
+        request_end = self._paper_data_request_end(end=end)
+        request_limit = self._paper_data_request_limit(
+            limit=limit,
+            request_end=request_end,
+        )
         return load_declared_feed(
             self,
             name,
             start=start,
             end=end,
+            request_end=request_end,
+            request_limit=request_limit,
             timeframe=timeframe,
             limit=limit,
             fields=fields,
@@ -587,6 +594,37 @@ class StrategyEngine(ABC):
             window_limit = int(window_limit)
             limit = window_limit if limit is None else min(int(limit), window_limit)
         return start, limit
+
+    def _paper_data_request_end(self, *, end=None):
+        """Return an adapter/cache horizon while preserving the caller-visible end."""
+        if end is None:
+            return None
+        window = (self.context or {}).get("_paper_data_window")
+        if not isinstance(window, dict):
+            return None
+        cache_end = window.get("cache_end")
+        if cache_end is None:
+            return None
+        try:
+            visible_end = pd.to_datetime(end, utc=True)
+            horizon = pd.to_datetime(cache_end, utc=True)
+        except (TypeError, ValueError):
+            return cache_end
+        return cache_end if horizon > visible_end else None
+
+    def _paper_data_request_limit(self, *, limit: int | None, request_end=None) -> int | None:
+        if limit is None or request_end is None:
+            return None
+        window = (self.context or {}).get("_paper_data_window")
+        if not isinstance(window, dict):
+            return None
+        try:
+            extra_bars = int(window.get("cache_extra_bars") or 0)
+        except (TypeError, ValueError):
+            extra_bars = 0
+        if extra_bars <= 0:
+            return None
+        return int(limit) + extra_bars
 
     def load_bars(
         self,

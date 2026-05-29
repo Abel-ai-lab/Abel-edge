@@ -152,6 +152,7 @@ class AbelDataFeedAdapter:
             cached_metadata,
             start=request.start,
             end=request.end,
+            limit=request.limit,
             required_columns=ABEL_BAR_CACHE_COLUMNS if request.kind == "bars" else None,
             max_cache_age_seconds=_max_cache_age_seconds(request.options),
         ):
@@ -165,7 +166,7 @@ class AbelDataFeedAdapter:
 
         if bars.empty:
             effective_limit = request.limit
-            if effective_limit is None or effective_limit < 5000:
+            if effective_limit is None:
                 effective_limit = 5000
             try:
                 bars = fetch_bars(
@@ -182,6 +183,7 @@ class AbelDataFeedAdapter:
                     bars,
                     requested_start=request.start,
                     requested_end=request.end,
+                    requested_limit=request.limit,
                 )
             except missing_api_key_error as exc:
                 raise AdapterRegistryError(str(exc)) from exc

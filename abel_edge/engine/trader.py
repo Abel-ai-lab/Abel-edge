@@ -175,6 +175,31 @@ def _strategy_cfg_with_paper_window(strategy_cfg: dict, paper_window: dict) -> d
     return updated
 
 
+def _paper_window_with_cache_horizon(paper_window: dict, *, as_of) -> dict:
+    updated = dict(paper_window)
+    if as_of is not None:
+        updated["cache_end"] = as_of
+    return updated
+
+
+def _update_paper_window_after_target_probe(strategy_cfg: dict, dates, paper_window: dict) -> None:
+    date_index = pd.DatetimeIndex(pd.to_datetime(dates, utc=True))
+    if len(date_index) == 0:
+        return
+    if paper_window.get("cache_end") is None:
+        paper_window["cache_end"] = date_index[-1]
+    if paper_window.get("boundary") != "fixed_lookback":
+        return
+    try:
+        _, last_row = resolve_paper_state(strategy_cfg)
+    except (FileNotFoundError, ValueError):
+        return
+    last_logged_date = pd.to_datetime(last_row["date"], utc=True)
+    catchup_rows = int((date_index > last_logged_date).sum())
+    if catchup_rows > 0:
+        paper_window["cache_extra_bars"] = catchup_rows
+
+
 def _paper_window_audit(paper_window: dict) -> dict:
     audit = {
         "boundary": paper_window.get("boundary"),
@@ -225,7 +250,10 @@ def paper_run_one(
 
     click.echo(f"  Paper trading {sid}...")
     engine_cls = _load_engine(engine_path)
-    paper_window = _resolve_paper_data_window(strategy_cfg)
+    paper_window = _paper_window_with_cache_horizon(
+        _resolve_paper_data_window(strategy_cfg),
+        as_of=as_of,
+    )
     runtime_cfg = _strategy_cfg_with_paper_window(strategy_cfg, paper_window)
     engine = engine_cls(context=runtime_cfg)
 
@@ -237,6 +265,11 @@ def paper_run_one(
             return _ensure_paper_signal(engine, as_of=ts)
 
         dates, prices = _target_dates_and_prices(engine, as_of=as_of)
+        _update_paper_window_after_target_probe(
+            strategy_cfg,
+            dates,
+            runtime_cfg["_paper_data_window"],
+        )
         positions = np.zeros(len(dates), dtype=float)
         next_positions = np.zeros(len(dates), dtype=float)
     else:

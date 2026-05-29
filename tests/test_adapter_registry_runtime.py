@@ -269,8 +269,10 @@ def test_abel_bars_adapter_refreshes_close_only_cache_with_full_ohlcv(tmp_path, 
     metadata = load_cached_metadata(entry)
 
     assert calls[0]["fields"] == ["open", "high", "low", "close", "volume"]
+    assert calls[0]["limit"] == 10
     assert list(frame.columns) == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
     assert metadata["columns"] == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+    assert metadata["requested_range"]["limit"] == 10
 
 
 def test_abel_bars_adapter_refreshes_stale_cache_confirmation(tmp_path, monkeypatch):
