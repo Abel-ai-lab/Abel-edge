@@ -54,7 +54,7 @@ def test_paper_state_store_pickle_supports_model_like_objects(tmp_path):
     assert store.load()["schema"] == "model/v1"
 
 
-def test_paper_state_store_signal_returns_standard_extras(tmp_path):
+def test_paper_state_store_signal_preserves_ledger_schema(tmp_path):
     store = PaperStateStore.from_context(_context(tmp_path), "strategy/state.pkl")
     payload = store.mark_current({"schema": "demo/v1"}, "2026-05-18T00:00:00Z")
 
@@ -67,11 +67,6 @@ def test_paper_state_store_signal_returns_standard_extras(tmp_path):
 
     assert signal == {
         "next_position": 0.35,
-        "state_file": str(store.path),
-        "state_path": "strategy/state.pkl",
-        "state_as_of": "2026-05-18",
-        "state_schema": "demo/v1",
-        "date": "2026-05-18",
         "confidence": 0.7,
     }
 

@@ -17,8 +17,8 @@ from abel_edge.runtime_paths import RuntimePaths, context_runtime_paths
 class PaperStateStore:
     """Persist strategy-owned state under the runtime state directory.
 
-    The store intentionally owns only path, serialization, and small paper
-    signal metadata concerns. Strategy code still owns model fitting, feature
+    The store intentionally owns only path, serialization, daily keys, and
+    bootstrap summaries. Strategy code still owns model fitting, feature
     construction, retrain calendars, and continuation semantics.
     """
 
@@ -138,12 +138,10 @@ class PaperStateStore:
         as_of: Any = None,
         **extras: Any,
     ) -> dict[str, Any]:
+        """Build a paper signal without adding helper-owned ledger fields."""
         signal = {
             "next_position": float(next_position),
-            **self.summary(payload, as_of=as_of),
         }
-        if signal.get("state_as_of"):
-            signal["date"] = signal["state_as_of"]
         signal.update(
             {
                 key: _safe_scalar(value)
