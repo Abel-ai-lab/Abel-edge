@@ -3,6 +3,7 @@ import importlib
 import sys
 
 from click.testing import CliRunner
+import pytest
 
 from abel_edge.config import load_config
 from abel_edge.engine.ledger import read_trade_log
@@ -283,11 +284,48 @@ def test_paper_bootstrap_context_bypasses_daily_history_window(tmp_path):
             engine_module = importlib.import_module("strategies.bootstrap_context.engine")
             engine = engine_module.BootstrapContextEngine(context=strategy)
 
-            engine.build_paper_initial_state(cutover_as_of="2026-01-25T00:00:00Z")
+            with engine.paper_bootstrap_cutover_scope("2026-01-20T00:00:00Z"):
+                engine.build_paper_initial_state(cutover_as_of="2026-01-20T00:00:00Z")
+
+                explicit_ctx = engine.paper_bootstrap_context(
+                    start="2026-01-01T00:00:00Z",
+                    end="2026-01-20T00:00:00Z",
+                )
+                explicit_close = explicit_ctx.target.series("close")
+                assert str(explicit_close.index[-1].date()) == "2026-01-20"
+
+                daily_ctx = engine.decision_context(start="2026-01-01T00:00:00Z")
+                daily_close = daily_ctx.target.series("close")
+                assert str(daily_close.index[-1].date()) == "2026-01-20"
+
+                with pytest.raises(
+                    ValueError,
+                    match=(
+                        "paper bootstrap context end 2026-01-21 is after "
+                        "validation cutover 2026-01-20"
+                    ),
+                ):
+                    engine.paper_bootstrap_context(
+                        start="2026-01-01T00:00:00Z",
+                        end="2026-01-21T00:00:00Z",
+                    )
+
+                with pytest.raises(
+                    ValueError,
+                    match=(
+                        "paper bootstrap context end 2026-01-21 is after "
+                        "validation cutover 2026-01-20"
+                    ),
+                ):
+                    engine.decision_context(
+                        start="2026-01-01T00:00:00Z",
+                        end="2026-01-21T00:00:00Z",
+                    )
+
             engine.get_paper_signal(as_of="2026-01-25T00:00:00Z")
 
             assert engine_module.BootstrapContextEngine.calls == [
-                ("bootstrap", "2026-01-01", "2026-01-25", 25),
+                ("bootstrap", "2026-01-01", "2026-01-20", 20),
                 ("daily", "2026-01-05", "2026-01-25", SYSTEM_LOOKBACK_PADDING_BARS + 1),
             ]
         finally:

@@ -8,6 +8,8 @@ so existing examples and tests remain runnable.
 from __future__ import annotations
 
 from abc import ABC
+from contextlib import contextmanager
+from typing import Iterator
 
 import numpy as np
 import pandas as pd
@@ -29,6 +31,12 @@ from abel_edge.engine.runtime_contract import (
 from abel_edge.engine.signal_contract import validate_signal_output
 
 
+def _coerce_bootstrap_cutover(value) -> pd.Timestamp:
+    if value is None or str(value).strip() == "":
+        raise ValueError("paper bootstrap cutover_as_of is required")
+    return pd.to_datetime(value, utc=True)
+
+
 class StrategyEngine(ABC):
     """Base class for all strategy engines.
 
@@ -44,6 +52,7 @@ class StrategyEngine(ABC):
         self._decision_surface_guard = False
         self._last_decision_context: DecisionContext | None = None
         self._last_compiled_output: CompiledDecisionOutput | None = None
+        self._paper_bootstrap_cutover_as_of = None
 
     def runtime_profile(self) -> RuntimeProfile:
         """Return the explicit runtime profile for this run."""
@@ -108,6 +117,17 @@ class StrategyEngine(ABC):
             apply_paper_window=False,
         )
 
+    @contextmanager
+    def paper_bootstrap_cutover_scope(self, cutover_as_of) -> Iterator[None]:
+        """Bound bootstrap-time data contexts to a validation cutover."""
+        cutover = _coerce_bootstrap_cutover(cutover_as_of)
+        previous = self._paper_bootstrap_cutover_as_of
+        self._paper_bootstrap_cutover_as_of = cutover
+        try:
+            yield
+        finally:
+            self._paper_bootstrap_cutover_as_of = previous
+
     def _decision_context(
         self,
         *,
@@ -116,6 +136,7 @@ class StrategyEngine(ABC):
         limit: int | None = None,
         apply_paper_window: bool,
     ) -> DecisionContext:
+        end = self._bootstrap_bounded_end(end)
         return DecisionContext(
             self,
             runtime_profile=self.runtime_profile(),
@@ -125,6 +146,22 @@ class StrategyEngine(ABC):
             limit=limit,
             apply_paper_window=apply_paper_window,
         )
+
+    def _bootstrap_bounded_end(self, end):
+        cutover = self._paper_bootstrap_cutover_as_of
+        if cutover is None:
+            return end
+        if end is None:
+            return cutover
+        end_ts = _coerce_bootstrap_cutover(end)
+        cutover_ts = pd.to_datetime(cutover, utc=True)
+        if end_ts > cutover_ts:
+            raise ValueError(
+                "paper bootstrap context end "
+                f"{end_ts.date().isoformat()} is after validation cutover "
+                f"{cutover_ts.date().isoformat()}"
+            )
+        return end
 
     def uses_decision_contract(self) -> bool:
         """Return whether the subclass overrides ``compute_decisions``."""

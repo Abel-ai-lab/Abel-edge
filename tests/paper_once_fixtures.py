@@ -69,7 +69,7 @@ class BootstrapContextEngine(StrategyEngine):
         raise AssertionError("paper_run_one direct mode must not compile full output")
 
     def build_paper_initial_state(self, *, cutover_as_of=None):
-        ctx = self.paper_bootstrap_context(start="2026-01-01T00:00:00Z", end=cutover_as_of)
+        ctx = self.paper_bootstrap_context(start="2026-01-01T00:00:00Z")
         close = ctx.target.series("close")
         type(self).calls.append(
             (
