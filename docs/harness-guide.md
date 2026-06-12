@@ -14,7 +14,6 @@ This is not documentation. It is an **executable architecture spec**.
 AGENTS.md (root)
 ├── "Add a strategy"        → strategies/AGENTS.md
 ├── "Fix a validation"      → abel_edge/validation/AGENTS.md
-├── "Add a dashboard chart"  → abel_edge/dashboard/AGENTS.md
 └── "Use Abel discovery"     → abel_edge/plugins/AGENTS.md
 ```
 
@@ -26,7 +25,7 @@ Each subsystem AGENTS.md provides:
 
 ## Structural Tests = Guardrails
 
-15 structural tests enforce architecture mechanically. When an agent makes a mistake, the test tells it exactly what to fix:
+Structural tests enforce architecture mechanically. When an agent makes a mistake, the test tells it exactly what to fix:
 
 ```
 FAIL: Strategy 'my_strategy' is missing 'color'.

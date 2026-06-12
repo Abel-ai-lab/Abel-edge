@@ -53,7 +53,6 @@ abel-edge init my-portfolio
 cd my-portfolio
 abel-edge run
 abel-edge validate
-abel-edge dashboard
 ```
 
 Validate an existing backtest CSV:
@@ -138,7 +137,6 @@ It owns:
 - feed and data contracts
 - look-ahead checks
 - metric validation
-- dashboards
 - raw runtime facts
 - handoff validation
 
@@ -202,10 +200,6 @@ abel-edge run [--strategy ID]
 abel-edge paper [--strategy ID]
 abel-edge validate [--verbose]
 abel-edge validate --csv file.csv
-abel-edge dashboard
-
-abel-edge signal-demo --strategy ethusd_causal --output signal-demo-ethusd.html
-abel-edge tracking --strategy ethusd_causal --output signal-track-ethusd.html
 
 abel-edge evaluate --workdir strategies/my_strategy
 abel-edge evaluate --workdir strategies/my_strategy --start 2020-01-01
@@ -269,13 +263,12 @@ AGENTS.md              contributor and agent operating notes
 abel_edge/
   validation/          Abel Proof metrics and look-ahead checks
   engine/              StrategyEngine, DecisionContext, execution runtime
-  dashboard/           Jinja2 and Plotly static dashboard generation
   plugins/             optional Abel discovery and price integrations
 examples/
   sma_crossover/       sample target-only strategy
   momentum_ml/         sample walk-forward ML strategy
   causal_demo/         graph-shaped example with driver feeds
-tests/                 runtime, validation, CLI, packaging, and dashboard tests
+tests/                 runtime, validation, CLI, and packaging tests
 ```
 
 ## Documentation

@@ -19,7 +19,6 @@ import pandas as pd
 import pytest
 from scipy import stats as sp_stats
 
-from abel_edge.dashboard.components import compute_metrics as compute_dashboard_metrics
 from abel_edge.validation.metrics import (
     _sharpe,
     _sortino,
@@ -108,13 +107,6 @@ class TestSortino:
             _sortino(pnl, periods_per_year=365), rel=1e-12
         )
 
-
-class TestDashboardMetrics:
-    def test_sharpe_respects_periods_per_year(self):
-        pnl = _make_pnl(mean=0.001, std=0.02, n=252, seed=9)
-        daily = compute_dashboard_metrics(pnl, periods_per_year=252)
-        crypto = compute_dashboard_metrics(pnl, periods_per_year=365)
-        assert crypto["sharpe"] != pytest.approx(daily["sharpe"], rel=1e-12)
 
 class TestValidationDataSource:
     def test_validate_strategy_ignores_live_rows_in_mixed_trade_log(self, tmp_path):

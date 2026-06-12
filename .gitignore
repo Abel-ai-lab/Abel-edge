@@ -9,7 +9,6 @@ build/
 *.csv
 !tests/fixtures/**/*.csv
 data/
-dashboard.html
 .ruff_cache/
 docs/tmp-math-audit/
 docs/math-audit-index.md

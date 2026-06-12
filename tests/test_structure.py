@@ -4,7 +4,6 @@ These tests validate project conventions, not business logic.
 Every assertion includes a 'Fix:' instruction.
 """
 
-import ast
 import importlib
 import re
 import sys
@@ -21,7 +20,6 @@ HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 REQUIRED_AGENTS_MD = [
     "abel_edge/engine/AGENTS.md",
-    "abel_edge/dashboard/AGENTS.md",
     "abel_edge/validation/AGENTS.md",
     "abel_edge/plugins/AGENTS.md",
     "strategies/AGENTS.md",
@@ -44,8 +42,6 @@ def _prefer_repo_imports() -> None:
 
 LEGACY_OVERSIZED_FILES = {
     "abel_edge/cli.py",
-    "abel_edge/dashboard/generator.py",
-    "abel_edge/dashboard/strategy_data.py",
     "abel_edge/engine/base.py",
     "abel_edge/engine/decision_context.py",
     "abel_edge/research/data_readiness.py",
@@ -153,40 +149,7 @@ class TestSubsystemAgentsMd:
         )
 
 
-# ── Test 7: Components registered ────────────────────────────────
-
-
-class TestComponentsRegistered:
-    def test_components_used_in_generator(self):
-        comp_path = ROOT / "abel_edge/dashboard/components.py"
-        gen_path = ROOT / "abel_edge/dashboard/generator.py"
-        strategy_data_path = ROOT / "abel_edge/dashboard/strategy_data.py"
-        if not comp_path.exists() or not gen_path.exists() or not strategy_data_path.exists():
-            pytest.skip("Dashboard not yet implemented")
-
-        comp_src = comp_path.read_text(encoding="utf-8")
-        consumer_src = "\n".join(
-            [
-                gen_path.read_text(encoding="utf-8"),
-                strategy_data_path.read_text(encoding="utf-8"),
-            ]
-        )
-
-        tree = ast.parse(comp_src)
-        public_funcs = [
-            node.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
-        ]
-        unused = [f for f in public_funcs if f not in consumer_src]
-        assert not unused, (
-            f"Components not used by dashboard render data path: {unused}\n"
-            f"Fix: Import and register in generator.py or strategy_data.py, "
-            f"or prefix with _ to mark private."
-        )
-
-
-# ── Test 8: AGENTS.md has decision tree ──────────────────────────
+# ── Test 7: AGENTS.md has decision tree ──────────────────────────
 
 
 class TestAgentsMdHasDecisionTree:
@@ -204,7 +167,7 @@ class TestAgentsMdHasDecisionTree:
         )
 
 
-# ── Test 9: Plugins optional ────────────────────────────────────
+# ── Test 8: Plugins optional ────────────────────────────────────
 
 
 class TestPluginsOptional:
@@ -229,7 +192,7 @@ class TestPluginsOptional:
     def test_core_source_no_plugin_imports(self):
         """Core source files must not import from plugins (except cli.py with try/except)."""
         violations = []
-        core_dirs = [ROOT / "abel_edge" / d for d in ("engine", "dashboard", "validation")]
+        core_dirs = [ROOT / "abel_edge" / d for d in ("engine", "validation")]
         core_files = [ROOT / "abel_edge" / "config.py"]
         for d in core_dirs:
             if d.exists():
@@ -246,7 +209,7 @@ class TestPluginsOptional:
         )
 
 
-# ── Test 10: Strategies standalone ───────────────────────────────
+# ── Test 9: Strategies standalone ───────────────────────────────
 
 
 class TestStrategiesStandalone:
@@ -272,15 +235,15 @@ class TestStrategiesStandalone:
         )
 
 
-# ── Test 11: CLI entry points ────────────────────────────────────
+# ── Test 10: CLI entry points ────────────────────────────────────
 
 
 class TestCliEntryPoints:
     def test_cli_subcommands_exist(self):
-        """CLI must have init, run, dashboard, validate, discover, status subcommands."""
+        """CLI must have init, run, validate, discover, status subcommands."""
         from abel_edge.cli import main
 
-        required = {"init", "run", "dashboard", "validate", "discover", "status"}
+        required = {"init", "run", "validate", "discover", "status"}
         actual = set(main.commands.keys())
         missing = required - actual
         assert not missing, (
@@ -289,7 +252,7 @@ class TestCliEntryPoints:
         )
 
 
-# ── Test 12: No hardcoded paths ──────────────────────────────────
+# ── Test 11: No hardcoded paths ──────────────────────────────────
 
 
 class TestNoHardcodedPaths:
@@ -311,7 +274,7 @@ class TestNoHardcodedPaths:
         )
 
 
-# ── Test 13: No secrets ─────────────────────────────────────────
+# ── Test 12: No secrets ─────────────────────────────────────────
 
 
 class TestNoSecrets:
@@ -337,7 +300,7 @@ class TestNoSecrets:
         )
 
 
-# ── Test 14: AGENTS.md references exist ──────────────────────────
+# ── Test 13: AGENTS.md references exist ──────────────────────────
 
 
 class TestAgentsMdReferencesExist:
@@ -359,7 +322,7 @@ class TestAgentsMdReferencesExist:
         )
 
 
-# ── Test 15: AGENTS.md size budget ───────────────────────────────
+# ── Test 14: AGENTS.md size budget ───────────────────────────────
 
 
 class TestAgentsMdSizeBudget:

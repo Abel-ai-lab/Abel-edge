@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abel_edge.validation.gate_explain_common import check, explanation, finite_number
-from abel_edge.validation.gate_explain_grandma import explain_grandma_metric_gates
 
 
 def explain_metric_gates(metrics: dict, profile: dict) -> dict:
@@ -12,9 +11,6 @@ def explain_metric_gates(metrics: dict, profile: dict) -> dict:
     The returned facts are derived from the same policy used by validate().
     This helper does not recompute metrics or inspect trade logs.
     """
-    validation_cfg = profile.get("validation", {})
-    if validation_cfg.get("contract") == "grandma":
-        return explain_grandma_metric_gates(metrics, profile)
     return _explain_standard_metric_gates(metrics, profile)
 
 

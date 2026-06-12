@@ -95,10 +95,6 @@ def test_init_project_runs_sample_data_workflow(tmp_path):
             assert len(read_trade_log("data/trade_log_sma_crossover.csv")) > 0
             assert len(read_trade_log("data/trade_log_momentum_ml.csv")) > 0
             assert len(read_trade_log("data/trade_log_feed_overlay_demo.csv")) > 0
-
-            result = runner.invoke(main, ["dashboard"])
-            assert result.exit_code == 0, result.output
-            assert Path("dashboard.html").exists()
         finally:
             os.chdir(original_cwd)
 

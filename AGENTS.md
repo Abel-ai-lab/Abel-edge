@@ -31,12 +31,6 @@ synthetic demos, not as an Abel-alpha branch workspace.
 1. `abel-edge validate --verbose`
 2. Read `abel_edge/validation/AGENTS.md` — failure→fix mapping with code
 
-#### Add a dashboard component
-1. Read `abel_edge/dashboard/AGENTS.md`
-2. Add pure function to `abel_edge/dashboard/components.py`
-3. Register in `abel_edge/dashboard/generator.py`
-4. `make test` verifies registration
-
 #### Use Abel causal discovery (optional)
 1. Read `abel_edge/plugins/AGENTS.md`
 2. If you do not already have a key, prefer installing `causal-abel` and completing OAuth there for agent-driven setups
@@ -49,7 +43,6 @@ synthetic demos, not as an Abel-alpha branch workspace.
 ### Architecture
 - `ARCHITECTURE.md` — dependency direction diagram
 - `abel_edge/engine/AGENTS.md` — strategy execution
-- `abel_edge/dashboard/AGENTS.md` — template rendering
 - `abel_edge/validation/AGENTS.md` — metric triangle + fix patterns
 - `abel_edge/plugins/AGENTS.md` — plugin isolation rules
 
