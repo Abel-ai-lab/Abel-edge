@@ -2,6 +2,7 @@ from pathlib import Path
 import importlib
 import sys
 
+import numpy as np
 import pandas as pd
 import pytest
 from click.testing import CliRunner
@@ -230,6 +231,9 @@ def test_paper_run_one_matches_golden_append_math(tmp_path):
                 1.0 * (90.0 / 110.0 - 1.0),
                 0.0 * (120.0 / 90.0 - 1.0),
             ])
+            assert list(live["cum_return"]) == pytest.approx(
+                np.cumprod(1.0 + live["pnl"].to_numpy(dtype=float)) - 1.0
+            )
             assert result["latest_snapshot"]["last_processed_date"] == "2026-01-04T00:00:00+00:00"
             assert result["latest_snapshot"]["current_position"] == 0.0
             assert result["latest_snapshot"]["next_position"] == 1.0

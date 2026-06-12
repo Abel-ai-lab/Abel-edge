@@ -24,7 +24,7 @@ The engine and validation pipeline relies on this bar-by-bar timing relationship
 price[t-1], price[t] -> asset_return[t]
 information through t-1 -> position[t]
 position[t] * asset_return[t] -> pnl[t]
-sum(pnl[:t]) -> cum_return[t]
+prod(1 + pnl[:t]) - 1 -> cum_return[t]
 prod(1 + pnl[:t]) - 1 -> validation total_return[t]
 ```
 
@@ -33,8 +33,8 @@ This implies:
 - `asset_return[t]` is the return realized over the interval from `t-1` to `t`
 - `position[t]` is the exposure chosen before `asset_return[t]` is realized
 - `pnl[t]` is the realized payoff of that pre-chosen exposure over that interval
-- `cum_return[t]` remains the trade-log simple cumulative field, while validation
-  `total_return` compounds the same per-period `pnl` observations
+- `cum_return[t]` and validation `total_return` compound the same per-period
+  `pnl` observations
 
 The live contract therefore forbids any decision path that uses `price[t]` or
 `asset_return[t]` when constructing `position[t]`.
