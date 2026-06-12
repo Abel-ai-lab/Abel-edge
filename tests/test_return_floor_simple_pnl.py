@@ -36,6 +36,13 @@ def test_validation_total_return_uses_compound_return():
     assert metrics["total_return"] == pytest.approx(0.21)
 
 
+def test_validation_annual_return_stays_simple_annualized():
+    dates = pd.bdate_range("2020-01-01", periods=30)
+    pnl = np.array([0.10, 0.10] + [0.0] * 28)
+    metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
+    assert metrics["annual_return"] == pytest.approx(0.20 / metrics["elapsed_years"])
+
+
 def test_validation_max_drawdown_counts_first_row_loss():
     dates = pd.bdate_range("2020-01-01", periods=30)
     pnl = np.array([-0.20] + [0.0] * 29)

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Validation `total_return` now compounds per-period `pnl`; annualized return and trade-log `cum_return` keep their existing simple cumulative semantics.
+
 ### Removed
 - Removed generated HTML reporting commands and package dependencies.
 - Removed the conservative daily validation profile and its profile-specific metrics.

@@ -121,9 +121,10 @@ def compute_all_metrics(
     sharpe = float(np.mean(pnl) / std * np.sqrt(periods_per_year)) if std > 1e-10 else 0
     sortino = _sortino(pnl, periods_per_year=periods_per_year)
     max_dd = float(np.min(dd))
-    total_return = float(cum_return[-1])
+    simple_total_return = float(cum_return[-1])
+    total_return = float(np.prod(1.0 + pnl) - 1.0)
     elapsed_years = _elapsed_years(dates, periods_per_year=periods_per_year)
-    ann_return = total_return / elapsed_years if elapsed_years > 0 else 0.0
+    ann_return = simple_total_return / elapsed_years if elapsed_years > 0 else 0.0
     calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
