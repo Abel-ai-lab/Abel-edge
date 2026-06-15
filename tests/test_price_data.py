@@ -161,7 +161,7 @@ def test_load_config_prefers_local_overlay(tmp_path, monkeypatch):
     Path("strategies.yaml").write_text(
         """
 settings:
-  theme: dark
+  capital: 100000
 strategies: []
 """,
         encoding="utf-8",
@@ -169,7 +169,7 @@ strategies: []
     Path("strategies.local.yaml").write_text(
         """
 settings:
-  theme: light
+  capital: 200000
 strategies:
   - id: local
     name: Local Strategy
@@ -183,7 +183,7 @@ strategies:
 
     cfg = config_module.load_config()
 
-    assert cfg["settings"]["theme"] == "light"
+    assert cfg["settings"]["capital"] == 200000
     assert [strategy["id"] for strategy in cfg["strategies"]] == ["local"]
 
 

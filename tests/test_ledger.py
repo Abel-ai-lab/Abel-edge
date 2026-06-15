@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from abel_edge.engine.ledger import append_trade_log_rows, read_trade_log, write_trade_log
 from abel_edge.validation.gate import validate_strategy
@@ -43,7 +44,7 @@ def test_append_trade_rows_prefer_live_over_same_day_backfill(tmp_path) -> None:
     assert float(df.iloc[-1]["pnl"]) == 0.05
 
 
-def test_write_trade_log_cum_return_uses_simple_interest(tmp_path) -> None:
+def test_write_trade_log_cum_return_uses_compounding(tmp_path) -> None:
     path = tmp_path / "log.csv"
     dates = pd.to_datetime(["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"], utc=True)
     write_trade_log(
@@ -55,7 +56,23 @@ def test_write_trade_log_cum_return_uses_simple_interest(tmp_path) -> None:
     )
 
     df = read_trade_log(path)
-    assert float(df.iloc[-1]["cum_return"]) == 0.20
+    assert float(df.iloc[-1]["cum_return"]) == pytest.approx(0.21)
+
+
+def test_append_trade_log_rows_cum_return_uses_compounding(tmp_path) -> None:
+    path = tmp_path / "log.csv"
+    dates = pd.to_datetime(["2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z"], utc=True)
+
+    append_trade_log_rows(
+        path,
+        [
+            {"date": dates[0], "pnl": 0.10, "position": 1.0, "source": "live"},
+            {"date": dates[1], "pnl": 0.10, "position": 1.0, "source": "live"},
+        ],
+    )
+
+    df = read_trade_log(path)
+    assert float(df.iloc[-1]["cum_return"]) == pytest.approx(0.21)
 
 
 def test_write_trade_log_preserves_existing_live_rows(tmp_path) -> None:
@@ -160,7 +177,7 @@ def test_validate_strategy_surfaces_runtime_r1_failure(tmp_path) -> None:
             "asset_return": asset_returns,
             "pnl": pnl,
             "position": positions,
-            "cum_return": np.cumsum(pnl),
+            "cum_return": np.cumprod(1.0 + pnl) - 1.0,
             "source": ["backfill"] * n,
         }
     ).to_csv(path, index=False)

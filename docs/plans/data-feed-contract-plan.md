@@ -152,7 +152,7 @@ strategies.yaml
   -> signal contract validation
   -> backtest kernel / paper path
   -> ledger.py
-  -> validate / dashboard
+  -> validate
 ```
 
 External inputs should enter engine logic only through framework-managed feed

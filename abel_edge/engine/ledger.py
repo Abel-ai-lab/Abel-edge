@@ -93,7 +93,7 @@ def write_trade_log(
                 df = pd.concat([df, live_rows], ignore_index=True, sort=False)
 
     df = _dedupe_trade_rows(df)
-    df["cum_return"] = df["pnl"].to_numpy(dtype=float).cumsum()
+    df["cum_return"] = compound_cum_return(df["pnl"].to_numpy(dtype=float))
     df.to_csv(path, index=False)
 
 
@@ -116,9 +116,14 @@ def append_trade_log_rows(path: str | Path, rows: list[dict]) -> pd.DataFrame:
     combined = pd.concat([existing, incoming], ignore_index=True, sort=False)
     combined = _dedupe_trade_rows(combined)
     combined["pnl"] = combined["pnl"].astype(float)
-    combined["cum_return"] = combined["pnl"].to_numpy(dtype=float).cumsum()
+    combined["cum_return"] = compound_cum_return(combined["pnl"].to_numpy(dtype=float))
     combined.to_csv(path, index=False)
     return combined.reset_index(drop=True)
+
+
+def compound_cum_return(pnl: np.ndarray) -> np.ndarray:
+    """Return compounded cumulative return from per-period simple returns."""
+    return np.cumprod(1.0 + np.asarray(pnl, dtype=float)) - 1.0
 
 
 def _dedupe_trade_rows(df: pd.DataFrame) -> pd.DataFrame:

@@ -220,7 +220,6 @@ abel-edge init my-portfolio   # 3 local sample-data demos: SMA, ML, Feed Overlay
 cd my-portfolio
 abel-edge login               # only needed for live Abel discovery
 abel-edge run                 # run all strategies
-abel-edge dashboard           # dark-theme Plotly dashboard
 abel-edge validate            # audited validation report card
 ```
 

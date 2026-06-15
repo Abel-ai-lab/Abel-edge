@@ -121,11 +121,11 @@ def compute_all_metrics(
     sharpe = float(np.mean(pnl) / std * np.sqrt(periods_per_year)) if std > 1e-10 else 0
     sortino = _sortino(pnl, periods_per_year=periods_per_year)
     max_dd = float(np.min(dd))
-    total_return = float(cum_return[-1])
+    simple_total_return = float(cum_return[-1])
+    total_return = float(np.prod(1.0 + pnl) - 1.0)
     elapsed_years = _elapsed_years(dates, periods_per_year=periods_per_year)
-    ann_return = total_return / elapsed_years if elapsed_years > 0 else 0.0
+    ann_return = simple_total_return / elapsed_years if elapsed_years > 0 else 0.0
     calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
-    pnl_to_maxdd = _pnl_to_maxdd(total_return, max_dd)
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
     rho1 = _lag1_autocorr(pnl)
@@ -200,11 +200,6 @@ def compute_all_metrics(
         if positions is not None
         else int(np.sum(np.abs(pnl) > 1e-10))
     )
-    position_exposure_applicable = positions is not None and len(positions) == T
-    max_abs_position = (
-        float(np.max(np.abs(positions))) if position_exposure_applicable and T > 0 else 0.0
-    )
-
     return {
         "sharpe": sharpe,
         "lo_adjusted": lo_adjusted,
@@ -213,7 +208,6 @@ def compute_all_metrics(
         "annual_return": ann_return,
         "elapsed_years": elapsed_years,
         "max_dd": max_dd,
-        "pnl_to_maxdd": pnl_to_maxdd,
         "calmar": calmar,
         "dsr": dsr,
         "dsr_trials_used": int(dsr_trials_used),
@@ -233,8 +227,6 @@ def compute_all_metrics(
         "position_ic_monthly_mean": position_ic_monthly_mean,
         "position_ic_applicable": position_ic_applicable,
         "position_ic_stability_applicable": position_ic_stability_applicable,
-        "position_exposure_applicable": position_exposure_applicable,
-        "max_abs_position": max_abs_position,
         "active_days": active_days,
         "total_days": T,
         "yearly_sharpes": yearly_sharpes,
@@ -282,14 +274,6 @@ def _elapsed_years(dates: pd.DatetimeIndex, periods_per_year: int = 252) -> floa
     total_span = span + median_gap
     seconds_per_year = 365.25 * 24 * 60 * 60
     return max(total_span.total_seconds() / seconds_per_year, 1.0 / periods_per_year)
-
-
-def _pnl_to_maxdd(total_return: float, max_dd: float) -> float:
-    if max_dd < -1e-12:
-        return float(total_return / abs(max_dd))
-    if total_return > 0:
-        return 999.0
-    return 0.0
 
 
 def _is_full_calendar_year(

@@ -5,20 +5,17 @@
 #   id:        unique snake_case identifier
 #   name:      human-readable display name
 #   asset:     target asset ticker (ETH, META, AAPL, etc.)
-#   color:     6-digit hex color for charts (#FF2D55)
+#   color:     6-digit hex color (#FF2D55)
 #   engine:    Python module path (strategies.my_strategy.engine)
 #   trade_log: path to trade log CSV
 #
 # Optional fields:
-#   tab_label: short label for dashboard tab (2-5 chars)
 #   retrain:   retrain schedule (monday, daily, etc.)
 #   badge:     validation badge ("15/15")
 #   parents:   causal parent list (Abel plugin)
 
 settings:
   capital: 100000
-  port: 8088
-  theme: dark
   price_data:
     default_adapter: abel
     default_timeframe: 1d
@@ -30,9 +27,3 @@ strategies:
     color: "#7C3AED"
     engine: strategies.ethusd_causal.engine
     trade_log: data/trade_log_ethusd_causal.csv
-    thesis: "ETHUSD stays on the board when its causal driver basket keeps pointing in the same direction."
-    audience: "Beginner signal followers who want a simple daily read"
-    cta_text: "Start tracking this signal"
-    why_now: "The latest driver mix is coherent enough to keep ETHUSD in an active watch state."
-    risk_note: "Crypto signals can change quickly; use this as a tracking cue, not a blind entry rule."
-    signal_label_rules: "Observe < 0.25, Track Lightly 0.25-0.74, Hold >= 0.75"

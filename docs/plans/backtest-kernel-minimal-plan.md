@@ -45,7 +45,7 @@ Those can be addressed in later iterations after this kernel boundary is stable.
 ## Guiding Principles
 
 1. Smallest correct change.
-2. Preserve current user-visible workflow: `strategies.yaml -> abel-edge run -> trade_log.csv -> validate/dashboard`.
+2. Preserve current user-visible workflow: `strategies.yaml -> abel-edge run -> trade_log.csv -> validate`.
 3. Do not widen strategy obligations. Existing `compute_signals()` engines should keep working.
 4. Move execution semantics out of `trader.py`, but do not build a big framework.
 5. Default behavior must remain backward-compatible when cost and leverage settings are absent.

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import json
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from abel_edge.dashboard.components import compute_metrics as compute_dashboard_metrics
-from abel_edge.dashboard.components import drawdown_chart
 from abel_edge.validation import explain_metric_gates
 from abel_edge.validation.gate_logic import validate
 from abel_edge.validation.metrics import compute_all_metrics, load_profile
@@ -33,27 +29,18 @@ def _passing_metrics(**overrides):
     return metrics
 
 
-def test_dashboard_cumulative_return_uses_simple_interest():
-    metrics = compute_dashboard_metrics(np.array([0.10, 0.10]))
-    assert metrics["cum_return"] == pytest.approx(0.20)
-
-
-def test_dashboard_max_drawdown_counts_first_row_loss():
-    metrics = compute_dashboard_metrics(np.array([-0.20, 0.0]))
-    assert metrics["max_dd"] == pytest.approx(0.20)
-
-
-def test_dashboard_drawdown_chart_counts_first_row_loss():
-    dates = pd.bdate_range("2020-01-01", periods=2)
-    payload = json.loads(drawdown_chart(dates, np.array([-0.20, -0.20]), "first loss"))
-    assert payload["data"][0]["y"][0] == pytest.approx(-20.0)
-
-
-def test_validation_total_return_uses_simple_interest():
+def test_validation_total_return_uses_compound_return():
     dates = pd.bdate_range("2020-01-01", periods=30)
     pnl = np.array([0.10, 0.10] + [0.0] * 28)
     metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
-    assert metrics["total_return"] == pytest.approx(0.20)
+    assert metrics["total_return"] == pytest.approx(0.21)
+
+
+def test_validation_annual_return_stays_simple_annualized():
+    dates = pd.bdate_range("2020-01-01", periods=30)
+    pnl = np.array([0.10, 0.10] + [0.0] * 28)
+    metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
+    assert metrics["annual_return"] == pytest.approx(0.20 / metrics["elapsed_years"])
 
 
 def test_validation_max_drawdown_counts_first_row_loss():

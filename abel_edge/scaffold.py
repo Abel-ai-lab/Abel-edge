@@ -83,12 +83,10 @@ def _write_demo_data(data_dir: Path) -> None:
 _STRATEGIES_YAML = """\
 # abel-edge project configuration
 # Standalone abel-edge project with local sample-data strategies.
-# Run: abel-edge run && abel-edge dashboard && abel-edge validate
+# Run: abel-edge run && abel-edge validate
 
 settings:
   capital: 100000
-  port: 8080
-  theme: dark
   price_data:
     default_adapter: csv
     default_timeframe: 1d
@@ -166,7 +164,6 @@ _CLAUDE_MD = """\
 
 ## Commands
 abel-edge run         # run strategies, write trade logs
-abel-edge dashboard   # generate dashboard.html
 abel-edge validate    # Abel Proof audited validation
 abel-edge status      # show strategy summary
 """
@@ -180,7 +177,7 @@ It is not an Abel-alpha branch workspace.
 ## I want to...
 
 ### Run everything
-    abel-edge run && abel-edge dashboard && abel-edge validate
+    abel-edge run && abel-edge validate
 
 ### Add a strategy
 1. Create `strategies/my_strategy/engine.py`
@@ -191,9 +188,6 @@ It is not an Abel-alpha branch workspace.
 
 ### Inspect runtime semantics for one strategy
     abel-edge debug-evaluate --workdir strategies/my_strategy
-
-### View the dashboard
-    abel-edge dashboard && open dashboard.html
 
 ## Authoring surface
 

@@ -55,7 +55,7 @@ def _write_sources(tmp_path: Path) -> dict[str, Path]:
     metric_csv.write_text(
         "date,asset_return,pnl,position,gross_pnl,turnover,execution_cost,"
         "next_position,decision_time,effective_time,close\n"
-        "2020-01-01T00:00:00Z,0,0,0,0,0,0,0,2020-01-01T00:00:00Z,"
+        "2020-01-01T00:00:00Z,0.01,0.01,1,0.01,0,0,1,2020-01-01T00:00:00Z,"
         "2020-01-01T00:00:00Z,100\n"
         "2020-01-02T00:00:00Z,0.01,0.01,1,0.01,1,0,1,"
         "2020-01-02T00:00:00Z,2020-01-02T00:00:00Z,101\n",
@@ -114,7 +114,7 @@ def test_write_backtest_trade_log_from_metric_input_replaces_live_rows(tmp_path:
     assert result["rowCount"] == 2
     assert len(trade_log) == 2
     assert set(trade_log["source"]) == {"backfill"}
-    assert float(trade_log.iloc[-1]["cum_return"]) == pytest.approx(0.01)
+    assert float(trade_log.iloc[-1]["cum_return"]) == pytest.approx((1.01 * 1.01) - 1.0)
     assert result["sha256"] == sha256_file(paths["trade_log"])
 
 

@@ -189,7 +189,7 @@ def _kill_descendants(grace_seconds: float = 0.5) -> int:
 def install_tree_kill_trap() -> None:
     """Recursively kill descendants on SIGTERM/SIGINT and at exit. Idempotent.
 
-    Call at the start of long-running CLI commands (paper, run, dashboard)
+    Call at the start of long-running CLI commands (paper, run)
     so that any joblib worker that outlives deadlock detection is reaped
     before the CLI returns. Prevents the 2026-04-17 flock-zombie incident
     where fd 200 was held by an orphan for 6 days.

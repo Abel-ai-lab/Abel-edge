@@ -9,7 +9,11 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from abel_edge.engine.ledger import append_trade_log_rows, read_trade_log
+from abel_edge.engine.ledger import (
+    append_trade_log_rows,
+    compound_cum_return,
+    read_trade_log,
+)
 
 
 RESERVED_PAPER_ROW_FIELDS = {
@@ -292,7 +296,7 @@ def append_paper_decision_rows(
         combined = pd.DataFrame(rows)
         combined["date"] = pd.to_datetime(combined["date"], utc=True)
         combined["pnl"] = combined["pnl"].astype(float)
-        combined["cum_return"] = combined["pnl"].to_numpy(dtype=float).cumsum()
+        combined["cum_return"] = compound_cum_return(combined["pnl"].to_numpy(dtype=float))
         combined.to_csv(output_path, index=False)
     else:
         combined = append_trade_log_rows(resolved_paper_log_path, rows)

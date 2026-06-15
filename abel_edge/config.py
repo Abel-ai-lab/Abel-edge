@@ -17,9 +17,6 @@ from abel_edge.engine.adapter_registry import (
 
 DEFAULTS: dict[str, Any] = {
     "capital": 100000,
-    "port": 8088,
-    "refresh_seconds": 300,
-    "theme": "dark",
     "execution": {
         "cost_bps": 0,
         "max_abs_position": None,

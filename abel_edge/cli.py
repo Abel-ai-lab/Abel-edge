@@ -14,7 +14,6 @@ import click  # noqa: E402
 
 from abel_edge import __version__  # noqa: E402
 from abel_edge.cache_cli import warm_cache as warm_cache_command  # noqa: E402
-from abel_edge.cli_support import build_bars_loader  # noqa: E402
 from abel_edge.research.cli import debug_evaluate as debug_evaluate_command  # noqa: E402
 from abel_edge.research.cli import evaluate as evaluate_command  # noqa: E402
 from abel_edge.research.cli import export_artifact as export_artifact_command  # noqa: E402
@@ -84,7 +83,6 @@ def init(name):
     click.echo("Next:")
     click.echo(f"  cd {name}")
     click.echo("  abel-edge run")
-    click.echo("  abel-edge dashboard")
     click.echo("  abel-edge validate")
 
 
@@ -202,58 +200,6 @@ def paper(strategy, config, as_of):
     click.echo(f"Paper trading {len(cfg['strategies'])} strategies...")
     results = paper_run_all(cfg, strategy_id=strategy, as_of=as_of)
     click.echo(f"Done. {len(results)} strategies processed.")
-
-
-@main.command()
-@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
-@click.option("--output", default="dashboard.html", help="Output HTML path")
-def dashboard(config, output):
-    """Generate dashboard HTML."""
-    from abel_edge.dashboard.generator import generate
-    from abel_edge.config import load_config
-
-    cfg = load_config(config)
-    bars_loader = build_bars_loader(cfg)
-    generate(config, output, bars_loader=bars_loader)
-    click.echo(f"Dashboard generated: {output}")
-
-
-@main.command("signal-demo")
-@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
-@click.option("--strategy", required=True, help="Render a specific strategy signal demo page")
-@click.option("--output", default="signal-demo.html", help="Output HTML path")
-def signal_demo(config, strategy, output):
-    """Generate a single-strategy Signal Demo page."""
-    from abel_edge.dashboard.generator import generate_signal_demo
-    from abel_edge.config import load_config
-
-    cfg = load_config(config)
-    bars_loader = build_bars_loader(cfg)
-
-    try:
-        generate_signal_demo(config, output, strategy_id=strategy, bars_loader=bars_loader)
-    except ValueError as e:
-        raise click.ClickException(str(e))
-    click.echo(f"Signal demo generated: {output}")
-
-
-@main.command("tracking")
-@click.option("--config", default=None, help=CONFIG_OPTION_HELP)
-@click.option("--strategy", required=True, help="Render a specific strategy tracking page")
-@click.option("--output", default="tracking.html", help="Output HTML path")
-def tracking(config, strategy, output):
-    """Generate a single-strategy dashboard focused on paper tracking."""
-    from abel_edge.dashboard.generator import generate_tracking_page
-    from abel_edge.config import load_config
-
-    cfg = load_config(config)
-    bars_loader = build_bars_loader(cfg)
-
-    try:
-        generate_tracking_page(config, output, strategy_id=strategy, bars_loader=bars_loader)
-    except ValueError as e:
-        raise click.ClickException(str(e))
-    click.echo(f"Tracking page generated: {output}")
 
 
 @main.command()

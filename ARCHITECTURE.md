@@ -3,14 +3,14 @@
 ## Dependency Direction (left to right only)
 
 ```
-config.py -> engine/ -> dashboard/
+config.py -> engine/ -> validation/
                ^
           strategies/    (implements engine ABC, no framework dependency)
 ```
 
 - `config.py` depends on nothing (reads YAML)
 - `engine/` depends on `config.py`
-- `dashboard/` depends on `config.py` + reads trade log CSVs (NOT on engine/)
+- `validation/` depends on executed trade logs, not on strategy internals
 - `strategies/` implements `engine/base.py` ABC but can run standalone
 - `plugins/` is optional — core works without it
 
@@ -21,9 +21,7 @@ strategies.yaml -> config.py -> trader.py -> engine.compute_signals()
                                                  |
                                           trade_log_*.csv
                                                  |
-                                          generator.py -> dashboard.html
-                                                 |
-                                          server.py (serves HTML)
+                                          gate.py -> PASS/FAIL
 ```
 
 ## Validation Flow

@@ -726,7 +726,7 @@ class TestRunEvaluation:
         assert context["_runtime_profile"]["target"] == "SONY"
         assert context["_execution_constraints"]["long_only"] is False
 
-    def test_context_json_preserves_injected_grandma_runtime_contract(self, tmp_path):
+    def test_context_json_preserves_injected_validation_runtime_contract(self, tmp_path):
         context_path = tmp_path / "context.json"
         context_path.write_text(
             json.dumps(
@@ -735,7 +735,7 @@ class TestRunEvaluation:
                     "_runtime_profile": {
                         "profile": "daily",
                         "target": "TSLA",
-                        "validation_profile": "grandma_daily",
+                        "validation_profile": "equity_daily",
                         "execution_delay_bars": 2,
                     },
                     "_execution_constraints": {
@@ -753,7 +753,7 @@ class TestRunEvaluation:
             context_json=context_path,
         )
 
-        assert context["_runtime_profile"]["validation_profile"] == "grandma_daily"
+        assert context["_runtime_profile"]["validation_profile"] == "equity_daily"
         assert context["_runtime_profile"]["execution_delay_bars"] == 2
         assert context["_execution_constraints"]["position_bounds"] == [-1.0, 1.0]
 
@@ -761,14 +761,14 @@ class TestRunEvaluation:
         _write_engine(tmp_path / "engine.py")
         context_path = tmp_path / "context.json"
         context_path.write_text(
-            json.dumps({"validation_context": {"profile": "grandma_daily"}}),
+            json.dumps({"validation_context": {"profile": "equity_daily"}}),
             encoding="utf-8",
         )
 
         result = run_evaluation(tmp_path, context_json=context_path)
 
         assert result["verdict"] == "PASS"
-        assert result["profile"] == "grandma_daily"
+        assert result["profile"] == "equity_daily"
 
     def test_preflight_keeps_static_checks_as_warnings(self, tmp_path):
         engine = tmp_path / "engine.py"
