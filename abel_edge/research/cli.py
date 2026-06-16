@@ -10,6 +10,7 @@ import click
 @click.command()
 @click.option("--workdir", default=".", show_default=True, help="Directory containing engine.py")
 @click.option("--start", default=None, help="Optional backtest start date injected into research context")
+@click.option("--end", default=None, help="Optional backtest end date injected into research context")
 @click.option(
     "--context-json",
     default=None,
@@ -19,7 +20,7 @@ import click
 @click.option("--output-md", default=None, help="Optional path for raw validation markdown")
 @click.option("--output-csv", default=None, help="Optional path for metric input CSV")
 @click.option("--output-handoff", default=None, help="Optional path for edge-owned handoff JSON")
-def evaluate(workdir, start, context_json, output_json, output_md, output_csv, output_handoff):
+def evaluate(workdir, start, end, context_json, output_json, output_md, output_csv, output_handoff):
     """Evaluate one strategy and emit raw validation facts."""
     from abel_edge.research.evaluate import run_evaluation, write_evaluation_outputs
 
@@ -29,6 +30,7 @@ def evaluate(workdir, start, context_json, output_json, output_md, output_csv, o
     result = run_evaluation(
         workdir,
         start=start,
+        end=end,
         context_json=Path(context_json) if context_json else None,
         output_csv=Path(output_csv) if output_csv else None,
     )
@@ -119,13 +121,14 @@ def export_artifact(
 @click.command("debug-evaluate")
 @click.option("--workdir", default=".", show_default=True, help="Directory containing engine.py")
 @click.option("--start", default=None, help="Optional backtest start date injected into research context")
+@click.option("--end", default=None, help="Optional backtest end date injected into research context")
 @click.option(
     "--context-json",
     default=None,
     help="Optional JSON file merged into the research engine context",
 )
 @click.option("--output-json", default=None, help="Optional path for raw JSON diagnostics")
-def debug_evaluate(workdir, start, context_json, output_json):
+def debug_evaluate(workdir, start, end, context_json, output_json):
     """Run evaluation with a diagnostics-first UX for research debugging."""
     import json
 
@@ -134,6 +137,7 @@ def debug_evaluate(workdir, start, context_json, output_json):
     result = run_preflight(
         workdir,
         start=start,
+        end=end,
         context_json=Path(context_json) if context_json else None,
     )
     if output_json:

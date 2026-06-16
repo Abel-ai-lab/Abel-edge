@@ -100,8 +100,12 @@ def _write_start_aware_engine(path: Path) -> None:
                 "    def compute_signals(self):",
                 "        requested = ((self.context or {}).get('_research') or {}).get('requested_window') or {}",
                 "        start = requested.get('start') or '2024-01-01'",
+                "        end = requested.get('end')",
                 "        dates = pd.date_range(start, periods=120, freq='D', tz='UTC')",
+                "        if end:",
+                "            dates = dates[dates <= pd.to_datetime(end, utc=True)]",
                 "        phase = np.linspace(0, 8 * np.pi, 120)",
+                "        phase = phase[:len(dates)]",
                 "        positions = np.where(np.sin(phase) > 0, 1.0, -1.0)",
                 "        returns = 0.02 * positions + 0.002 * np.sin(phase)",
                 "        prices = 100.0 * np.cumprod(1.0 + returns)",
@@ -554,6 +558,14 @@ class TestRunEvaluation:
         assert result["effective_window"]["start"] == "2020-01-01"
         assert result["effective_window"]["end"] == "2020-04-29"
 
+    def test_end_aware_engine_records_requested_and_effective_window(self, tmp_path):
+        _write_start_aware_engine(tmp_path / "engine.py")
+        result = run_evaluation(tmp_path, start="2020-01-01", end="2020-02-15")
+        assert result["verdict"] == "PASS"
+        assert result["requested_window"] == {"start": "2020-01-01", "end": "2020-02-15"}
+        assert result["effective_window"]["start"] == "2020-01-01"
+        assert result["effective_window"]["end"] == "2020-02-15"
+
     def test_can_persist_metric_input_csv(self, tmp_path):
         _write_engine(tmp_path / "engine.py")
         output_csv = tmp_path / "artifacts" / "metric-input.csv"
@@ -718,6 +730,7 @@ class TestRunEvaluation:
         context = research_evaluate._build_research_context(
             workspace=tmp_path,
             start=None,
+            end=None,
             context_json=context_path,
         )
 
@@ -750,6 +763,7 @@ class TestRunEvaluation:
         context = research_evaluate._build_research_context(
             workspace=tmp_path,
             start=None,
+            end=None,
             context_json=context_path,
         )
 
@@ -1154,6 +1168,8 @@ class TestEvaluateCli:
                     str(workdir),
                     "--start",
                     "2020-01-01",
+                    "--end",
+                    "2020-02-15",
                     "--output-json",
                     str(workdir / "edge-result.json"),
                 ],
@@ -1161,6 +1177,7 @@ class TestEvaluateCli:
             assert result.exit_code == 0, result.output
             payload = (workdir / "edge-result.json").read_text(encoding="utf-8")
             assert '"start": "2020-01-01"' in payload
+            assert '"end": "2020-02-15"' in payload
 
     def test_evaluate_cli_fails_for_bad_engine(self, tmp_path):
         runner = CliRunner()
@@ -1184,6 +1201,32 @@ class TestEvaluateCli:
             assert result.exit_code == 0, result.output
             assert "Failure signature: constant_position" in result.output
             assert "Signal activity:" in result.output
+
+    def test_debug_evaluate_cli_passes_end_into_research_context(self, tmp_path):
+        runner = CliRunner()
+        with runner.isolated_filesystem(temp_dir=tmp_path):
+            workdir = Path("workspace")
+            workdir.mkdir()
+            _write_start_aware_engine(workdir / "engine.py")
+
+            result = runner.invoke(
+                main,
+                [
+                    "debug-evaluate",
+                    "--workdir",
+                    str(workdir),
+                    "--start",
+                    "2020-01-01",
+                    "--end",
+                    "2020-02-15",
+                    "--output-json",
+                    str(workdir / "debug-result.json"),
+                ],
+            )
+            assert result.exit_code == 0, result.output
+            payload = (workdir / "debug-result.json").read_text(encoding="utf-8")
+            assert '"requested_window": {' in payload
+            assert '"end": "2020-02-15"' in payload
 
 
 class TestVerifyData:
