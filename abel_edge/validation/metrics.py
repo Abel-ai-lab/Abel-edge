@@ -110,7 +110,7 @@ def compute_all_metrics(
     if positions is not None:
         positions = np.nan_to_num(positions, nan=0.0, posinf=0.0, neginf=0.0)
 
-    equity = 1.0 + np.cumsum(pnl)
+    equity = np.cumprod(1.0 + pnl)
     cum_return = equity - 1.0
     peak_equity = np.maximum.accumulate(np.concatenate(([1.0], equity)))[1:]
     dd = (equity / peak_equity) - 1.0
@@ -121,11 +121,12 @@ def compute_all_metrics(
     sharpe = float(np.mean(pnl) / std * np.sqrt(periods_per_year)) if std > 1e-10 else 0
     sortino = _sortino(pnl, periods_per_year=periods_per_year)
     max_dd = float(np.min(dd))
-    simple_total_return = float(cum_return[-1])
-    total_return = float(np.prod(1.0 + pnl) - 1.0)
+    simple_total_return = float(np.sum(pnl))
+    total_return = float(cum_return[-1])
     elapsed_years = _elapsed_years(dates, periods_per_year=periods_per_year)
     ann_return = simple_total_return / elapsed_years if elapsed_years > 0 else 0.0
-    calmar = float(ann_return / abs(max_dd)) if max_dd < 0 else 0.0
+    compound_ann_return = _compound_annual_return(total_return, elapsed_years)
+    calmar = float(compound_ann_return / abs(max_dd)) if max_dd < 0 else 0.0
 
     # Simplified serial-correlation penalty: lag-1 autocorrelation only.
     rho1 = _lag1_autocorr(pnl)
@@ -148,7 +149,7 @@ def compute_all_metrics(
         year_dates = dates[mask]
         year_pnl = pnl[mask]
         yearly_sharpes[yr] = _sharpe(year_pnl, periods_per_year=periods_per_year)
-        total_year_pnl = float(np.sum(year_pnl))
+        total_year_pnl = float(np.prod(1.0 + year_pnl) - 1.0)
         yearly_pnl[yr] = total_year_pnl
         if _is_full_calendar_year(year_dates, validation_cfg):
             full_years_count += 1
@@ -274,6 +275,14 @@ def _elapsed_years(dates: pd.DatetimeIndex, periods_per_year: int = 252) -> floa
     total_span = span + median_gap
     seconds_per_year = 365.25 * 24 * 60 * 60
     return max(total_span.total_seconds() / seconds_per_year, 1.0 / periods_per_year)
+
+
+def _compound_annual_return(total_return: float, elapsed_years: float) -> float:
+    if elapsed_years <= 0:
+        return 0.0
+    if total_return <= -1.0:
+        return -1.0
+    return float((1.0 + total_return) ** (1.0 / elapsed_years) - 1.0)
 
 
 def _is_full_calendar_year(

@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Changed
-- Validation `total_return` and trade-log `cum_return` now compound per-period `pnl`; annualized return keeps its existing simple cumulative semantics.
+- Validation `total_return`, trade-log `cum_return`, drawdown metrics, Calmar, and yearly PnL/loss-year accounting now compound per-period `pnl`; annualized return keeps its existing simple cumulative semantics.
 
 ### Removed
 - Removed generated HTML reporting commands and package dependencies.
