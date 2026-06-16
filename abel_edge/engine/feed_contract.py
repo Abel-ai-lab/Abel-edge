@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
+
 import pandas as pd
+
+
+MAX_DATA_DATE_ENV = "ABEL_EDGE_MAX_DATA_DATE"
+DATE_GUARD_MODE_ENV = "ABEL_EDGE_DATE_GUARD_MODE"
 
 
 class FeedContractError(ValueError):
@@ -17,7 +24,77 @@ class FeedAlignmentError(FeedContractError):
     """Raised when a series cannot be aligned safely to strategy dates."""
 
 
+class FeedDateGuardError(FeedContractError):
+    """Raised when guarded data access exceeds the configured max data date."""
+
+
 SUPPORTED_DATA_PROFILES = {"daily"}
+
+
+def guarded_max_data_date(environ: Mapping[str, str] | None = None) -> pd.Timestamp | None:
+    env = environ if environ is not None else os.environ
+    mode = str(env.get(DATE_GUARD_MODE_ENV) or "fail-closed").strip().lower()
+    if mode in {"", "off", "disabled", "disable", "false", "0"}:
+        return None
+    if mode != "fail-closed":
+        raise FeedDateGuardError(
+            f"Unsupported {DATE_GUARD_MODE_ENV}={mode!r}; supported modes are "
+            "'fail-closed' and 'off'."
+        )
+
+    raw = str(env.get(MAX_DATA_DATE_ENV) or "").strip()
+    if not raw:
+        return None
+    try:
+        cutoff = pd.to_datetime(raw, utc=True)
+    except (TypeError, ValueError) as exc:
+        raise FeedDateGuardError(f"{MAX_DATA_DATE_ENV} must be a valid date.") from exc
+    if pd.isna(cutoff):
+        raise FeedDateGuardError(f"{MAX_DATA_DATE_ENV} must be a valid date.")
+    return pd.Timestamp(cutoff).normalize()
+
+
+def apply_max_data_date_guard(
+    end,
+    *,
+    source: str,
+    environ: Mapping[str, str] | None = None,
+):
+    cutoff = guarded_max_data_date(environ)
+    if cutoff is None:
+        return end
+    if end is None:
+        return cutoff.date().isoformat()
+
+    requested_end = _guard_timestamp(end, name="requested end")
+    if requested_end > cutoff:
+        raise FeedDateGuardError(
+            f"date_guard_violation: {source} requested end {requested_end.date().isoformat()} "
+            f"after {MAX_DATA_DATE_ENV}={cutoff.date().isoformat()}."
+        )
+    return end
+
+
+def assert_frame_respects_max_data_date(
+    frame: pd.DataFrame,
+    *,
+    source: str,
+    timestamp_col: str = "timestamp",
+    environ: Mapping[str, str] | None = None,
+) -> None:
+    cutoff = guarded_max_data_date(environ)
+    if cutoff is None or frame.empty or timestamp_col not in frame.columns:
+        return
+    observed = pd.to_datetime(frame[timestamp_col], utc=True, errors="coerce")
+    if observed.isna().all():
+        return
+    max_observed = pd.Timestamp(observed.max()).normalize()
+    if max_observed > cutoff:
+        raise FeedDateGuardError(
+            f"polluted_cache: {source} observed data through "
+            f"{max_observed.date().isoformat()}, after {MAX_DATA_DATE_ENV}="
+            f"{cutoff.date().isoformat()}. Clear the affected cache or run in a clean workspace."
+        )
 
 
 def validate_data_profile(profile: str) -> str:
@@ -132,3 +209,13 @@ def align_series_to_dates(
             f"{name} could not be aligned to strategy dates without gaps."
         )
     return aligned
+
+
+def _guard_timestamp(value, *, name: str) -> pd.Timestamp:
+    try:
+        ts = pd.to_datetime(value, utc=True)
+    except (TypeError, ValueError) as exc:
+        raise FeedDateGuardError(f"{name} must be a valid date.") from exc
+    if pd.isna(ts):
+        raise FeedDateGuardError(f"{name} must be a valid date.")
+    return pd.Timestamp(ts).normalize()
