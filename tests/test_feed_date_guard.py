@@ -13,6 +13,7 @@ from abel_edge.engine.feed_contract import (
     assert_frame_respects_max_data_date,
     guarded_max_data_date,
 )
+from abel_edge.engine.feed_loader import load_feed_frame
 
 
 def test_guarded_max_data_date_is_disabled_without_cutoff():
@@ -69,3 +70,91 @@ def test_assert_frame_respects_max_data_date_can_be_disabled():
     frame = pd.DataFrame({"timestamp": ["2026-06-16T00:00:00Z"]})
 
     assert_frame_respects_max_data_date(frame, source="cached bars", environ=env)
+
+
+def test_load_feed_frame_detects_polluted_csv_cache_before_filtering(tmp_path, monkeypatch):
+    monkeypatch.setenv(MAX_DATA_DATE_ENV, "2026-06-15")
+    monkeypatch.setenv(DATE_GUARD_MODE_ENV, "fail-closed")
+    csv_path = tmp_path / "aapl.csv"
+    csv_path.write_text(
+        "timestamp,close\n"
+        "2026-06-15T00:00:00Z,100\n"
+        "2026-06-16T00:00:00Z,101\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(FeedDateGuardError, match="polluted_cache"):
+        load_feed_frame(
+            {
+                "name": "primary",
+                "kind": "bars",
+                "adapter": "csv",
+                "path": str(csv_path),
+                "symbol": "AAPL",
+            },
+            end="2026-06-15",
+        )
+
+
+def test_load_feed_frame_closes_open_ended_abel_request(tmp_path, monkeypatch):
+    monkeypatch.setenv(MAX_DATA_DATE_ENV, "2026-06-15")
+    monkeypatch.setenv(DATE_GUARD_MODE_ENV, "fail-closed")
+    calls = []
+
+    def fake_fetch_bars(
+        *,
+        symbols,
+        start=None,
+        end=None,
+        timeframe="1d",
+        limit=None,
+        fields=None,
+        config=None,
+    ):
+        calls.append({"symbols": symbols, "start": start, "end": end, "limit": limit})
+        return pd.DataFrame(
+            {
+                "timestamp": ["2026-06-15T00:00:00Z"],
+                "symbol": ["AAPL"],
+                "open": [99.0],
+                "high": [101.0],
+                "low": [98.0],
+                "close": [100.0],
+                "volume": [1000.0],
+            }
+        )
+
+    import abel_edge.plugins.abel.prices as prices_module
+
+    monkeypatch.setattr(prices_module, "fetch_bars", fake_fetch_bars)
+    load_feed_frame(
+        {
+            "name": "primary",
+            "kind": "bars",
+            "adapter": "abel",
+            "symbol": "AAPL",
+            "cache_root": str(tmp_path),
+        }
+    )
+
+    assert calls[0]["end"] == "2026-06-15"
+
+
+def test_fetch_bars_wrapper_applies_guarded_end(monkeypatch):
+    monkeypatch.setenv("ABEL_API_KEY", "abel_test")
+    monkeypatch.setenv(MAX_DATA_DATE_ENV, "2026-06-15")
+    monkeypatch.setenv(DATE_GUARD_MODE_ENV, "fail-closed")
+    observed = {}
+
+    def fake_fetch_bars(self, **kwargs):
+        observed["end"] = kwargs["end"]
+        return [{"timestamp": "2026-06-15T00:00:00Z", "symbol": "AAPL", "close": 100.0}]
+
+    from abel_edge.plugins.abel.client import AbelClient
+    from abel_edge.plugins.abel import prices as prices_module
+
+    monkeypatch.setattr(AbelClient, "fetch_bars", fake_fetch_bars)
+
+    prices_module.fetch_bars(symbols=["AAPL"])
+
+    assert observed["end"] == "2026-06-15"
