@@ -33,7 +33,8 @@ def generate_positive_daily() -> None:
     dates = _bdays("2020-01-02", n)
 
     # Small positive pnl each day: mean ~0.003, std ~0.0002 → always positive
-    # With n=110: total_return ≈ sum(pnl) ≈ 0.33 → passes 5% annualized return_floor.
+    # With n=110: total_return compounds positive pnl and easily passes the
+    # 5% annualized return_floor.
     pnl = 0.003 + rng.randn(n) * 0.0002
     pnl = np.abs(pnl)  # ensure strictly positive
 
@@ -149,9 +150,9 @@ def generate_ic_unsupported_no_position() -> None:
     n = 210
     dates = _bdays("2020-01-02", n)
 
-    # We need total_return ~0.041.
-    # total_return = sum(pnl_i)
-    # Target sum ≈ 0.041, so mean pnl ≈ 0.041/210 ≈ 0.000195
+    # We need annual_return just below 5%. Annual return intentionally remains
+    # simple-annualized, while total_return compounds these same pnl rows.
+    # Target simple sum ≈ 0.041, so mean pnl ≈ 0.041/210 ≈ 0.000195
     # Need mix of positive and negative (omega must not be applicable → wait, test says omega_applicable is False)
     # Actually test says omega_applicable is False. Let's check: omega_applicable = len(losses) > 0 and loss_mass > 1e-12
     # If omega_applicable is False, it means either no losses or loss_mass is negligible.
@@ -162,16 +163,16 @@ def generate_ic_unsupported_no_position() -> None:
     # So we need: loss_years_applicable=False, omega_applicable=False, position_ic_applicable=False
     # omega_applicable=False means no negative pnl (all positive or zero)
     # But then only 1 failure (return_floor), giving 4/5. Perfect.
-    # All-positive pnl with total_return ~0.041
+    # All-positive pnl with simple annualized return just below the floor.
 
-    # target: sum(pnl_i) = 0.041
+    # target: simple sum(pnl_i) = 0.041
     # Use small positive daily returns
     target_total = 1.041
     mean_daily = (target_total - 1.0) / n
     pnl = mean_daily + rng.randn(n) * 0.00005
     pnl = np.abs(pnl)  # ensure all positive → omega_applicable=False
 
-    # Adjust to hit exact simple total_return.
+    # Adjust to hit the intended simple annualized-return numerator.
     scale = (target_total - 1.0) / np.sum(pnl)
     pnl_scaled = pnl * scale
 

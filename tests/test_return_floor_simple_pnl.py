@@ -50,6 +50,42 @@ def test_validation_max_drawdown_counts_first_row_loss():
     assert metrics["max_dd"] == pytest.approx(-0.20)
 
 
+def test_validation_max_drawdown_uses_compound_equity_curve():
+    dates = pd.bdate_range("2020-01-01", periods=30)
+    pnl = np.array([0.10, -0.10] + [0.0] * 28)
+    metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
+    assert metrics["max_dd"] == pytest.approx(-0.10)
+
+
+def test_validation_yearly_pnl_uses_compound_return():
+    dates = pd.bdate_range("2020-01-01", periods=30)
+    pnl = np.array([0.10, 0.10] + [0.0] * 28)
+    metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
+    assert metrics["yearly_pnl"][2020] == pytest.approx(0.21)
+
+
+def test_validation_loss_years_use_compound_yearly_return():
+    dates = pd.bdate_range("2020-01-02", "2020-12-31")
+    pnl = np.array([1.00, -0.60] + [0.0] * (len(dates) - 2))
+    metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
+    assert metrics["loss_years_applicable"] is True
+    assert metrics["loss_years"] == 1
+
+
+def test_validation_calmar_uses_compound_annualized_return():
+    dates = pd.bdate_range("2020-01-01", periods=252)
+    pnl = np.array([0.10, -0.10] + [0.0] * 250)
+    metrics = compute_all_metrics(pnl, dates, profile=load_profile("equity_daily"))
+    expected_compound_annual_return = (1.0 + metrics["total_return"]) ** (
+        1.0 / metrics["elapsed_years"]
+    ) - 1.0
+    assert metrics["annual_return"] == pytest.approx(0.0)
+    assert metrics["max_dd"] == pytest.approx(-0.10)
+    assert metrics["calmar"] == pytest.approx(
+        expected_compound_annual_return / abs(metrics["max_dd"])
+    )
+
+
 def test_daily_return_floor_uses_annualized_simple_return():
     passed, failures = validate(_passing_metrics(), load_profile("equity_daily"))
     assert passed is True

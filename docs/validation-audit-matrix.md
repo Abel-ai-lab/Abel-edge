@@ -24,6 +24,7 @@ The engine and validation pipeline relies on this bar-by-bar timing relationship
 price[t-1], price[t] -> asset_return[t]
 information through t-1 -> position[t]
 position[t] * asset_return[t] -> pnl[t]
+prod(1 + pnl[:t]) -> validation equity[t]
 prod(1 + pnl[:t]) - 1 -> cum_return[t]
 prod(1 + pnl[:t]) - 1 -> validation total_return[t]
 ```
@@ -35,6 +36,10 @@ This implies:
 - `pnl[t]` is the realized payoff of that pre-chosen exposure over that interval
 - `cum_return[t]` and validation `total_return` compound the same per-period
   `pnl` observations
+- validation drawdown, yearly PnL, and loss-year accounting use the same
+  compounded `pnl` return path; `annual_return` remains simple annualized PnL
+- `calmar` uses compounded annual return over compounded max drawdown, while
+  the exposed `annual_return` field remains the simple annualized return-floor input
 
 The live contract therefore forbids any decision path that uses `price[t]` or
 `asset_return[t]` when constructing `position[t]`.
