@@ -16,7 +16,11 @@ from abel_edge.engine.cache import (
     load_cached_metadata,
     write_cached_bars,
 )
-from abel_edge.engine.feed_contract import FeedContractError
+from abel_edge.engine.feed_contract import (
+    FeedContractError,
+    apply_max_data_date_guard,
+    assert_frame_respects_max_data_date,
+)
 
 ABEL_BAR_FIELDS = ["open", "high", "low", "close", "volume"]
 ABEL_BAR_CACHE_COLUMNS = ["timestamp", "symbol", *ABEL_BAR_FIELDS]
@@ -96,6 +100,10 @@ class CSVDataFeedAdapter:
     assume_utc_for_naive = True
 
     def load(self, request: FeedLoadRequest) -> pd.DataFrame:
+        apply_max_data_date_guard(
+            request.end,
+            source=f"feed '{request.feed_name}' adapter request",
+        )
         path_value = request.options.get("path")
         if not path_value:
             raise AdapterRegistryError(
@@ -104,9 +112,13 @@ class CSVDataFeedAdapter:
         path = Path(path_value)
         df = pd.read_csv(path)
         if request.kind == "bars":
-            return _csv_bars_frame(df, request)
+            frame = _csv_bars_frame(df, request)
+            assert_frame_respects_max_data_date(frame, source=f"feed '{request.feed_name}'")
+            return frame
         if request.kind == "series":
-            return _csv_series_frame(df, request)
+            frame = _csv_series_frame(df, request)
+            assert_frame_respects_max_data_date(frame, source=f"feed '{request.feed_name}'")
+            return frame
         raise AdapterRegistryError(
             f"Feed '{request.feed_name}' declares unsupported kind '{request.kind}'."
         )
@@ -121,6 +133,10 @@ class AbelDataFeedAdapter:
             raise AdapterRegistryError(
                 f"Feed '{request.feed_name}' uses adapter='abel' but is missing 'symbol'."
             )
+        guarded_end = apply_max_data_date_guard(
+            request.end,
+            source=f"feed '{request.feed_name}' adapter request",
+        )
         try:
             credentials_module = importlib.import_module("abel_edge.plugins.abel.credentials")
             prices_module = importlib.import_module("abel_edge.plugins.abel.prices")
@@ -151,7 +167,7 @@ class AbelDataFeedAdapter:
         if cache_covers_request(
             cached_metadata,
             start=request.start,
-            end=request.end,
+            end=guarded_end,
             limit=request.limit,
             required_columns=ABEL_BAR_CACHE_COLUMNS if request.kind == "bars" else None,
             max_cache_age_seconds=_max_cache_age_seconds(request.options),
@@ -172,7 +188,7 @@ class AbelDataFeedAdapter:
                 bars = fetch_bars(
                     symbols=[symbol],
                     start=request.start,
-                    end=request.end,
+                    end=guarded_end,
                     timeframe=request.timeframe or "1d",
                     limit=effective_limit,
                     fields=ABEL_BAR_FIELDS if request.kind == "bars" else fields,
@@ -182,11 +198,12 @@ class AbelDataFeedAdapter:
                     entry,
                     bars,
                     requested_start=request.start,
-                    requested_end=request.end,
+                    requested_end=guarded_end,
                     requested_limit=request.limit,
                 )
             except missing_api_key_error as exc:
                 raise AdapterRegistryError(str(exc)) from exc
+        assert_frame_respects_max_data_date(bars, source=f"feed '{request.feed_name}'")
 
         if request.kind == "bars":
             return bars
