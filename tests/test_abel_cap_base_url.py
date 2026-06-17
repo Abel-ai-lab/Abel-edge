@@ -37,9 +37,11 @@ def test_fetch_bars_wrapper_uses_env_path_for_cap_base_url(monkeypatch, tmp_path
     monkeypatch.setattr(AbelClient, "fetch_bars", fake_fetch_bars)
     from abel_edge.plugins.abel import prices as prices_module
 
-    prices_module.fetch_bars(symbols=["ETHUSD"], config={"env_path": str(env_path)})
+    frame = prices_module.fetch_bars(symbols=["ETHUSD"], fields=["close"], config={"env_path": str(env_path)})
 
     assert observed["cap_base_url"] == CUSTOM_CAP_URL
+    assert frame.empty
+    assert list(frame.columns) == ["timestamp", "symbol", "close"]
 
 
 def test_discover_wrapper_uses_env_path_for_cap_base_url(monkeypatch, tmp_path):
