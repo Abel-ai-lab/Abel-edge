@@ -275,6 +275,44 @@ def test_abel_bars_adapter_refreshes_close_only_cache_with_full_ohlcv(tmp_path, 
     assert metadata["requested_range"]["limit"] == 10
 
 
+def test_abel_bars_adapter_handles_empty_market_payload_with_bar_schema(tmp_path, monkeypatch):
+    def fake_fetch_bars(*, symbols, start=None, end=None, timeframe="1d", limit=None, fields=None, config=None):
+        return pd.DataFrame(columns=["timestamp", "symbol", "open", "high", "low", "close", "volume"])
+
+    import abel_edge.plugins.abel.prices as prices_module
+
+    monkeypatch.setattr(prices_module, "fetch_bars", fake_fetch_bars)
+    request = FeedLoadRequest(
+        adapter="abel",
+        kind="bars",
+        symbol="AAPL",
+        field=None,
+        timeframe="1d",
+        start="2020-01-01",
+        end="2020-02-01",
+        limit=10,
+        profile="daily",
+        options={"cache_root": str(tmp_path)},
+        strategy_id=None,
+        feed_name="primary",
+    )
+    frame = AbelDataFeedAdapter().load(request)
+    entry = cache_entry_for_request(
+        adapter="abel",
+        symbol="AAPL",
+        timeframe="1d",
+        profile="daily",
+        options=request.options,
+        cache_root=tmp_path,
+    )
+    metadata = load_cached_metadata(entry)
+
+    assert frame.empty
+    assert list(frame.columns) == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+    assert metadata["row_count"] == 0
+    assert metadata["columns"] == ["timestamp", "symbol", "open", "high", "low", "close", "volume"]
+
+
 def test_abel_bars_adapter_refreshes_stale_cache_confirmation(tmp_path, monkeypatch):
     calls = []
 

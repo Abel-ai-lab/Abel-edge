@@ -11,6 +11,8 @@ from abel_edge.engine.feed_contract import (
 from abel_edge.plugins.abel.client import AbelClient
 from abel_edge.plugins.abel.credentials import MissingAbelApiKeyError, require_api_key
 
+DEFAULT_BAR_FIELDS = ("open", "high", "low", "close", "volume")
+
 
 def fetch_bars(
     *,
@@ -42,5 +44,17 @@ def fetch_bars(
         api_key=api_key,
     )
     frame = pd.DataFrame(payload)
+    if frame.empty and "timestamp" not in frame.columns:
+        frame = empty_bar_frame(fields=fields)
     assert_frame_respects_max_data_date(frame, source="Abel price fetch")
     return frame
+
+
+def empty_bar_frame(*, fields: list[str] | None = None) -> pd.DataFrame:
+    columns = ["timestamp", "symbol"]
+    for field in fields or list(DEFAULT_BAR_FIELDS):
+        if field not in columns:
+            columns.append(str(field))
+    if "close" not in columns:
+        columns.append("close")
+    return pd.DataFrame(columns=columns)
