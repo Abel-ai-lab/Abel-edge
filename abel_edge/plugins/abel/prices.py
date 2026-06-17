@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import pandas as pd
 
+from abel_edge.engine.feed_contract import (
+    apply_max_data_date_guard,
+    assert_frame_respects_max_data_date,
+)
 from abel_edge.plugins.abel.client import AbelClient
 from abel_edge.plugins.abel.credentials import MissingAbelApiKeyError, require_api_key
 
@@ -26,14 +30,17 @@ def fetch_bars(
         raise MissingAbelApiKeyError(
             f"{e} Or set price_data.adapter to 'csv' for local bar data."
         ) from e
+    guarded_end = apply_max_data_date_guard(end, source="Abel price fetch")
     abel = client or AbelClient(env_path=env_path)
     payload = abel.fetch_bars(
         symbols=symbols,
         start=start,
-        end=end,
+        end=guarded_end,
         timeframe=timeframe,
         limit=limit,
         fields=fields,
         api_key=api_key,
     )
-    return pd.DataFrame(payload)
+    frame = pd.DataFrame(payload)
+    assert_frame_respects_max_data_date(frame, source="Abel price fetch")
+    return frame

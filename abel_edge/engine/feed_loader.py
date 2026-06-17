@@ -7,7 +7,12 @@ from typing import Any
 import pandas as pd
 
 from abel_edge.engine.adapter_registry import FeedLoadRequest, resolve_adapter
-from abel_edge.engine.feed_contract import FeedContractError, normalize_series_frame
+from abel_edge.engine.feed_contract import (
+    FeedContractError,
+    apply_max_data_date_guard,
+    assert_frame_respects_max_data_date,
+    normalize_series_frame,
+)
 from abel_edge.engine.price_data import normalize_bars
 
 _REQUEST_RESERVED_KEYS = {
@@ -55,6 +60,13 @@ def load_feed_frame(
 
     adapter = resolve_adapter(adapter_name)
     request_fields = _request_fields(kind, fields)
+    if end is not None:
+        apply_max_data_date_guard(end, source=f"feed '{feed_name}' visible window")
+    requested_end = end if request_end is None else request_end
+    guarded_request_end = apply_max_data_date_guard(
+        requested_end,
+        source=f"feed '{feed_name}' adapter request",
+    )
     request = FeedLoadRequest(
         adapter=adapter_name,
         kind=kind,
@@ -62,7 +74,7 @@ def load_feed_frame(
         field=feed_cfg.get("field"),
         timeframe=timeframe or feed_cfg.get("timeframe"),
         start=start,
-        end=end if request_end is None else request_end,
+        end=guarded_request_end,
         limit=limit if request_limit is None else request_limit,
         profile=str(feed_cfg.get("profile") or "daily"),
         options=_request_options(feed_cfg, fields=request_fields),
@@ -71,6 +83,7 @@ def load_feed_frame(
     )
     raw = adapter.load(request)
     frame = _normalize_loaded_frame(feed_cfg, raw, assume_utc_for_naive=adapter.assume_utc_for_naive)
+    assert_frame_respects_max_data_date(frame, source=f"feed '{feed_name}'")
     return _apply_time_filters(frame, start=start, end=end, limit=limit)
 
 

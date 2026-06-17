@@ -78,12 +78,14 @@ def run_preflight(
     workdir: Path | str | None = None,
     *,
     start: str | None = None,
+    end: str | None = None,
     context_json: Path | None = None,
 ) -> dict:
     try:
         prepared = _prepare_engine_runtime(
             workdir=workdir,
             start=start,
+            end=end,
             context_json=context_json,
         )
     except _PreparedRuntimeError as exc:
@@ -102,7 +104,7 @@ def run_preflight(
         "metrics": {},
         "triangle": {"ratio": 0, "rank": 0, "shape": 0},
         "K": prepared["dsr_trials"],
-        "requested_window": {"start": start, "end": None},
+        "requested_window": {"start": start, "end": end},
         "effective_window": _effective_window(
             pd.DataFrame({"date": prepared["compiled"].decision_index})
         ),
@@ -123,6 +125,7 @@ def run_evaluation(
     workdir: Path | str | None = None,
     *,
     start: str | None = None,
+    end: str | None = None,
     context_json: Path | None = None,
     output_csv: Path | None = None,
 ) -> dict:
@@ -130,6 +133,7 @@ def run_evaluation(
         prepared = _prepare_engine_runtime(
             workdir=workdir,
             start=start,
+            end=end,
             context_json=context_json,
         )
     except _PreparedRuntimeError as exc:
@@ -153,7 +157,7 @@ def run_evaluation(
             signal=semantic["signal"],
         )
         result["K"] = prepared["dsr_trials"]
-        result["requested_window"] = {"start": start, "end": None}
+        result["requested_window"] = {"start": start, "end": end}
         result["effective_window"] = _effective_window(pd.DataFrame({"date": dates}))
         result["context_path"] = str(context_json.resolve()) if context_json is not None else None
         result["K_detail"] = _build_k_detail(prepared)
@@ -195,7 +199,7 @@ def run_evaluation(
             runtime_stage="validation",
         )
         result["K"] = prepared["dsr_trials"]
-        result["requested_window"] = {"start": start, "end": None}
+        result["requested_window"] = {"start": start, "end": end}
         result["effective_window"] = _effective_window(frame)
         result["context_path"] = str(context_json.resolve()) if context_json is not None else None
         result["K_detail"] = _build_k_detail(prepared)
@@ -204,7 +208,7 @@ def run_evaluation(
 
     csv_path.unlink(missing_ok=True)
     result["K"] = prepared["dsr_trials"]
-    result["requested_window"] = {"start": start, "end": None}
+    result["requested_window"] = {"start": start, "end": end}
     result["effective_window"] = _effective_window(frame)
     result["context_path"] = str(context_json.resolve()) if context_json is not None else None
     result["implementation_contract"] = compiled.output_mode
@@ -235,6 +239,7 @@ def render_validation_markdown(result: dict) -> str:
 - implementation_contract: `{result.get("implementation_contract", "unknown")}`
 - K: `{result.get("K", "?")}`
 - requested_start: `{requested_window.get("start", "none")}`
+- requested_end: `{requested_window.get("end", "none")}`
 - effective_window: `{effective_window.get("start", "unknown")} -> {effective_window.get("end", "unknown")}`
 - active_days: `{result.get("active_days", 0)} / {result.get("total_days", 0)}`
 
@@ -298,6 +303,7 @@ def _prepare_engine_runtime(
     *,
     workdir: Path | str | None,
     start: str | None,
+    end: str | None,
     context_json: Path | None,
 ) -> dict:
     workspace = Path(workdir or ".")
@@ -317,6 +323,7 @@ def _prepare_engine_runtime(
         research_context = _build_research_context(
             workspace=workspace,
             start=start,
+            end=end,
             context_json=context_json,
         )
     except ValueError as exc:
@@ -331,7 +338,7 @@ def _prepare_engine_runtime(
     try:
         engine_cls = load_engine_from_file(engine_path)
         engine = engine_cls(context=research_context)
-        compiled = engine.compute_runtime_output(start=start)
+        compiled = engine.compute_runtime_output(start=start, end=end)
     except (DecisionContractError, FeedContractError, SignalContractError, ImportError, TypeError, ValueError) as exc:
         raise _PreparedRuntimeError(
             _error(
@@ -628,6 +635,7 @@ def _build_research_context(
     *,
     workspace: Path,
     start: str | None,
+    end: str | None,
     context_json: Path | None,
 ) -> dict:
     injected: dict[str, object] = {}
@@ -643,7 +651,7 @@ def _build_research_context(
     research_context = dict(injected)
     research_context["_research"] = {
         "workdir": str(workspace.resolve()),
-        "requested_window": {"start": start, "end": None},
+        "requested_window": {"start": start, "end": end},
     }
     data_contract = {"profile": "daily"}
     injected_data_contract = research_context.get("_data_contract")
@@ -1113,6 +1121,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate engine-backed research strategy")
     parser.add_argument("--workdir", default=".", help="Directory containing engine.py")
     parser.add_argument("--start", default=None, help="Optional backtest start date")
+    parser.add_argument("--end", default=None, help="Optional backtest end date")
     parser.add_argument("--context-json", default=None, help="Optional JSON context payload")
     parser.add_argument("--output-json", default=None, help="Optional path for raw JSON result")
     parser.add_argument("--output-md", default=None, help="Optional path for raw markdown report")
@@ -1126,6 +1135,7 @@ def main() -> None:
     result = run_evaluation(
         args.workdir,
         start=args.start,
+        end=args.end,
         context_json=Path(args.context_json) if args.context_json else None,
         output_csv=Path(args.output_csv) if args.output_csv else None,
     )
