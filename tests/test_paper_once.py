@@ -152,6 +152,57 @@ def test_paper_history_fixed_lookback_limits_compiled_recompute(tmp_path):
             sys.path.pop(0)
 
 
+def test_paper_history_fixed_lookback_expands_compiled_recompute_to_cover_cursor(tmp_path):
+    runner = CliRunner()
+    with runner.isolated_filesystem(temp_dir=tmp_path):
+        root = Path.cwd()
+        write_project(
+            root,
+            package_name="decision_profile_catchup",
+            engine_code=DECISION_ENGINE_CODE,
+            profile_yaml="""
+      history:
+        boundary: fixed_lookback
+        lookbackBars: 1
+        feeds:
+          - ETHUSD
+""".rstrip(),
+        )
+        sys.path.insert(0, str(root))
+
+        try:
+            write_bootstrap_log(
+                "data/trade_log_decision_profile_catchup.csv",
+                dates=["2026-01-02T00:00:00Z"],
+                closes=[101.0],
+                positions=[0.18],
+                next_positions=[0.18],
+            )
+            cfg = load_config()
+
+            result = paper_run_one(
+                cfg["strategies"][0],
+                settings=cfg.get("settings"),
+                as_of="2026-01-25T00:00:00Z",
+            )
+
+            engine_module = importlib.import_module("strategies.decision_profile_catchup.engine")
+            assert engine_module.CountingDecisionEngine.calls == [
+                ("2026-01-01", "2026-01-25", 25)
+            ]
+            assert result["execution_mode"] == "compiled_output"
+            assert result["paper_history_boundary"]["boundary"] == "fixed_lookback"
+            assert result["n_rows"] == 23
+            paper_df = read_trade_log("data/paper_log_decision_profile_catchup.csv")
+            assert list(paper_df["date"].dt.strftime("%Y-%m-%d")) == [
+                f"2026-01-{day:02d}" for day in range(3, 26)
+            ]
+            assert float(paper_df["next_position"].iloc[0]) == 0.50
+            assert float(paper_df["next_position"].iloc[-1]) == 6.00
+        finally:
+            sys.path.pop(0)
+
+
 def test_paper_history_origin_anchored_limits_compiled_recompute(tmp_path):
     runner = CliRunner()
     with runner.isolated_filesystem(temp_dir=tmp_path):
