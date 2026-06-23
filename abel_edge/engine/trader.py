@@ -182,22 +182,62 @@ def _paper_window_with_cache_horizon(paper_window: dict, *, as_of) -> dict:
     return updated
 
 
-def _update_paper_window_after_target_probe(strategy_cfg: dict, dates, paper_window: dict) -> None:
-    date_index = pd.DatetimeIndex(pd.to_datetime(dates, utc=True))
-    if len(date_index) == 0:
-        return
-    if paper_window.get("cache_end") is None:
-        paper_window["cache_end"] = date_index[-1]
-    if paper_window.get("boundary") != "fixed_lookback":
-        return
+def _paper_cursor_target_data(strategy_cfg: dict, engine_cls, *, as_of=None) -> dict:
+    if _resolve_paper_data_window(strategy_cfg).get("boundary") != "fixed_lookback":
+        return {}
     try:
         _, last_row = resolve_paper_state(strategy_cfg)
     except (FileNotFoundError, ValueError):
-        return
+        return {}
     last_logged_date = pd.to_datetime(last_row["date"], utc=True)
-    catchup_rows = int((date_index > last_logged_date).sum())
+    if as_of is not None and pd.to_datetime(as_of, utc=True) <= last_logged_date:
+        return {}
+    probe_engine = engine_cls(context=strategy_cfg)
+    try:
+        ctx = probe_engine.paper_bootstrap_context(start=last_logged_date, end=as_of)
+        close = ctx.target.series("close").sort_index()
+    except (DecisionContractError, FeedContractError, SignalContractError, TypeError, ValueError) as exc:
+        raise click.ClickException(f"{probe_engine.__class__.__name__}: {exc}") from exc
+    dates = pd.DatetimeIndex(pd.to_datetime(close.index, utc=True))
+    prices = close.to_numpy(dtype=float)
+    catchup_rows = int((dates > last_logged_date).sum())
+    rows_from_cursor = int((dates >= last_logged_date).sum())
+    return {
+        "catchup_rows": catchup_rows,
+        "rows_from_cursor": rows_from_cursor,
+        "cache_end": dates[-1] if len(dates) else None,
+        "dates": dates,
+        "prices": prices,
+    }
+
+
+def _update_paper_window_for_cursor_catchup(paper_window: dict, cursor_data: dict) -> None:
+    if not cursor_data:
+        return
+    cache_end = cursor_data.get("cache_end")
+    if paper_window.get("cache_end") is None:
+        paper_window["cache_end"] = cache_end
+    if paper_window.get("boundary") != "fixed_lookback":
+        return
+    catchup_rows = int(cursor_data.get("catchup_rows") or 0)
+    paper_window["_cursor_rows_from_state"] = int(cursor_data.get("rows_from_cursor") or 0)
     if catchup_rows > 0:
-        paper_window["cache_extra_bars"] = catchup_rows
+        paper_window["cache_extra_bars"] = max(
+            int(paper_window.get("cache_extra_bars") or 0),
+            catchup_rows,
+        )
+
+
+def _expand_compiled_fixed_lookback_window_for_cursor(paper_window: dict) -> None:
+    if paper_window.get("boundary") != "fixed_lookback":
+        return
+    catchup_rows = int(paper_window.get("cache_extra_bars") or 0)
+    if catchup_rows <= 0 or paper_window.get("limit") is None:
+        return
+    base_limit = int(paper_window["limit"])
+    if int(paper_window.get("_cursor_rows_from_state") or 0) <= base_limit:
+        return
+    paper_window["limit"] = base_limit + catchup_rows
 
 
 def _paper_window_audit(paper_window: dict) -> dict:
@@ -254,6 +294,10 @@ def paper_run_one(
         _resolve_paper_data_window(strategy_cfg),
         as_of=as_of,
     )
+    cursor_target_data = _paper_cursor_target_data(strategy_cfg, engine_cls, as_of=as_of)
+    _update_paper_window_for_cursor_catchup(paper_window, cursor_target_data)
+    if engine_cls.get_paper_signal is StrategyEngine.get_paper_signal:
+        _expand_compiled_fixed_lookback_window_for_cursor(paper_window)
     runtime_cfg = _strategy_cfg_with_paper_window(strategy_cfg, paper_window)
     engine = engine_cls(context=runtime_cfg)
 
@@ -264,12 +308,11 @@ def paper_run_one(
         def signal_lookup(ts):
             return _ensure_paper_signal(engine, as_of=ts)
 
-        dates, prices = _target_dates_and_prices(engine, as_of=as_of)
-        _update_paper_window_after_target_probe(
-            strategy_cfg,
-            dates,
-            runtime_cfg["_paper_data_window"],
-        )
+        if cursor_target_data:
+            dates = cursor_target_data["dates"]
+            prices = cursor_target_data["prices"]
+        else:
+            dates, prices = _target_dates_and_prices(engine, as_of=as_of)
         positions = np.zeros(len(dates), dtype=float)
         next_positions = np.zeros(len(dates), dtype=float)
     else:
