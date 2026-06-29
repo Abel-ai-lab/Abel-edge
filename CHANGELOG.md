@@ -2,12 +2,20 @@
 
 ## [Unreleased]
 
+## [0.8.10] - 2026-06-29
+
 ### Changed
 - Validation `total_return`, trade-log `cum_return`, drawdown metrics, Calmar, and yearly PnL/loss-year accounting now compound per-period `pnl`; annualized return keeps its existing simple cumulative semantics.
+- Evaluation and feed loading now support bounded end windows for guarded research runs.
+- Abel, CSV, and feed-loader paths now honor `ABEL_EDGE_MAX_DATA_DATE` / `ABEL_EDGE_DATE_GUARD_MODE` and fail closed on requests or cached data beyond the configured data horizon.
 
 ### Removed
 - Removed generated HTML reporting commands and package dependencies.
 - Removed the conservative daily validation profile and its profile-specific metrics.
+
+### Fixed
+- Compiled strategy paper catch-up now uses cursor-bounded windows so daily paper execution does not recompute from the wrong window.
+- Empty Abel bar payloads now normalize to a stable empty OHLCV frame shape instead of a columnless frame.
 
 ## [0.8.6] - 2026-05-19
 
