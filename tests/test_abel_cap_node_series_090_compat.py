@@ -98,6 +98,36 @@ def test_old_spec_uses_explicit_runtime_end_instead_of_prepared_end(monkeypatch)
     )
 
 
+def test_old_source_window_options_do_not_reach_live_materialization(monkeypatch):
+    spec = _old_spec()
+    calls = []
+
+    class CanonicalModule:
+        @staticmethod
+        def load_cap_node_series(**kwargs):
+            calls.append(kwargs)
+            frame = pd.DataFrame([PREPARED_ROW]).drop(columns=["node_id"])
+            frame.attrs["source_receipt_sha256"] = cap_node_series_receipt(
+                [PREPARED_ROW],
+                node_id=NODE_ID,
+            )
+            frame.attrs["series_spec_sha256"] = spec.sha256
+            return frame
+
+    real_import = importlib.import_module
+
+    def fake_import(name):
+        if name == "abel_edge.plugins.abel.cap_node_series":
+            return CanonicalModule()
+        return real_import(name)
+
+    monkeypatch.setattr(importlib, "import_module", fake_import)
+
+    load_feed_frame(_old_feed(spec), end="2026-06-30")
+
+    assert calls[0]["config"] == {"env_path": ".env"}
+
+
 def test_old_spec_open_ended_requests_do_not_reuse_a_snapshot(tmp_path, monkeypatch):
     calls = []
 

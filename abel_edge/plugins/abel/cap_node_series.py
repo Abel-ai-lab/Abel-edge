@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from datetime import date
+from datetime import date, datetime
+from numbers import Integral, Number
 from typing import Any, Callable, Mapping
 
 import pandas as pd
@@ -96,6 +97,7 @@ def prepare_cap_node_series_spec(
 ) -> PointInTimeSeriesSpec:
     """Probe one live CAP scalar series and record its response receipt."""
 
+    _validate_runtime_window(start=start, end=end, limit=limit)
     rows = (fetcher or fetch_node_series)(
         node_id=node_id,
         start=None,
@@ -157,7 +159,7 @@ def load_cap_node_series(
             "CAP scalar-node materialization requires source.request.node_id "
             "to match series_spec.series_id."
         )
-    _validate_runtime_window(start=start, end=end)
+    _validate_runtime_window(start=start, end=end, limit=limit)
     return materialize_cap_node_series(
         series_spec=series_spec,
         node_id=node_id,
@@ -259,11 +261,15 @@ def materialize_cap_node_series(
     )
 
 
-def _validate_runtime_window(*, start, end) -> None:
-    start_date = _required_date(start, label="start") if start is not None else None
-    end_date = _required_date(end, label="end") if end is not None else None
-    if start_date is not None and end_date is not None and start_date > end_date:
+def _validate_runtime_window(*, start, end, limit: int | None) -> None:
+    start_time = _timestamp_bound(start, label="start") if start is not None else None
+    end_time = _timestamp_bound(end, label="end", inclusive_date=True) if end is not None else None
+    if start_time is not None and end_time is not None and start_time > end_time:
         raise CanonicalNodeDataError("Canonical visible start must not exceed end.")
+    if limit is not None and (
+        isinstance(limit, bool) or not isinstance(limit, Integral) or limit <= 0
+    ):
+        raise CanonicalNodeDataError("Canonical visible limit must be positive.")
 
 
 def _filter_visible_frame(
@@ -280,12 +286,12 @@ def _filter_visible_frame(
         )
     visible = frame
     if start is not None:
-        start_date = _required_date(start, label="start")
-        visible = visible[timestamps.dt.date >= start_date]
+        start_time = _timestamp_bound(start, label="start")
+        visible = visible[timestamps >= start_time]
         timestamps = timestamps.loc[visible.index]
     if end is not None:
-        end_date = _required_date(end, label="end")
-        visible = visible[timestamps.dt.date <= end_date]
+        end_time = _timestamp_bound(end, label="end", inclusive_date=True)
+        visible = visible[timestamps <= end_time]
     visible = visible.copy()
     if limit is not None:
         visible = visible.tail(int(limit)).copy()
@@ -319,10 +325,44 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _required_date(value: Any, *, label: str) -> date:
-    try:
-        return date.fromisoformat(str(value)[:10])
-    except ValueError as exc:
+def _timestamp_bound(
+    value: Any,
+    *,
+    label: str,
+    inclusive_date: bool = False,
+) -> pd.Timestamp:
+    if isinstance(value, Number):
         raise CanonicalNodeDataError(
-            f"Canonical source {label} must be an ISO date."
+            f"Canonical visible {label} must be an ISO date or timestamp."
+        )
+    try:
+        timestamp = pd.Timestamp(value)
+    except (TypeError, ValueError) as exc:
+        raise CanonicalNodeDataError(
+            f"Canonical visible {label} must be an ISO date or timestamp."
         ) from exc
+    if pd.isna(timestamp):
+        raise CanonicalNodeDataError(
+            f"Canonical visible {label} must be an ISO date or timestamp."
+        )
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize("UTC")
+    else:
+        timestamp = timestamp.tz_convert("UTC")
+    if inclusive_date and _is_date_only(value):
+        timestamp += pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
+    return timestamp
+
+
+def _is_date_only(value: Any) -> bool:
+    if isinstance(value, datetime):
+        return False
+    if isinstance(value, date):
+        return True
+    if not isinstance(value, str):
+        return False
+    try:
+        date.fromisoformat(value.strip())
+    except ValueError:
+        return False
+    return True

@@ -174,30 +174,26 @@ class AbelDataFeedAdapter:
                     "Abel canonical-node data support is unavailable. "
                     "See: abel_edge/plugins/AGENTS.md"
                 ) from exc
-            source_identity = credentials_module.resolve_cap_base_url(
-                env_path=request.options.get("env_path", ".env")
-            )
             # An open-ended live request is never complete, so it must not be
             # satisfied by or published as an indefinitely reusable snapshot.
             cache_root = request.options.get("cache_root") if guarded_end is not None else None
             entry = None
             if cache_root:
+                source_identity = credentials_module.resolve_cap_base_url(
+                    env_path=request.options.get("env_path", ".env")
+                )
                 entry = point_in_time_cache_entry(
                     adapter=request.adapter,
-                    series_spec_sha256=_point_in_time_cache_identity(
-                        request,
+                    series_spec_sha256=point_in_time_cache_identity(
+                        series_spec_sha256=request.series_spec.sha256,
                         source_identity=source_identity,
                     ),
                     cache_root=cache_root,
                 )
                 metadata = load_cached_metadata(entry)
-                # The cached receipt protects the cached bytes. The receipt
-                # embedded by an older artifact is not a live source version.
-                source_receipt = str(metadata.get("source_receipt_sha256") or "")
                 if point_in_time_cache_covers_request(
                     metadata,
                     series_spec_sha256=request.series_spec.sha256,
-                    source_receipt_sha256=source_receipt,
                     start=request.start,
                     end=guarded_end,
                     limit=request.limit,
@@ -213,7 +209,9 @@ class AbelDataFeedAdapter:
                 start=request.start,
                 end=guarded_end,
                 limit=request.limit,
-                config=request.options,
+                config={
+                    "env_path": request.options.get("env_path") or ".env",
+                },
             )
             if entry is not None:
                 write_cached_point_in_time_series(
@@ -341,17 +339,15 @@ def _csv_series_frame(df: pd.DataFrame, request: FeedLoadRequest) -> pd.DataFram
     return frame
 
 
-def _point_in_time_cache_identity(
-    request: FeedLoadRequest,
+def point_in_time_cache_identity(
     *,
+    series_spec_sha256: str,
     source_identity: str,
 ) -> str:
-    if request.series_spec is None:
-        raise AdapterRegistryError(
-            f"Feed '{request.feed_name}' is missing its point-in-time series spec."
-        )
+    """Hash one series spec and resolved source endpoint into a cache identity."""
+
     payload = {
-        "series_spec_sha256": request.series_spec.sha256,
+        "series_spec_sha256": str(series_spec_sha256),
         "source_identity": str(source_identity).rstrip("/"),
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()

@@ -162,21 +162,22 @@ def assert_point_in_time_adapter_identity(
     name: str,
     verify_source_receipt: bool = True,
 ) -> None:
-    """Fail closed when adapter data or materialization identity drifts."""
+    """Require adapter identities and optionally match the prepared receipt."""
 
     resolved = (
         spec if isinstance(spec, PointInTimeSeriesSpec) else PointInTimeSeriesSpec.from_mapping(spec)
     )
-    expected = str(resolved.payload["provenance"]["source_receipt_sha256"])
     observed = str(frame.attrs.get("source_receipt_sha256") or "")
-    if verify_source_receipt and not observed:
+    if not observed:
         raise PointInTimeSeriesContractError(
             f"{name} adapter did not return a source receipt."
         )
-    if verify_source_receipt and observed != expected:
-        raise PointInTimeSeriesContractError(
-            f"{name} source receipt mismatch: expected {expected}, observed {observed}."
-        )
+    if verify_source_receipt:
+        expected = str(resolved.payload["provenance"]["source_receipt_sha256"])
+        if observed != expected:
+            raise PointInTimeSeriesContractError(
+                f"{name} source receipt mismatch: expected {expected}, observed {observed}."
+            )
     observed_spec = str(frame.attrs.get("series_spec_sha256") or "")
     if not observed_spec:
         raise PointInTimeSeriesContractError(

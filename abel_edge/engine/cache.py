@@ -129,7 +129,6 @@ def point_in_time_cache_covers_request(
     metadata: dict[str, Any],
     *,
     series_spec_sha256: str,
-    source_receipt_sha256: str,
     start: object | None,
     end: object | None,
     limit: int | None,
@@ -137,8 +136,6 @@ def point_in_time_cache_covers_request(
     if metadata.get("contract") != "abel-edge.point-in-time-cache/v2":
         return False
     if metadata.get("series_spec_sha256") != series_spec_sha256:
-        return False
-    if metadata.get("source_receipt_sha256") != source_receipt_sha256:
         return False
     requested = metadata.get("requested_range") or {}
     cached_start = _as_timestamp(requested.get("start"))
@@ -276,7 +273,7 @@ def write_cached_point_in_time_series(
     requested_end: object | None,
     requested_limit: int | None,
 ) -> dict[str, Any]:
-    """Persist an exact receipt-checked point-in-time response."""
+    """Persist a point-in-time response with its materialization identities."""
 
     if "value" not in frame.columns or not {
         "event_time",

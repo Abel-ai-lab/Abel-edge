@@ -12,6 +12,7 @@ import pytest
 from abel_edge.engine.point_in_time_series import (
     PointInTimeSeriesContractError,
     PointInTimeSeriesSpec,
+    assert_point_in_time_adapter_identity,
     normalize_point_in_time_series_frame,
 )
 
@@ -145,6 +146,20 @@ def test_normalization_uses_available_at_as_strategy_visible_timestamp():
     assert frame.iloc[0]["timestamp"] == pd.Timestamp("2024-01-02T05:00:00Z")
     assert frame.attrs["series_id"] == "macro.cpi.us"
     assert frame.attrs["series_spec_sha256"] == spec.sha256
+
+
+def test_adapter_identity_requires_actual_receipt_without_comparing_contents():
+    spec = PointInTimeSeriesSpec.from_mapping(_series_spec())
+    raw = pd.DataFrame()
+    raw.attrs["series_spec_sha256"] = spec.sha256
+
+    with pytest.raises(PointInTimeSeriesContractError, match="did not return a source receipt"):
+        assert_point_in_time_adapter_identity(
+            raw,
+            spec,
+            name="live canonical",
+            verify_source_receipt=False,
+        )
 
 
 def test_normalization_does_not_align_values_by_adapter_index_labels():

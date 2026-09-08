@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import pandas as pd
+import pytest
 
 from abel_edge.engine.feed_contract import DATE_GUARD_MODE_ENV, MAX_DATA_DATE_ENV
 from abel_edge.engine.feed_loader import load_feed_frame
 from abel_edge.plugins.abel.cap_node_series import (
+    CanonicalNodeDataError,
     compile_cap_node_series_spec,
     load_cap_node_series,
     prepare_cap_node_series_spec,
@@ -104,6 +106,55 @@ def test_runtime_limit_is_applied_after_availability_filtering(monkeypatch):
     )
 
     assert calls[0]["limit"] is None
+    assert frame["value"].tolist() == [9.0]
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_runtime_limit_must_be_positive(limit):
+    with pytest.raises(CanonicalNodeDataError, match="limit must be positive"):
+        load_cap_node_series(
+            series_spec=_spec(),
+            start=None,
+            end="2026-12-31",
+            limit=limit,
+            config={},
+        )
+
+
+def test_runtime_intraday_bounds_filter_exact_availability_times(monkeypatch):
+    rows = [
+        {
+            "timestamp": "2026-01-01T01:00:00Z",
+            "event_time": "2026-01-01T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 8.0,
+        },
+        {
+            "timestamp": "2026-01-01T07:00:00Z",
+            "event_time": "2026-01-01T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 9.0,
+        },
+        {
+            "timestamp": "2026-01-01T12:00:00Z",
+            "event_time": "2026-01-01T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 10.0,
+        },
+    ]
+    monkeypatch.setattr(
+        "abel_edge.plugins.abel.cap_node_series.fetch_node_series",
+        lambda **kwargs: pd.DataFrame(rows),
+    )
+
+    frame = load_cap_node_series(
+        series_spec=_spec(),
+        start="2026-01-01T06:00:00Z",
+        end="2026-01-01T08:00:00Z",
+        limit=None,
+        config={},
+    )
+
     assert frame["value"].tolist() == [9.0]
 
 
@@ -221,3 +272,15 @@ def test_preparation_receipt_excludes_rows_not_yet_visible_at_cutoff():
         spec.payload["provenance"]["source_last_timestamp"]
         == "2026-01-02T12:00:00Z"
     )
+
+
+def test_preparation_limit_must_be_positive():
+    with pytest.raises(CanonicalNodeDataError, match="limit must be positive"):
+        prepare_cap_node_series_spec(
+            node_id=NODE_ID,
+            graph_ref=GRAPH_REF,
+            start="2026-01-01",
+            end="2026-12-31",
+            limit=0,
+            fetcher=lambda **kwargs: pd.DataFrame(),
+        )
