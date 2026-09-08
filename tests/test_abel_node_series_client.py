@@ -1,5 +1,7 @@
 """Request-boundary tests for Abel day_bar symbol and node modes."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 import requests
 
@@ -41,6 +43,59 @@ def test_day_bar_request_preserves_exchange_suffixes():
         "9606.HK",
         "XFLI.TO",
     ]
+    assert session.body["start"] == "2020-01-01"
+    assert session.body["end"] == "2026-05-28"
+
+
+def test_day_bar_request_serializes_datetime_bounds_as_utc_dates(monkeypatch):
+    bodies = []
+    client = AbelClient()
+    monkeypatch.setattr(
+        client,
+        "_post_market",
+        lambda *, endpoint, body, api_key: bodies.append(body) or {"data": []},
+    )
+
+    client.fetch_bars(
+        symbols=["BRK-B"],
+        start="2026-09-04T23:30:00-05:00",
+        end=datetime(2026, 9, 6, 1, tzinfo=timezone(timedelta(hours=2))),
+        timeframe="1d",
+        limit=20,
+        fields=["close"],
+        api_key="test",
+    )
+
+    assert bodies[0]["symbols"] == ["BRK-B"]
+    assert bodies[0]["start"] == "2026-09-05"
+    assert bodies[0]["end"] == "2026-09-05"
+
+
+def test_node_series_request_preserves_exact_datetime_bounds(monkeypatch):
+    bodies = []
+    client = AbelClient()
+    monkeypatch.setattr(
+        client,
+        "_post_market",
+        lambda *, endpoint, body, api_key: bodies.append(body)
+        or {
+            "mode": "node_series",
+            "node": {"node_id": "v4::catalog::demo"},
+            "data": [],
+            "page": {"has_more": False},
+        },
+    )
+
+    client.fetch_node_series(
+        node_id="v4::catalog::demo",
+        start="2026-05-01T06:00:00Z",
+        end="2026-05-01T08:00:00Z",
+        limit=20,
+        api_key="test",
+    )
+
+    assert bodies[0]["start"] == "2026-05-01T06:00:00Z"
+    assert bodies[0]["end"] == "2026-05-01T08:00:00Z"
 
 
 def test_fetch_node_series_uses_exact_single_node_id_mode():

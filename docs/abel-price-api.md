@@ -33,15 +33,17 @@ the other after a failed request.
 | market bars | `symbols` | targets, ordinary OHLCV, and canonical close/volume nodes | provider front-adjusted market history |
 | graph node | one exact `node_id` plus `shape=series` | canonical non-market V4 graph parents | node-native scalar values, no price adjustment |
 
-Both modes use UTC timestamps. The request must contain exactly one of
-`symbols` or `node_id`; `node_ids` batching is not part of this interface.
+Symbol mode uses UTC calendar dates because its bars have daily granularity.
+Node mode keeps exact UTC timestamp bounds because those bounds filter
+visibility times. The request must contain exactly one of `symbols` or
+`node_id`; `node_ids` batching is not part of this interface.
 
 ### Symbol-mode request
 
 ```json
 {
   "symbols": ["ETHUSD", "BTCUSD"],
-  "start": "2023-01-01T00:00:00Z",
+  "start": "2023-01-01",
   "end": null,
   "timeframe": "1d",
   "limit": 600,
@@ -52,6 +54,9 @@ Both modes use UTC timestamps. The request must contain exactly one of
 Notes:
 - `symbols` are market-data symbols like `ETHUSD`, `605138.SS`, `9606.HK`,
   or `XFLI.TO`, not public graph IDs such as `ETHUSD.price`
+- `start` and `end` are inclusive UTC calendar dates in `YYYY-MM-DD` form;
+  Edge converts datetime-like caller values to their UTC calendar date before
+  transport
 - exchange suffixes are part of the market symbol and must not be stripped or
   interpreted as graph-node field suffixes
 - `timeframe` is currently expected to be `1d`

@@ -14,6 +14,9 @@
   retain their existing receipt checks.
 - Abel canonical requests no longer reuse unfinished or cross-endpoint
   point-in-time snapshots as permanently complete data.
+- Abel daily symbol-bar requests now serialize datetime-like bounds as UTC
+  calendar dates, matching the `1d` market endpoint and avoiding paper-run
+  failures on timezone-qualified ISO bounds.
 
 ## [0.9.0] - 2026-08-29
 
