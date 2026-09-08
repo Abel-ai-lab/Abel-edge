@@ -109,9 +109,9 @@ def test_cap_node_series_materializer_loads_exact_series_and_receipt(monkeypatch
     assert calls == [
         {
             "node_id": NODE_ID,
-            "start": "2026-05-01",
+            "start": None,
             "end": "2026-05-02",
-            "limit": 20,
+            "limit": None,
             "config": {},
         }
     ]
@@ -158,12 +158,104 @@ def test_cap_runtime_window_uses_caller_bounds(monkeypatch):
     )
 
     assert (calls[0]["start"], calls[0]["end"], calls[0]["limit"]) == (
-        "2026-05-01",
+        None,
         "2026-05-31",
-        1,
+        None,
     )
     assert list(frame["timestamp"]) == ["2026-05-02T00:00:00Z"]
     assert list(frame["value"]) == [25.0]
+
+
+def test_cap_runtime_start_filters_availability_after_fetching_older_observations(
+    monkeypatch,
+):
+    rows = [
+        {
+            "timestamp": "2026-01-02T00:00:00Z",
+            "event_time": "2025-12-31T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 9.0,
+        },
+        {
+            "timestamp": "2026-01-03T00:00:00Z",
+            "event_time": "2026-01-03T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 10.0,
+        },
+    ]
+    calls = []
+
+    def fake_fetch_node_series(**kwargs):
+        calls.append(kwargs)
+        if kwargs["start"] is not None:
+            return pd.DataFrame(rows[1:])
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(
+        "abel_edge.plugins.abel.cap_node_series.fetch_node_series",
+        fake_fetch_node_series,
+    )
+    spec = compile_cap_node_series_spec(
+        node_id=NODE_ID,
+        graph_ref=GRAPH_REF,
+        source_receipt_sha256="e" * 64,
+    )
+
+    frame = load_cap_node_series(
+        series_spec=spec,
+        start="2026-01-01",
+        end="2026-01-31",
+        limit=None,
+        config={},
+    )
+
+    assert calls[0]["start"] is None
+    assert frame["value"].tolist() == [9.0, 10.0]
+
+
+def test_cap_runtime_limit_is_applied_after_availability_filtering(monkeypatch):
+    rows = [
+        {
+            "timestamp": "2026-12-30T00:00:00Z",
+            "event_time": "2026-12-30T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 9.0,
+        },
+        {
+            "timestamp": "2027-01-02T00:00:00Z",
+            "event_time": "2026-12-31T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 10.0,
+        },
+    ]
+    calls = []
+
+    def fake_fetch_node_series(**kwargs):
+        calls.append(kwargs)
+        if kwargs["limit"] is not None:
+            return pd.DataFrame(rows[-int(kwargs["limit"]):])
+        return pd.DataFrame(rows)
+
+    monkeypatch.setattr(
+        "abel_edge.plugins.abel.cap_node_series.fetch_node_series",
+        fake_fetch_node_series,
+    )
+    spec = compile_cap_node_series_spec(
+        node_id=NODE_ID,
+        graph_ref=GRAPH_REF,
+        source_receipt_sha256="e" * 64,
+    )
+
+    frame = load_cap_node_series(
+        series_spec=spec,
+        start=None,
+        end="2026-12-31",
+        limit=1,
+        config={},
+    )
+
+    assert calls[0]["limit"] is None
+    assert frame["value"].tolist() == [9.0]
 
 
 def test_cap_node_series_materializer_records_response_receipt_drift(monkeypatch):

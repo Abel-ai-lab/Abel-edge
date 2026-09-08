@@ -85,7 +85,7 @@ def test_old_spec_uses_explicit_runtime_end_instead_of_prepared_end(monkeypatch)
         end="2026-07-05",
     )
 
-    assert calls[0]["start"] == "2026-06-01"
+    assert calls[0]["start"] is None
     assert calls[0]["end"] == "2026-07-05"
     assert calls[0]["limit"] is None
     assert result["timestamp"].dt.strftime("%Y-%m-%d").tolist() == [

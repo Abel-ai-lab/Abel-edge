@@ -146,19 +146,13 @@ def load_cap_node_series(
             "to match series_spec.series_id."
         )
     _validate_runtime_window(start=start, end=end)
-    frame = materialize_cap_node_series(
+    return materialize_cap_node_series(
         series_spec=series_spec,
         node_id=node_id,
         start=start,
         end=end,
         limit=limit,
         config=config or {},
-    )
-    return _filter_visible_frame(
-        frame,
-        start=start,
-        end=end,
-        limit=limit,
     )
 
 
@@ -215,7 +209,7 @@ def materialize_cap_node_series(
     config: dict[str, Any],
     fetcher: Callable[..., pd.DataFrame] | None = None,
 ) -> pd.DataFrame:
-    """Fetch and receipt-check one bounded CAP scalar series."""
+    """Fetch and receipt-check rows needed for one visible CAP window."""
 
     if series_spec.payload.get("transforms"):
         raise CanonicalNodeDataError(
@@ -225,9 +219,9 @@ def materialize_cap_node_series(
         )
     rows = (fetcher or fetch_node_series)(
         node_id=node_id,
-        start=start,
+        start=None,
         end=end,
-        limit=limit,
+        limit=None,
         config=config,
     )
     records = rows.to_dict("records")
@@ -245,7 +239,12 @@ def materialize_cap_node_series(
     )
     frame.attrs["source_receipt_sha256"] = actual_receipt
     frame.attrs["series_spec_sha256"] = series_spec.sha256
-    return frame
+    return _filter_visible_frame(
+        frame,
+        start=start,
+        end=end,
+        limit=limit,
+    )
 
 
 def _validate_runtime_window(*, start, end) -> None:
