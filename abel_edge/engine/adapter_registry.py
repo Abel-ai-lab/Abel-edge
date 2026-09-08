@@ -166,11 +166,17 @@ class AbelDataFeedAdapter:
                 canonical_module = importlib.import_module(
                     "abel_edge.plugins.abel.cap_node_series"
                 )
+                credentials_module = importlib.import_module(
+                    "abel_edge.plugins.abel.credentials"
+                )
             except ImportError as exc:
                 raise AdapterRegistryError(
                     "Abel canonical-node data support is unavailable. "
                     "See: abel_edge/plugins/AGENTS.md"
                 ) from exc
+            source_identity = credentials_module.resolve_cap_base_url(
+                env_path=request.options.get("env_path", ".env")
+            )
             # An open-ended live request is never complete, so it must not be
             # satisfied by or published as an indefinitely reusable snapshot.
             cache_root = request.options.get("cache_root") if guarded_end is not None else None
@@ -178,7 +184,10 @@ class AbelDataFeedAdapter:
             if cache_root:
                 entry = point_in_time_cache_entry(
                     adapter=request.adapter,
-                    series_spec_sha256=_point_in_time_cache_identity(request),
+                    series_spec_sha256=_point_in_time_cache_identity(
+                        request,
+                        source_identity=source_identity,
+                    ),
                     cache_root=cache_root,
                 )
                 metadata = load_cached_metadata(entry)
@@ -332,27 +341,18 @@ def _csv_series_frame(df: pd.DataFrame, request: FeedLoadRequest) -> pd.DataFram
     return frame
 
 
-def _point_in_time_cache_identity(request: FeedLoadRequest) -> str:
+def _point_in_time_cache_identity(
+    request: FeedLoadRequest,
+    *,
+    source_identity: str,
+) -> str:
     if request.series_spec is None:
         raise AdapterRegistryError(
             f"Feed '{request.feed_name}' is missing its point-in-time series spec."
         )
-    source_window = {
-        "start": str(request.options["source_start"])
-        if request.options.get("source_start") is not None
-        else None,
-        "end": str(request.options["source_end"])
-        if request.options.get("source_end") is not None
-        else None,
-        "limit": int(request.options["source_limit"])
-        if request.options.get("source_limit") is not None
-        else None,
-    }
-    if not any(value is not None for value in source_window.values()):
-        return request.series_spec.sha256
     payload = {
         "series_spec_sha256": request.series_spec.sha256,
-        "source_window": source_window,
+        "source_identity": str(source_identity).rstrip("/"),
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(canonical).hexdigest()
