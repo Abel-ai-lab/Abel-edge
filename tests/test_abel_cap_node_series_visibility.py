@@ -146,33 +146,42 @@ def test_future_availability_is_filtered_before_max_data_date_guard(monkeypatch)
 
 
 def test_preparation_receipt_excludes_rows_not_yet_visible_at_cutoff():
-    rows = pd.DataFrame(
-        [
-            {
-                "timestamp": "2026-12-30T12:00:00Z",
-                "event_time": "2026-12-30T00:00:00Z",
-                "node_id": NODE_ID,
-                "value": 9.0,
-            },
-            {
-                "timestamp": "2027-01-02T12:00:00Z",
-                "event_time": "2026-12-31T00:00:00Z",
-                "node_id": NODE_ID,
-                "value": 10.0,
-            },
-        ]
-    )
+    rows = [
+        {
+            "timestamp": "2026-01-02T12:00:00Z",
+            "event_time": "2025-12-31T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 9.0,
+        },
+        {
+            "timestamp": "2027-01-02T12:00:00Z",
+            "event_time": "2026-12-31T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 10.0,
+        },
+    ]
+    calls = []
+
+    def fake_fetcher(**kwargs):
+        calls.append(kwargs)
+        selected = rows[1:] if kwargs["start"] is not None else rows
+        if kwargs["limit"] is not None:
+            selected = selected[-int(kwargs["limit"]) :]
+        return pd.DataFrame(selected)
 
     spec = prepare_cap_node_series_spec(
         node_id=NODE_ID,
         graph_ref=GRAPH_REF,
         start="2026-01-01",
         end="2026-12-31",
-        fetcher=lambda **kwargs: rows,
+        limit=1,
+        fetcher=fake_fetcher,
     )
 
+    assert calls[0]["start"] is None
+    assert calls[0]["limit"] is None
     assert spec.payload["provenance"]["source_observation_count"] == 1
     assert (
         spec.payload["provenance"]["source_last_timestamp"]
-        == "2026-12-30T12:00:00Z"
+        == "2026-01-02T12:00:00Z"
     )

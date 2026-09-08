@@ -98,9 +98,9 @@ def prepare_cap_node_series_spec(
 
     rows = (fetcher or fetch_node_series)(
         node_id=node_id,
-        start=start,
+        start=None,
         end=end,
-        limit=limit,
+        limit=None,
         config=config or {},
     )
     records = rows.to_dict("records") if isinstance(rows, pd.DataFrame) else list(rows)
