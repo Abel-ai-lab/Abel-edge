@@ -130,6 +130,7 @@ def point_in_time_cache_covers_request(
     metadata: dict[str, Any],
     *,
     series_spec_sha256: str,
+    source_identity: str,
     start: object | None,
     end: object | None,
     limit: int | None,
@@ -138,23 +139,21 @@ def point_in_time_cache_covers_request(
         return False
     if metadata.get("series_spec_sha256") != series_spec_sha256:
         return False
+    if metadata.get("source_identity") != str(source_identity).rstrip("/"):
+        return False
     requested = metadata.get("requested_range") or {}
     cached_start = _as_timestamp(requested.get("start"))
     cached_end = _as_timestamp(requested.get("end"))
-    requested_start = _as_timestamp(start)
-    requested_end = _as_timestamp(end)
+    requested_start, requested_end = _as_timestamp(start), _as_timestamp(end)
     if bool(requested.get("end_is_inclusive_date")) != is_date_only_bound(end):
         return False
-    if requested_start is not None and (
-        cached_start is None or cached_start > requested_start
-    ):
+    if requested_start is not None and (cached_start is None or cached_start > requested_start):
         return False
     if requested_end is not None and (cached_end is None or cached_end < requested_end):
         return False
     cached_limit = requested.get("limit")
-    if cached_limit is not None and (
-        cached_start != requested_start or cached_end != requested_end
-    ):
+    same_range = cached_start == requested_start and cached_end == requested_end
+    if cached_limit is not None and not same_range:
         return False
     if limit is None:
         if cached_limit is not None:
@@ -269,6 +268,7 @@ def write_cached_point_in_time_series(
     frame: pd.DataFrame,
     *,
     series_spec_sha256: str,
+    source_identity: str,
     source_receipt_sha256: str,
     requested_start: object | None,
     requested_end: object | None,
@@ -296,6 +296,7 @@ def write_cached_point_in_time_series(
             "metadata_path": str(entry.meta_path),
             "data_sha256": _file_sha256(entry.data_path),
             "series_spec_sha256": series_spec_sha256,
+            "source_identity": str(source_identity).rstrip("/"),
             "source_receipt_sha256": source_receipt_sha256,
             "requested_range": {
                 "start": _format_request_bound(requested_start, exact=True),

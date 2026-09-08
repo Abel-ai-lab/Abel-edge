@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -191,16 +190,14 @@ class AbelDataFeedAdapter:
                 )
                 entry = point_in_time_cache_entry(
                     adapter=request.adapter,
-                    series_spec_sha256=point_in_time_cache_identity(
-                        series_spec_sha256=request.series_spec.sha256,
-                        source_identity=source_identity,
-                    ),
+                    series_spec_sha256=request.series_spec.sha256,
                     cache_root=cache_root,
                 )
                 metadata = load_cached_metadata(entry)
                 if point_in_time_cache_covers_request(
                     metadata,
                     series_spec_sha256=request.series_spec.sha256,
+                    source_identity=source_identity,
                     start=request.start,
                     end=guarded_end,
                     limit=request.limit,
@@ -225,6 +222,7 @@ class AbelDataFeedAdapter:
                     entry,
                     frame,
                     series_spec_sha256=request.series_spec.sha256,
+                    source_identity=source_identity,
                     source_receipt_sha256=str(
                         frame.attrs.get("source_receipt_sha256") or ""
                     ),
@@ -344,21 +342,6 @@ def _csv_series_frame(df: pd.DataFrame, request: FeedLoadRequest) -> pd.DataFram
     if "symbol" not in frame.columns and request.symbol:
         frame["symbol"] = request.symbol
     return frame
-
-
-def point_in_time_cache_identity(
-    *,
-    series_spec_sha256: str,
-    source_identity: str,
-) -> str:
-    """Hash one series spec and resolved source endpoint into a cache identity."""
-
-    payload = {
-        "series_spec_sha256": str(series_spec_sha256),
-        "source_identity": str(source_identity).rstrip("/"),
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(canonical).hexdigest()
 
 
 def _point_in_time_cache_end_has_elapsed(

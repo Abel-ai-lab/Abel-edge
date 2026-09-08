@@ -13,7 +13,6 @@ from abel_edge.engine.adapter_registry import (
     AbelDataFeedAdapter,
     FeedLoadRequest,
     _point_in_time_cache_end_has_elapsed,
-    point_in_time_cache_identity,
 )
 from abel_edge.engine.cache import (
     point_in_time_cache_covers_request,
@@ -21,6 +20,8 @@ from abel_edge.engine.cache import (
     write_cached_point_in_time_series,
 )
 from abel_edge.plugins.abel import compile_cap_node_series_spec
+
+SOURCE_IDENTITY = "https://cap.example/api"
 
 
 def _point_spec():
@@ -83,7 +84,7 @@ def test_builtin_abel_adapter_reuses_exact_point_in_time_cache(tmp_path, monkeyp
     assert second.attrs["series_spec_sha256"] == point_spec.sha256
 
 
-def test_builtin_abel_adapter_separates_cap_endpoints(tmp_path, monkeypatch):
+def test_builtin_abel_adapter_rejects_other_cap_endpoint_cache(tmp_path, monkeypatch):
     point_spec = _point_spec()
     calls = []
 
@@ -136,21 +137,6 @@ def test_builtin_abel_adapter_separates_cap_endpoints(tmp_path, monkeypatch):
     assert len(calls) == 2
 
 
-def test_point_in_time_cache_identity_normalizes_endpoint_trailing_slash():
-    spec_hash = "a" * 64
-
-    first = point_in_time_cache_identity(
-        series_spec_sha256=spec_hash,
-        source_identity="https://cap.example/api",
-    )
-    second = point_in_time_cache_identity(
-        series_spec_sha256=spec_hash,
-        source_identity="https://cap.example/api/",
-    )
-
-    assert first == second
-
-
 def test_point_in_time_cache_end_must_have_elapsed():
     now = pd.Timestamp("2026-05-01T12:00:00Z")
 
@@ -176,6 +162,7 @@ def test_limited_point_in_time_cache_does_not_cover_unlimited_request():
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256="a" * 64,
+        source_identity=SOURCE_IDENTITY,
         start="2024-01-01",
         end="2024-12-31",
         limit=None,
@@ -198,6 +185,7 @@ def test_limited_point_in_time_cache_does_not_cover_different_bounds():
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256="a" * 64,
+        source_identity=SOURCE_IDENTITY,
         start="2024-01-01",
         end="2024-06-30",
         limit=10,
@@ -221,6 +209,7 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
             }
         ),
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         source_receipt_sha256=receipt_hash,
         requested_start="2026-05-01T12:00:00Z",
         requested_end="2026-05-01T18:00:00Z",
@@ -233,9 +222,11 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
         "end_is_inclusive_date": False,
         "limit": None,
     }
+    assert metadata["source_identity"] == SOURCE_IDENTITY
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T06:00:00Z",
         end="2026-05-01T18:00:00Z",
         limit=None,
@@ -243,6 +234,7 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T12:00:00Z",
         end="2026-05-01T20:00:00Z",
         limit=None,
@@ -250,6 +242,7 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T12:00:00Z",
         end="2026-05-01",
         limit=None,
@@ -272,6 +265,7 @@ def test_point_in_time_cache_coverage_does_not_require_artifact_receipt(tmp_path
             }
         ),
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         source_receipt_sha256="b" * 64,
         requested_start="2026-05-01",
         requested_end="2026-05-31",
@@ -282,6 +276,7 @@ def test_point_in_time_cache_coverage_does_not_require_artifact_receipt(tmp_path
     assert point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01",
         end="2026-05-31",
         limit=None,
@@ -304,6 +299,7 @@ def test_point_in_time_cache_rejects_legacy_day_granularity_metadata():
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256="a" * 64,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T06:00:00Z",
         end="2026-05-01T12:00:00Z",
         limit=None,

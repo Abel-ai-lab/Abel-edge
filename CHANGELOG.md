@@ -12,8 +12,8 @@
 - Prepare-time source bounds and receipts remain provenance for Abel canonical
   feeds instead of freezing later execution. Generic point-in-time adapters
   retain their existing receipt checks.
-- Open-ended Abel canonical requests no longer reuse persisted point-in-time
-  snapshots as permanently complete data.
+- Abel canonical requests no longer reuse unfinished or cross-endpoint
+  point-in-time snapshots as permanently complete data.
 
 ## [0.9.0] - 2026-08-29
 
