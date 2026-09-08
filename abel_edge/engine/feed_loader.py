@@ -95,6 +95,9 @@ def load_feed_frame(
         requested_end,
         source=f"feed '{feed_name}' adapter request",
     )
+    adapter_limit = limit if request_limit is None else request_limit
+    if abel_node_series and request_end is not None:
+        adapter_limit = None
     request = FeedLoadRequest(
         adapter=adapter_name,
         kind=kind,
@@ -103,7 +106,7 @@ def load_feed_frame(
         timeframe=timeframe or feed_cfg.get("timeframe"),
         start=start,
         end=guarded_request_end,
-        limit=limit if request_limit is None else request_limit,
+        limit=adapter_limit,
         profile=str(feed_cfg.get("profile") or "daily"),
         options=_request_options(feed_cfg, fields=request_fields),
         strategy_id=strategy_id,

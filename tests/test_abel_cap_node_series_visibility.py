@@ -107,6 +107,42 @@ def test_runtime_limit_is_applied_after_availability_filtering(monkeypatch):
     assert frame["value"].tolist() == [9.0]
 
 
+def test_paper_prefetch_limit_is_applied_after_the_visible_end(monkeypatch):
+    rows = [
+        {
+            "timestamp": "2026-01-01T12:00:00Z",
+            "event_time": "2026-01-01T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 9.0,
+        },
+        {
+            "timestamp": "2026-01-31T12:00:00Z",
+            "event_time": "2026-01-31T00:00:00Z",
+            "node_id": NODE_ID,
+            "value": 10.0,
+        },
+    ]
+    monkeypatch.setattr(
+        "abel_edge.plugins.abel.cap_node_series.fetch_node_series",
+        lambda **kwargs: pd.DataFrame(rows),
+    )
+
+    frame = load_feed_frame(
+        {
+            "name": "canonical",
+            "kind": "point_in_time_series",
+            "adapter": "abel",
+            "series_spec": _spec().to_mapping(),
+        },
+        end="2026-01-01",
+        request_end="2026-01-31",
+        request_limit=1,
+        limit=1,
+    )
+
+    assert frame["value"].tolist() == [9.0]
+
+
 def test_future_availability_is_filtered_before_max_data_date_guard(monkeypatch):
     from abel_edge.plugins.abel.client import AbelClient
 
