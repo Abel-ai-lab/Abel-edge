@@ -7,6 +7,7 @@ import json
 import re
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Mapping
 
 import numpy as np
@@ -32,6 +33,20 @@ _TOP_LEVEL_KEYS = {
 _REQUIRED_KEYS = _TOP_LEVEL_KEYS - {"transforms"}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _GRID_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$")
+
+
+def is_date_only_bound(value: Any) -> bool:
+    """Return whether a point-in-time bound denotes a whole calendar day."""
+
+    if isinstance(value, date):
+        return not isinstance(value, datetime)
+    if not isinstance(value, str):
+        return False
+    try:
+        date.fromisoformat(value.strip())
+    except ValueError:
+        return False
+    return True
 
 
 class PointInTimeSeriesContractError(FeedContractError):
@@ -98,6 +113,7 @@ def normalize_point_in_time_series_frame(
     resolved = (
         spec if isinstance(spec, PointInTimeSeriesSpec) else PointInTimeSeriesSpec.from_mapping(spec)
     )
+    observed_source_receipt = str(frame.attrs.get("source_receipt_sha256") or "")
     schema = resolved.schema
     event_field = str(schema["event_time_field"])
     value_field = str(schema["value_field"])
@@ -147,9 +163,10 @@ def normalize_point_in_time_series_frame(
     normalized.insert(0, "timestamp", normalized["available_at"])
     normalized.attrs["series_id"] = resolved.series_id
     normalized.attrs["series_spec_sha256"] = resolved.sha256
-    normalized.attrs["source_receipt_sha256"] = resolved.payload["provenance"][
-        "source_receipt_sha256"
-    ]
+    normalized.attrs["source_receipt_sha256"] = (
+        observed_source_receipt
+        or resolved.payload["provenance"]["source_receipt_sha256"]
+    )
     return normalized
 
 
@@ -158,22 +175,24 @@ def assert_point_in_time_adapter_identity(
     spec: PointInTimeSeriesSpec | Mapping[str, Any],
     *,
     name: str,
+    verify_source_receipt: bool = True,
 ) -> None:
-    """Fail closed when adapter data or materialization identity drifts."""
+    """Require adapter identities and optionally match the prepared receipt."""
 
     resolved = (
         spec if isinstance(spec, PointInTimeSeriesSpec) else PointInTimeSeriesSpec.from_mapping(spec)
     )
-    expected = str(resolved.payload["provenance"]["source_receipt_sha256"])
     observed = str(frame.attrs.get("source_receipt_sha256") or "")
     if not observed:
         raise PointInTimeSeriesContractError(
             f"{name} adapter did not return a source receipt."
         )
-    if observed != expected:
-        raise PointInTimeSeriesContractError(
-            f"{name} source receipt mismatch: expected {expected}, observed {observed}."
-        )
+    if verify_source_receipt:
+        expected = str(resolved.payload["provenance"]["source_receipt_sha256"])
+        if observed != expected:
+            raise PointInTimeSeriesContractError(
+                f"{name} source receipt mismatch: expected {expected}, observed {observed}."
+            )
     observed_spec = str(frame.attrs.get("series_spec_sha256") or "")
     if not observed_spec:
         raise PointInTimeSeriesContractError(

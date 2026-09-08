@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -27,7 +26,10 @@ from abel_edge.engine.feed_contract import (
     apply_max_data_date_guard,
     assert_frame_respects_max_data_date,
 )
-from abel_edge.engine.point_in_time_series import PointInTimeSeriesSpec
+from abel_edge.engine.point_in_time_series import (
+    PointInTimeSeriesSpec,
+    is_date_only_bound,
+)
 
 ABEL_BAR_FIELDS = ["open", "high", "low", "close", "volume"]
 ABEL_BAR_CACHE_COLUMNS = ["timestamp", "symbol", *ABEL_BAR_FIELDS]
@@ -166,29 +168,36 @@ class AbelDataFeedAdapter:
                 canonical_module = importlib.import_module(
                     "abel_edge.plugins.abel.cap_node_series"
                 )
+                credentials_module = importlib.import_module(
+                    "abel_edge.plugins.abel.credentials"
+                )
             except ImportError as exc:
                 raise AdapterRegistryError(
                     "Abel canonical-node data support is unavailable. "
                     "See: abel_edge/plugins/AGENTS.md"
                 ) from exc
-            cache_root = request.options.get("cache_root")
+            # A live request is reusable only after its effective upper bound
+            # has elapsed; today's inclusive date is incomplete until tomorrow.
+            cache_root = (
+                request.options.get("cache_root")
+                if _point_in_time_cache_end_has_elapsed(guarded_end)
+                else None
+            )
             entry = None
             if cache_root:
+                source_identity = credentials_module.resolve_cap_base_url(
+                    env_path=request.options.get("env_path", ".env")
+                )
                 entry = point_in_time_cache_entry(
                     adapter=request.adapter,
-                    series_spec_sha256=_point_in_time_cache_identity(request),
+                    series_spec_sha256=request.series_spec.sha256,
                     cache_root=cache_root,
                 )
                 metadata = load_cached_metadata(entry)
-                source_receipt = str(
-                    request.series_spec.payload["provenance"][
-                        "source_receipt_sha256"
-                    ]
-                )
                 if point_in_time_cache_covers_request(
                     metadata,
                     series_spec_sha256=request.series_spec.sha256,
-                    source_receipt_sha256=source_receipt,
+                    source_identity=source_identity,
                     start=request.start,
                     end=guarded_end,
                     limit=request.limit,
@@ -204,13 +213,16 @@ class AbelDataFeedAdapter:
                 start=request.start,
                 end=guarded_end,
                 limit=request.limit,
-                config=request.options,
+                config={
+                    "env_path": request.options.get("env_path") or ".env",
+                },
             )
             if entry is not None:
                 write_cached_point_in_time_series(
                     entry,
                     frame,
                     series_spec_sha256=request.series_spec.sha256,
+                    source_identity=source_identity,
                     source_receipt_sha256=str(
                         frame.attrs.get("source_receipt_sha256") or ""
                     ),
@@ -332,30 +344,18 @@ def _csv_series_frame(df: pd.DataFrame, request: FeedLoadRequest) -> pd.DataFram
     return frame
 
 
-def _point_in_time_cache_identity(request: FeedLoadRequest) -> str:
-    if request.series_spec is None:
-        raise AdapterRegistryError(
-            f"Feed '{request.feed_name}' is missing its point-in-time series spec."
-        )
-    source_window = {
-        "start": str(request.options["source_start"])
-        if request.options.get("source_start") is not None
-        else None,
-        "end": str(request.options["source_end"])
-        if request.options.get("source_end") is not None
-        else None,
-        "limit": int(request.options["source_limit"])
-        if request.options.get("source_limit") is not None
-        else None,
-    }
-    if not any(value is not None for value in source_window.values()):
-        return request.series_spec.sha256
-    payload = {
-        "series_spec_sha256": request.series_spec.sha256,
-        "source_window": source_window,
-    }
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-    return hashlib.sha256(canonical).hexdigest()
+def _point_in_time_cache_end_has_elapsed(
+    end: object | None,
+    *,
+    now: pd.Timestamp | None = None,
+) -> bool:
+    if end is None:
+        return False
+    effective_end = pd.to_datetime(end, utc=True)
+    if is_date_only_bound(end):
+        effective_end += pd.Timedelta(days=1)
+    current = pd.Timestamp.now(tz="UTC") if now is None else now
+    return effective_end <= current
 
 
 def _max_cache_age_seconds(options: dict[str, object]) -> float | None:

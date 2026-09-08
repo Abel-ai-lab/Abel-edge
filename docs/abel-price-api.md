@@ -175,13 +175,16 @@ Canonical node rows must have a unique UTC visibility timestamp. CAP applies
 the canonical node's key/filter and aggregation inside its V4 registry. Edge
 does not choose sum, mean, or last-row semantics on the consumer's behalf.
 
-When a point-in-time feed declares an explicit `cache_root`, Edge caches the
-receipt-checked response by the complete `series_spec` SHA-256 plus any frozen
-`source_start`, `source_end`, and `source_limit` options. Reuse requires the same
-spec, frozen source window, source receipt, and a cached requested range covering
-the new request. The cache file is content-hashed; a missing, edited, or drifted
-entry is ignored and the canonical source is read again. Node IDs are never used
-as filesystem paths.
+When an Abel canonical point-in-time feed declares an explicit `cache_root`,
+Edge caches responses only after their effective upper bound has elapsed, under
+the complete `series_spec` SHA-256. Reuse also requires the metadata's resolved
+CAP endpoint and date-versus-timestamp bound semantics to match, plus a cached
+requested range covering the new request. Open-ended, current-day, and future
+requests bypass persisted cache reuse because a live response cannot prove
+completeness. The cache file is content-hashed; a missing, edited, or
+cross-endpoint entry is ignored and the canonical source is read again.
+Prepare-time `source_start`, `source_end`, `source_limit`, and receipt provenance
+do not constrain this live route. Node IDs are never used as filesystem paths.
 
 ## Why This Contract
 

@@ -1,22 +1,27 @@
-"""Receipt-bound disk cache for Abel point-in-time series."""
+"""Range-aware disk cache for Abel point-in-time series."""
 
 from __future__ import annotations
 
 import importlib
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from threading import Barrier, Lock
 from time import sleep
 
 import pandas as pd
 
-from abel_edge.engine.adapter_registry import AbelDataFeedAdapter, FeedLoadRequest
+from abel_edge.engine.adapter_registry import (
+    AbelDataFeedAdapter,
+    FeedLoadRequest,
+    _point_in_time_cache_end_has_elapsed,
+)
 from abel_edge.engine.cache import (
     point_in_time_cache_covers_request,
     point_in_time_cache_entry,
     write_cached_point_in_time_series,
 )
 from abel_edge.plugins.abel import compile_cap_node_series_spec
+
+SOURCE_IDENTITY = "https://cap.example/api"
 
 
 def _point_spec():
@@ -79,14 +84,14 @@ def test_builtin_abel_adapter_reuses_exact_point_in_time_cache(tmp_path, monkeyp
     assert second.attrs["series_spec_sha256"] == point_spec.sha256
 
 
-def test_builtin_abel_adapter_separates_frozen_source_windows(tmp_path, monkeypatch):
+def test_builtin_abel_adapter_rejects_other_cap_endpoint_cache(tmp_path, monkeypatch):
     point_spec = _point_spec()
     calls = []
 
     class CanonicalModule:
         @staticmethod
         def load_cap_node_series(**kwargs):
-            calls.append(kwargs["config"])
+            calls.append(kwargs)
             frame = pd.DataFrame(
                 {
                     "event_time": ["2024-01-02T05:00:00Z"],
@@ -106,53 +111,39 @@ def test_builtin_abel_adapter_separates_frozen_source_windows(tmp_path, monkeypa
         return real_import(name)
 
     monkeypatch.setattr(importlib, "import_module", fake_import)
-    base = FeedLoadRequest(
+    request = FeedLoadRequest(
         adapter="abel",
         kind="point_in_time_series",
         symbol=None,
         field=None,
         timeframe=None,
         start=None,
-        end=None,
+        end="2024-01-31",
         limit=None,
         profile="daily",
-        options={
-            "cache_root": str(tmp_path),
-            "source_start": "2024-01-01",
-            "source_end": "2024-12-31",
-            "source_limit": 30,
-        },
+        options={"cache_root": str(tmp_path)},
         strategy_id="demo",
         feed_name="graph_parent_01",
         series_spec=point_spec,
     )
-    narrower_window = replace(
-        base,
-        options={
-            **base.options,
-            "source_end": "2024-06-30",
-        },
-    )
-    different_limit = replace(
-        narrower_window,
-        options={
-            **narrower_window.options,
-            "source_limit": 10,
-        },
-    )
-
     adapter = AbelDataFeedAdapter()
-    adapter.load(base)
-    adapter.load(narrower_window)
-    adapter.load(different_limit)
+    monkeypatch.setenv("ABEL_CAP_BASE_URL", "https://cap-one.example/api")
+    adapter.load(request)
+    adapter.load(request)
+    monkeypatch.setenv("ABEL_CAP_BASE_URL", "https://cap-two.example/api")
+    adapter.load(request)
+    adapter.load(request)
 
-    assert len(calls) == 3
-    assert [call["source_end"] for call in calls] == [
-        "2024-12-31",
-        "2024-06-30",
-        "2024-06-30",
-    ]
-    assert [call["source_limit"] for call in calls] == [30, 30, 10]
+    assert len(calls) == 2
+
+
+def test_point_in_time_cache_end_must_have_elapsed():
+    now = pd.Timestamp("2026-05-01T12:00:00Z")
+
+    assert not _point_in_time_cache_end_has_elapsed("2026-05-01", now=now)
+    assert _point_in_time_cache_end_has_elapsed("2026-04-30", now=now)
+    assert not _point_in_time_cache_end_has_elapsed("2026-05-01T13:00:00Z", now=now)
+    assert _point_in_time_cache_end_has_elapsed("2026-05-01T11:00:00Z", now=now)
 
 
 def test_limited_point_in_time_cache_does_not_cover_unlimited_request():
@@ -171,7 +162,7 @@ def test_limited_point_in_time_cache_does_not_cover_unlimited_request():
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256="a" * 64,
-        source_receipt_sha256="b" * 64,
+        source_identity=SOURCE_IDENTITY,
         start="2024-01-01",
         end="2024-12-31",
         limit=None,
@@ -194,7 +185,7 @@ def test_limited_point_in_time_cache_does_not_cover_different_bounds():
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256="a" * 64,
-        source_receipt_sha256="b" * 64,
+        source_identity=SOURCE_IDENTITY,
         start="2024-01-01",
         end="2024-06-30",
         limit=10,
@@ -218,6 +209,7 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
             }
         ),
         series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         source_receipt_sha256=receipt_hash,
         requested_start="2026-05-01T12:00:00Z",
         requested_end="2026-05-01T18:00:00Z",
@@ -227,12 +219,22 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
     assert metadata["requested_range"] == {
         "start": "2026-05-01T12:00:00+00:00",
         "end": "2026-05-01T18:00:00+00:00",
+        "end_is_inclusive_date": False,
         "limit": None,
     }
+    assert metadata["source_identity"] == SOURCE_IDENTITY
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,
-        source_receipt_sha256=receipt_hash,
+        source_identity=SOURCE_IDENTITY,
+        start=None,
+        end="2026-05-01T18:00:00Z",
+        limit=None,
+    )
+    assert not point_in_time_cache_covers_request(
+        metadata,
+        series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T06:00:00Z",
         end="2026-05-01T18:00:00Z",
         limit=None,
@@ -240,9 +242,51 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,
-        source_receipt_sha256=receipt_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T12:00:00Z",
         end="2026-05-01T20:00:00Z",
+        limit=None,
+    )
+    assert not point_in_time_cache_covers_request(
+        metadata,
+        series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
+        start="2026-05-01T12:00:00Z",
+        end="2026-05-01",
+        limit=None,
+    )
+
+
+def test_point_in_time_cache_coverage_does_not_require_artifact_receipt(tmp_path):
+    spec_hash = "a" * 64
+    entry = point_in_time_cache_entry(
+        adapter="abel",
+        series_spec_sha256=spec_hash,
+        cache_root=tmp_path,
+    )
+    metadata = write_cached_point_in_time_series(
+        entry,
+        pd.DataFrame(
+            {
+                "event_time": ["2026-05-01T12:00:00Z"],
+                "value": [1.0],
+            }
+        ),
+        series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
+        source_receipt_sha256="b" * 64,
+        requested_start="2026-05-01",
+        requested_end="2026-05-31",
+        requested_limit=None,
+    )
+
+    assert metadata["requested_range"]["end_is_inclusive_date"] is True
+    assert point_in_time_cache_covers_request(
+        metadata,
+        series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
+        start="2026-05-01",
+        end="2026-05-31",
         limit=None,
     )
 
@@ -263,7 +307,7 @@ def test_point_in_time_cache_rejects_legacy_day_granularity_metadata():
     assert not point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256="a" * 64,
-        source_receipt_sha256="b" * 64,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T06:00:00Z",
         end="2026-05-01T12:00:00Z",
         limit=None,

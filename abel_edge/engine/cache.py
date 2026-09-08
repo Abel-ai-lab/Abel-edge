@@ -13,6 +13,7 @@ from typing import Any, Iterable
 import pandas as pd
 
 from abel_edge.engine.cache_lock import exclusive_cache_lock
+from abel_edge.engine.point_in_time_series import is_date_only_bound
 
 CACHE_ROOT_ENV = "ABEL_EDGE_CACHE_ROOT"
 DEFAULT_CACHE_ROOT = Path(".cache/market_data")
@@ -129,7 +130,7 @@ def point_in_time_cache_covers_request(
     metadata: dict[str, Any],
     *,
     series_spec_sha256: str,
-    source_receipt_sha256: str,
+    source_identity: str,
     start: object | None,
     end: object | None,
     limit: int | None,
@@ -138,23 +139,21 @@ def point_in_time_cache_covers_request(
         return False
     if metadata.get("series_spec_sha256") != series_spec_sha256:
         return False
-    if metadata.get("source_receipt_sha256") != source_receipt_sha256:
+    if metadata.get("source_identity") != str(source_identity).rstrip("/"):
         return False
     requested = metadata.get("requested_range") or {}
     cached_start = _as_timestamp(requested.get("start"))
     cached_end = _as_timestamp(requested.get("end"))
-    requested_start = _as_timestamp(start)
-    requested_end = _as_timestamp(end)
-    if requested_start is not None and (
-        cached_start is None or cached_start > requested_start
-    ):
+    requested_start, requested_end = _as_timestamp(start), _as_timestamp(end)
+    if bool(requested.get("end_is_inclusive_date")) != is_date_only_bound(end):
+        return False
+    if cached_start is not None and (requested_start is None or cached_start > requested_start):
         return False
     if requested_end is not None and (cached_end is None or cached_end < requested_end):
         return False
     cached_limit = requested.get("limit")
-    if cached_limit is not None and (
-        cached_start != requested_start or cached_end != requested_end
-    ):
+    same_range = cached_start == requested_start and cached_end == requested_end
+    if cached_limit is not None and not same_range:
         return False
     if limit is None:
         if cached_limit is not None:
@@ -179,9 +178,7 @@ def load_cached_point_in_time_series(
     if not expected_data_hash or _file_sha256(entry.data_path) != expected_data_hash:
         return None
     frame = pd.read_csv(entry.data_path)
-    frame.attrs["source_receipt_sha256"] = str(
-        metadata.get("source_receipt_sha256") or ""
-    )
+    frame.attrs["source_receipt_sha256"] = str(metadata.get("source_receipt_sha256") or "")
     frame.attrs["series_spec_sha256"] = str(metadata.get("series_spec_sha256") or "")
     return frame
 
@@ -271,12 +268,13 @@ def write_cached_point_in_time_series(
     frame: pd.DataFrame,
     *,
     series_spec_sha256: str,
+    source_identity: str,
     source_receipt_sha256: str,
     requested_start: object | None,
     requested_end: object | None,
     requested_limit: int | None,
 ) -> dict[str, Any]:
-    """Persist an exact receipt-checked point-in-time response."""
+    """Persist a point-in-time response with its materialization identities."""
 
     if "value" not in frame.columns or not {
         "event_time",
@@ -298,10 +296,12 @@ def write_cached_point_in_time_series(
             "metadata_path": str(entry.meta_path),
             "data_sha256": _file_sha256(entry.data_path),
             "series_spec_sha256": series_spec_sha256,
+            "source_identity": str(source_identity).rstrip("/"),
             "source_receipt_sha256": source_receipt_sha256,
             "requested_range": {
                 "start": _format_request_bound(requested_start, exact=True),
                 "end": _format_request_bound(requested_end, exact=True),
+                "end_is_inclusive_date": is_date_only_bound(requested_end),
                 "limit": int(requested_limit) if requested_limit is not None else None,
             },
             "row_count": int(len(frame)),
