@@ -13,6 +13,7 @@ from typing import Any, Iterable
 import pandas as pd
 
 from abel_edge.engine.cache_lock import exclusive_cache_lock
+from abel_edge.engine.point_in_time_series import is_date_only_bound
 
 CACHE_ROOT_ENV = "ABEL_EDGE_CACHE_ROOT"
 DEFAULT_CACHE_ROOT = Path(".cache/market_data")
@@ -142,6 +143,8 @@ def point_in_time_cache_covers_request(
     cached_end = _as_timestamp(requested.get("end"))
     requested_start = _as_timestamp(start)
     requested_end = _as_timestamp(end)
+    if bool(requested.get("end_is_inclusive_date")) != is_date_only_bound(end):
+        return False
     if requested_start is not None and (
         cached_start is None or cached_start > requested_start
     ):
@@ -176,9 +179,7 @@ def load_cached_point_in_time_series(
     if not expected_data_hash or _file_sha256(entry.data_path) != expected_data_hash:
         return None
     frame = pd.read_csv(entry.data_path)
-    frame.attrs["source_receipt_sha256"] = str(
-        metadata.get("source_receipt_sha256") or ""
-    )
+    frame.attrs["source_receipt_sha256"] = str(metadata.get("source_receipt_sha256") or "")
     frame.attrs["series_spec_sha256"] = str(metadata.get("series_spec_sha256") or "")
     return frame
 
@@ -299,6 +300,7 @@ def write_cached_point_in_time_series(
             "requested_range": {
                 "start": _format_request_bound(requested_start, exact=True),
                 "end": _format_request_bound(requested_end, exact=True),
+                "end_is_inclusive_date": is_date_only_bound(requested_end),
                 "limit": int(requested_limit) if requested_limit is not None else None,
             },
             "row_count": int(len(frame)),

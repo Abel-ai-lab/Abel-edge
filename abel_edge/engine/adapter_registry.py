@@ -27,7 +27,10 @@ from abel_edge.engine.feed_contract import (
     apply_max_data_date_guard,
     assert_frame_respects_max_data_date,
 )
-from abel_edge.engine.point_in_time_series import PointInTimeSeriesSpec
+from abel_edge.engine.point_in_time_series import (
+    PointInTimeSeriesSpec,
+    is_date_only_bound,
+)
 
 ABEL_BAR_FIELDS = ["open", "high", "low", "close", "volume"]
 ABEL_BAR_CACHE_COLUMNS = ["timestamp", "symbol", *ABEL_BAR_FIELDS]
@@ -174,9 +177,13 @@ class AbelDataFeedAdapter:
                     "Abel canonical-node data support is unavailable. "
                     "See: abel_edge/plugins/AGENTS.md"
                 ) from exc
-            # An open-ended live request is never complete, so it must not be
-            # satisfied by or published as an indefinitely reusable snapshot.
-            cache_root = request.options.get("cache_root") if guarded_end is not None else None
+            # A live request is reusable only after its effective upper bound
+            # has elapsed; today's inclusive date is incomplete until tomorrow.
+            cache_root = (
+                request.options.get("cache_root")
+                if _point_in_time_cache_end_has_elapsed(guarded_end)
+                else None
+            )
             entry = None
             if cache_root:
                 source_identity = credentials_module.resolve_cap_base_url(
@@ -352,6 +359,20 @@ def point_in_time_cache_identity(
     }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _point_in_time_cache_end_has_elapsed(
+    end: object | None,
+    *,
+    now: pd.Timestamp | None = None,
+) -> bool:
+    if end is None:
+        return False
+    effective_end = pd.to_datetime(end, utc=True)
+    if is_date_only_bound(end):
+        effective_end += pd.Timedelta(days=1)
+    current = pd.Timestamp.now(tz="UTC") if now is None else now
+    return effective_end <= current
 
 
 def _max_cache_age_seconds(options: dict[str, object]) -> float | None:

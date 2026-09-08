@@ -7,6 +7,7 @@ import json
 import re
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any, Mapping
 
 import numpy as np
@@ -32,6 +33,20 @@ _TOP_LEVEL_KEYS = {
 _REQUIRED_KEYS = _TOP_LEVEL_KEYS - {"transforms"}
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _GRID_TIME_RE = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$")
+
+
+def is_date_only_bound(value: Any) -> bool:
+    """Return whether a point-in-time bound denotes a whole calendar day."""
+
+    if isinstance(value, date):
+        return not isinstance(value, datetime)
+    if not isinstance(value, str):
+        return False
+    try:
+        date.fromisoformat(value.strip())
+    except ValueError:
+        return False
+    return True
 
 
 class PointInTimeSeriesContractError(FeedContractError):

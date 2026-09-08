@@ -12,6 +12,7 @@ import pandas as pd
 from abel_edge.engine.adapter_registry import (
     AbelDataFeedAdapter,
     FeedLoadRequest,
+    _point_in_time_cache_end_has_elapsed,
     point_in_time_cache_identity,
 )
 from abel_edge.engine.cache import (
@@ -150,6 +151,15 @@ def test_point_in_time_cache_identity_normalizes_endpoint_trailing_slash():
     assert first == second
 
 
+def test_point_in_time_cache_end_must_have_elapsed():
+    now = pd.Timestamp("2026-05-01T12:00:00Z")
+
+    assert not _point_in_time_cache_end_has_elapsed("2026-05-01", now=now)
+    assert _point_in_time_cache_end_has_elapsed("2026-04-30", now=now)
+    assert not _point_in_time_cache_end_has_elapsed("2026-05-01T13:00:00Z", now=now)
+    assert _point_in_time_cache_end_has_elapsed("2026-05-01T11:00:00Z", now=now)
+
+
 def test_limited_point_in_time_cache_does_not_cover_unlimited_request():
     metadata = {
         "contract": "abel-edge.point-in-time-cache/v1",
@@ -220,6 +230,7 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
     assert metadata["requested_range"] == {
         "start": "2026-05-01T12:00:00+00:00",
         "end": "2026-05-01T18:00:00+00:00",
+        "end_is_inclusive_date": False,
         "limit": None,
     }
     assert not point_in_time_cache_covers_request(
@@ -234,6 +245,13 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
         series_spec_sha256=spec_hash,
         start="2026-05-01T12:00:00Z",
         end="2026-05-01T20:00:00Z",
+        limit=None,
+    )
+    assert not point_in_time_cache_covers_request(
+        metadata,
+        series_spec_sha256=spec_hash,
+        start="2026-05-01T12:00:00Z",
+        end="2026-05-01",
         limit=None,
     )
 
@@ -260,6 +278,7 @@ def test_point_in_time_cache_coverage_does_not_require_artifact_receipt(tmp_path
         requested_limit=None,
     )
 
+    assert metadata["requested_range"]["end_is_inclusive_date"] is True
     assert point_in_time_cache_covers_request(
         metadata,
         series_spec_sha256=spec_hash,

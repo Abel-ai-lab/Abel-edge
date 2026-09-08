@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from datetime import date, datetime
 from numbers import Integral, Number
 from typing import Any, Callable, Mapping
 
@@ -15,6 +14,7 @@ from abel_edge.engine.feed_contract import FeedContractError
 from abel_edge.engine.point_in_time_series import (
     PointInTimeSeriesContractError,
     PointInTimeSeriesSpec,
+    is_date_only_bound,
 )
 from abel_edge.plugins.abel.prices import fetch_node_series
 
@@ -349,20 +349,6 @@ def _timestamp_bound(
         timestamp = timestamp.tz_localize("UTC")
     else:
         timestamp = timestamp.tz_convert("UTC")
-    if inclusive_date and _is_date_only(value):
+    if inclusive_date and is_date_only_bound(value):
         timestamp += pd.Timedelta(days=1) - pd.Timedelta(nanoseconds=1)
     return timestamp
-
-
-def _is_date_only(value: Any) -> bool:
-    if isinstance(value, datetime):
-        return False
-    if isinstance(value, date):
-        return True
-    if not isinstance(value, str):
-        return False
-    try:
-        date.fromisoformat(value.strip())
-    except ValueError:
-        return False
-    return True
