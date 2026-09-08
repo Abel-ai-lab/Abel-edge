@@ -227,6 +227,14 @@ def test_point_in_time_cache_preserves_intraday_request_bounds(tmp_path):
         metadata,
         series_spec_sha256=spec_hash,
         source_identity=SOURCE_IDENTITY,
+        start=None,
+        end="2026-05-01T18:00:00Z",
+        limit=None,
+    )
+    assert not point_in_time_cache_covers_request(
+        metadata,
+        series_spec_sha256=spec_hash,
+        source_identity=SOURCE_IDENTITY,
         start="2026-05-01T06:00:00Z",
         end="2026-05-01T18:00:00Z",
         limit=None,

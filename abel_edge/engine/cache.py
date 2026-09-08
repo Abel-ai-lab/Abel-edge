@@ -147,7 +147,7 @@ def point_in_time_cache_covers_request(
     requested_start, requested_end = _as_timestamp(start), _as_timestamp(end)
     if bool(requested.get("end_is_inclusive_date")) != is_date_only_bound(end):
         return False
-    if requested_start is not None and (cached_start is None or cached_start > requested_start):
+    if cached_start is not None and (requested_start is None or cached_start > requested_start):
         return False
     if requested_end is not None and (cached_end is None or cached_end < requested_end):
         return False

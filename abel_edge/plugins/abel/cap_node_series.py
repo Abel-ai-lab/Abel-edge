@@ -10,7 +10,7 @@ from typing import Any, Callable, Mapping
 
 import pandas as pd
 
-from abel_edge.engine.feed_contract import FeedContractError
+from abel_edge.engine.feed_contract import FeedContractError, apply_max_data_date_guard
 from abel_edge.engine.point_in_time_series import (
     PointInTimeSeriesContractError,
     PointInTimeSeriesSpec,
@@ -97,11 +97,15 @@ def prepare_cap_node_series_spec(
 ) -> PointInTimeSeriesSpec:
     """Probe one live CAP scalar series and record its response receipt."""
 
-    _validate_runtime_window(start=start, end=end, limit=limit)
+    guarded_end = apply_max_data_date_guard(
+        end,
+        source="CAP node-series preparation",
+    )
+    _validate_runtime_window(start=start, end=guarded_end, limit=limit)
     rows = (fetcher or fetch_node_series)(
         node_id=node_id,
         start=None,
-        end=end,
+        end=guarded_end,
         limit=None,
         config=config or {},
     )
@@ -114,7 +118,7 @@ def prepare_cap_node_series_spec(
     visible = _filter_visible_frame(
         pd.DataFrame(records),
         start=start,
-        end=end,
+        end=guarded_end,
         limit=limit,
     )
     records = visible.to_dict("records")

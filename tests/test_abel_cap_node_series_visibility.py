@@ -274,6 +274,46 @@ def test_preparation_receipt_excludes_rows_not_yet_visible_at_cutoff():
     )
 
 
+def test_preparation_uses_global_cutoff_as_open_ended_visibility_bound(monkeypatch):
+    monkeypatch.setenv(MAX_DATA_DATE_ENV, "2026-01-02")
+    monkeypatch.setenv(DATE_GUARD_MODE_ENV, "fail-closed")
+    calls = []
+
+    def fake_fetcher(**kwargs):
+        calls.append(kwargs)
+        return pd.DataFrame(
+            [
+                {
+                    "timestamp": "2026-01-02T12:00:00Z",
+                    "event_time": "2026-01-01T00:00:00Z",
+                    "node_id": NODE_ID,
+                    "value": 9.0,
+                },
+                {
+                    "timestamp": "2026-01-03T00:00:00Z",
+                    "event_time": "2026-01-02T00:00:00Z",
+                    "node_id": NODE_ID,
+                    "value": 10.0,
+                },
+            ]
+        )
+
+    spec = prepare_cap_node_series_spec(
+        node_id=NODE_ID,
+        graph_ref=GRAPH_REF,
+        start=None,
+        end=None,
+        fetcher=fake_fetcher,
+    )
+
+    assert calls[0]["end"] == "2026-01-02"
+    assert spec.payload["provenance"]["source_observation_count"] == 1
+    assert (
+        spec.payload["provenance"]["source_last_timestamp"]
+        == "2026-01-02T12:00:00Z"
+    )
+
+
 def test_preparation_limit_must_be_positive():
     with pytest.raises(CanonicalNodeDataError, match="limit must be positive"):
         prepare_cap_node_series_spec(
