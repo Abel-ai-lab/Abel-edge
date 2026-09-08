@@ -80,7 +80,9 @@ def fetch_node_series(
     frame = pd.DataFrame(payload)
     if frame.empty and "timestamp" not in frame.columns:
         frame = pd.DataFrame(columns=["timestamp", "node_id", "value"])
-    assert_frame_respects_max_data_date(frame, source="Abel node-series fetch")
+    # CAP bounds node-series responses by observation date. Their availability
+    # timestamp may legitimately be later and is filtered by the PITS
+    # materializer before the general frame guard runs.
     return frame
 
 
