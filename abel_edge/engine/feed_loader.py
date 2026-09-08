@@ -75,12 +75,18 @@ def load_feed_frame(
                 f"Feed '{feed_name}' adapter '{adapter_name}' does not match "
                 f"series_spec source adapter '{series_spec.source_adapter}'."
             )
+    abel_node_series = bool(
+        adapter_name == "abel"
+        and series_spec is not None
+        and series_spec.source_request.get("retrieval_mode") == "node_series"
+    )
     request_fields = _request_fields(kind, fields)
     if end is not None:
         apply_max_data_date_guard(end, source=f"feed '{feed_name}' visible window")
     requested_end = end if request_end is None else request_end
     if (
         kind == "point_in_time_series"
+        and not abel_node_series
         and requested_end is None
         and feed_cfg.get("source_end") is not None
     ):
@@ -106,7 +112,12 @@ def load_feed_frame(
     )
     raw = adapter.load(request)
     if series_spec is not None:
-        assert_point_in_time_adapter_identity(raw, series_spec, name=f"feed '{feed_name}'")
+        assert_point_in_time_adapter_identity(
+            raw,
+            series_spec,
+            name=f"feed '{feed_name}'",
+            verify_source_receipt=not abel_node_series,
+        )
     frame = _normalize_loaded_frame(feed_cfg, raw, assume_utc_for_naive=adapter.assume_utc_for_naive)
     assert_frame_respects_max_data_date(frame, source=f"feed '{feed_name}'")
     return _apply_time_filters(

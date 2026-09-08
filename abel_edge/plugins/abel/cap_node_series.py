@@ -1,4 +1,4 @@
-"""Compile, freeze, and materialize CAP-owned scalar node series."""
+"""Compile, prepare, and materialize CAP-owned scalar node series."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from abel_edge.plugins.abel.prices import fetch_node_series
 
 
 class CanonicalNodeDataError(FeedContractError):
-    """Raised when a frozen CAP scalar node cannot be reproduced."""
+    """Raised when a CAP scalar node cannot be loaded safely."""
 
 
 def compile_cap_node_series_spec(
@@ -94,7 +94,7 @@ def prepare_cap_node_series_spec(
     config: dict | None = None,
     fetcher: Callable[..., pd.DataFrame] | None = None,
 ) -> PointInTimeSeriesSpec:
-    """Probe one live CAP scalar series and freeze its response receipt."""
+    """Probe one live CAP scalar series and record its response receipt."""
 
     rows = (fetcher or fetch_node_series)(
         node_id=node_id,
@@ -128,7 +128,7 @@ def load_cap_node_series(
     limit: int | None,
     config: dict | None,
 ) -> pd.DataFrame:
-    """Replay the frozen CAP source window, verify it, then filter visibility."""
+    """Load one caller-bounded CAP source window, then filter visibility."""
 
     if series_spec.source_adapter != "abel":
         raise CanonicalNodeDataError(
@@ -139,26 +139,25 @@ def load_cap_node_series(
         raise CanonicalNodeDataError(
             "CAP scalar-node materialization requires retrieval_mode='node_series'."
         )
-    source_start, source_end, source_limit, visible_start, visible_end = (
-        _materialization_window(
-            start=start,
-            end=end,
-            limit=limit,
-            config=config or {},
+    node_id = str(request.get("node_id") or "").strip()
+    if not node_id or node_id != series_spec.series_id:
+        raise CanonicalNodeDataError(
+            "CAP scalar-node materialization requires source.request.node_id "
+            "to match series_spec.series_id."
         )
-    )
+    _validate_runtime_window(start=start, end=end)
     frame = materialize_cap_node_series(
         series_spec=series_spec,
-        node_id=str(request["node_id"]),
-        start=source_start,
-        end=source_end,
-        limit=source_limit,
+        node_id=node_id,
+        start=start,
+        end=end,
+        limit=limit,
         config=config or {},
     )
     return _filter_visible_frame(
         frame,
-        start=visible_start,
-        end=visible_end,
+        start=start,
+        end=end,
         limit=limit,
     )
 
@@ -233,12 +232,6 @@ def materialize_cap_node_series(
     )
     records = rows.to_dict("records")
     actual_receipt = cap_node_series_receipt(records, node_id=node_id)
-    expected_receipt = series_spec.payload["provenance"]["source_receipt_sha256"]
-    if actual_receipt != expected_receipt:
-        raise CanonicalNodeDataError(
-            "Canonical node source receipt drift: "
-            f"expected {expected_receipt}, got {actual_receipt}."
-        )
     frame = pd.DataFrame(
         {
             "event_time": [
@@ -255,44 +248,11 @@ def materialize_cap_node_series(
     return frame
 
 
-def _materialization_window(
-    *,
-    start,
-    end,
-    limit: int | None,
-    config: dict[str, Any],
-) -> tuple[Any, Any, int | None, Any, Any]:
-    frozen_start = config.get("source_start")
-    frozen_end = config.get("source_end")
-    if (frozen_start is None) != (frozen_end is None):
-        raise CanonicalNodeDataError(
-            "Frozen canonical source receipts require source_start and source_end together."
-        )
-    visible_start = start if start is not None else frozen_start
-    visible_end = end if end is not None else frozen_end
-    if visible_start is None or visible_end is None:
-        raise CanonicalNodeDataError(
-            "Frozen canonical source receipts require explicit start and end dates."
-        )
-    source_start = frozen_start if frozen_start is not None else visible_start
-    source_end = frozen_end if frozen_end is not None else visible_end
-    source_start_date = _required_date(source_start, label="source_start")
-    source_end_date = _required_date(source_end, label="source_end")
-    visible_start_date = _required_date(visible_start, label="start")
-    visible_end_date = _required_date(visible_end, label="end")
-    if source_start_date > source_end_date:
-        raise CanonicalNodeDataError("Canonical source_start must not exceed source_end.")
-    if visible_start_date > visible_end_date:
+def _validate_runtime_window(*, start, end) -> None:
+    start_date = _required_date(start, label="start") if start is not None else None
+    end_date = _required_date(end, label="end") if end is not None else None
+    if start_date is not None and end_date is not None and start_date > end_date:
         raise CanonicalNodeDataError("Canonical visible start must not exceed end.")
-    if visible_start_date < source_start_date or visible_end_date > source_end_date:
-        raise CanonicalNodeDataError(
-            "Canonical visible window must stay within the frozen source window."
-        )
-    source_limit = limit
-    if frozen_start is not None:
-        raw_source_limit = config.get("source_limit")
-        source_limit = int(raw_source_limit) if raw_source_limit is not None else None
-    return source_start, source_end, source_limit, visible_start, visible_end
 
 
 def _filter_visible_frame(
@@ -307,11 +267,15 @@ def _filter_visible_frame(
         raise CanonicalNodeDataError(
             "Canonical node series has invalid UTC timestamp values."
         )
-    start_date = _required_date(start, label="start")
-    end_date = _required_date(end, label="end")
-    visible = frame[
-        (timestamps.dt.date >= start_date) & (timestamps.dt.date <= end_date)
-    ].copy()
+    visible = frame
+    if start is not None:
+        start_date = _required_date(start, label="start")
+        visible = visible[timestamps.dt.date >= start_date]
+        timestamps = timestamps.loc[visible.index]
+    if end is not None:
+        end_date = _required_date(end, label="end")
+        visible = visible[timestamps.dt.date <= end_date]
+    visible = visible.copy()
     if limit is not None:
         visible = visible.tail(int(limit)).copy()
     visible.attrs.update(frame.attrs)

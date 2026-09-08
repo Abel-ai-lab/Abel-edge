@@ -171,7 +171,9 @@ class AbelDataFeedAdapter:
                     "Abel canonical-node data support is unavailable. "
                     "See: abel_edge/plugins/AGENTS.md"
                 ) from exc
-            cache_root = request.options.get("cache_root")
+            # An open-ended live request is never complete, so it must not be
+            # satisfied by or published as an indefinitely reusable snapshot.
+            cache_root = request.options.get("cache_root") if guarded_end is not None else None
             entry = None
             if cache_root:
                 entry = point_in_time_cache_entry(
@@ -180,11 +182,9 @@ class AbelDataFeedAdapter:
                     cache_root=cache_root,
                 )
                 metadata = load_cached_metadata(entry)
-                source_receipt = str(
-                    request.series_spec.payload["provenance"][
-                        "source_receipt_sha256"
-                    ]
-                )
+                # The cached receipt protects the cached bytes. The receipt
+                # embedded by an older artifact is not a live source version.
+                source_receipt = str(metadata.get("source_receipt_sha256") or "")
                 if point_in_time_cache_covers_request(
                     metadata,
                     series_spec_sha256=request.series_spec.sha256,

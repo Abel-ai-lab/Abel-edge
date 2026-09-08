@@ -59,12 +59,13 @@ The adapter named by `source.adapter` is resolved through the existing adapter
 registry. It receives the validated `PointInTimeSeriesSpec` in
 `FeedLoadRequest.series_spec` and returns the source fields declared by
 `schema`. It must also put the actual source-data SHA-256 in
-`frame.attrs["source_receipt_sha256"]`; Edge compares this receipt with the
-frozen spec before normalization. The built-in CSV adapter hashes the source
+`frame.attrs["source_receipt_sha256"]`. Generic adapters compare that receipt
+with the spec before normalization. The built-in CSV adapter hashes the source
 file bytes and accepts only an empty `transforms` list; transformed CSV specs
 fail closed because that adapter does not materialize transforms. The Abel CAP
-scalar-node adapter has the same empty-transform restriction. The adapter must
-also return the exact
+scalar-node adapter has the same empty-transform restriction, but its receipt
+records prepare-time provenance rather than freezing a live source response.
+The adapter must also return the exact
 `frame.attrs["series_spec_sha256"]` it used for materialization so a cache made
 under another transform or alignment spec cannot be reused silently.
 
@@ -121,13 +122,15 @@ The minimal CAP scalar spec uses explicit UTC availability and `asof` access.
 CAP owns exact-node filtering and aggregation; Edge requires
 `mode=node_series`, exact identity, finite values, unique visibility timestamps,
 and advancing pagination. A raw `mode=node_records` response fails closed.
-`prepare_cap_node_series_spec` probes a bounded live window and freezes the
+`prepare_cap_node_series_spec` probes a bounded live window and records its
 normalized response receipt. Edge does not synthesize internal CAP rules from
 an unrelated S3 package.
 
-The materialization request must provide explicit source start and end dates,
-either through the runtime window or feed options, because a source receipt is
-meaningless without a bounded row set.
+Runtime materialization follows the caller's `start`, `end`, and `limit`.
+Prepare-time source bounds do not clamp that query. An explicit `end` remains
+the visibility boundary; `end: null` is an open-ended live query. Open-ended
+Abel canonical requests bypass persisted point-in-time cache reuse because an
+earlier live response cannot prove that the source is complete.
 
 ## Compatibility
 

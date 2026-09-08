@@ -98,6 +98,7 @@ def normalize_point_in_time_series_frame(
     resolved = (
         spec if isinstance(spec, PointInTimeSeriesSpec) else PointInTimeSeriesSpec.from_mapping(spec)
     )
+    observed_source_receipt = str(frame.attrs.get("source_receipt_sha256") or "")
     schema = resolved.schema
     event_field = str(schema["event_time_field"])
     value_field = str(schema["value_field"])
@@ -147,9 +148,10 @@ def normalize_point_in_time_series_frame(
     normalized.insert(0, "timestamp", normalized["available_at"])
     normalized.attrs["series_id"] = resolved.series_id
     normalized.attrs["series_spec_sha256"] = resolved.sha256
-    normalized.attrs["source_receipt_sha256"] = resolved.payload["provenance"][
-        "source_receipt_sha256"
-    ]
+    normalized.attrs["source_receipt_sha256"] = (
+        observed_source_receipt
+        or resolved.payload["provenance"]["source_receipt_sha256"]
+    )
     return normalized
 
 
@@ -158,6 +160,7 @@ def assert_point_in_time_adapter_identity(
     spec: PointInTimeSeriesSpec | Mapping[str, Any],
     *,
     name: str,
+    verify_source_receipt: bool = True,
 ) -> None:
     """Fail closed when adapter data or materialization identity drifts."""
 
@@ -166,11 +169,11 @@ def assert_point_in_time_adapter_identity(
     )
     expected = str(resolved.payload["provenance"]["source_receipt_sha256"])
     observed = str(frame.attrs.get("source_receipt_sha256") or "")
-    if not observed:
+    if verify_source_receipt and not observed:
         raise PointInTimeSeriesContractError(
             f"{name} adapter did not return a source receipt."
         )
-    if observed != expected:
+    if verify_source_receipt and observed != expected:
         raise PointInTimeSeriesContractError(
             f"{name} source receipt mismatch: expected {expected}, observed {observed}."
         )

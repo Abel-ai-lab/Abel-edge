@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-08
+
+### Fixed
+
+- Abel canonical `node_series` feeds now follow the runtime query window. An
+  explicit end remains bounded, while an open-ended paper query can read data
+  made available after artifact preparation.
+- Prepare-time source bounds and receipts remain provenance for Abel canonical
+  feeds instead of freezing later execution. Generic point-in-time adapters
+  retain their existing receipt checks.
+- Open-ended Abel canonical requests no longer reuse persisted point-in-time
+  snapshots as permanently complete data.
+
 ## [0.9.0] - 2026-08-29
 
 ### Added

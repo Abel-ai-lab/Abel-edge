@@ -68,7 +68,7 @@ def test_cap_node_series_compiles_to_asof_point_in_time_feed():
     assert payload["transforms"] == []
 
 
-def test_cap_node_series_materializer_replays_exact_series_and_receipt(monkeypatch):
+def test_cap_node_series_materializer_loads_exact_series_and_receipt(monkeypatch):
     receipt = cap_node_series_receipt(ROWS, node_id=NODE_ID)
     spec = compile_cap_node_series_spec(
         node_id=NODE_ID,
@@ -117,7 +117,7 @@ def test_cap_node_series_materializer_replays_exact_series_and_receipt(monkeypat
     ]
 
 
-def test_cap_runtime_window_replays_frozen_receipt_window(monkeypatch):
+def test_cap_runtime_window_uses_caller_bounds(monkeypatch):
     rows = [
         {
             "timestamp": "2026-01-02T00:00:00Z",
@@ -158,15 +158,15 @@ def test_cap_runtime_window_replays_frozen_receipt_window(monkeypatch):
     )
 
     assert (calls[0]["start"], calls[0]["end"], calls[0]["limit"]) == (
-        "2026-01-01",
-        "2026-12-31",
-        None,
+        "2026-05-01",
+        "2026-05-31",
+        1,
     )
     assert list(frame["timestamp"]) == ["2026-05-02T00:00:00Z"]
     assert list(frame["value"]) == [25.0]
 
 
-def test_cap_node_series_materializer_rejects_response_receipt_drift(monkeypatch):
+def test_cap_node_series_materializer_records_response_receipt_drift(monkeypatch):
     spec = compile_cap_node_series_spec(
         node_id=NODE_ID,
         graph_ref=GRAPH_REF,
@@ -177,12 +177,34 @@ def test_cap_node_series_materializer_rejects_response_receipt_drift(monkeypatch
         lambda **_: pd.DataFrame(ROWS),
     )
 
-    with pytest.raises(CanonicalNodeDataError, match="source receipt drift"):
+    frame = load_cap_node_series(
+        series_spec=spec,
+        start="2026-05-01",
+        end="2026-05-02",
+        limit=20,
+        config={},
+    )
+
+    assert frame.attrs["source_receipt_sha256"] == cap_node_series_receipt(
+        ROWS,
+        node_id=NODE_ID,
+    )
+
+
+def test_cap_node_series_rejects_spec_request_node_mismatch():
+    payload = compile_cap_node_series_spec(
+        node_id=NODE_ID,
+        graph_ref=GRAPH_REF,
+        source_receipt_sha256="e" * 64,
+    ).payload
+    payload["source"]["request"]["node_id"] = "another.node"
+
+    with pytest.raises(CanonicalNodeDataError, match="node_id.*series_spec.series_id"):
         load_cap_node_series(
-            series_spec=spec,
+            series_spec=PointInTimeSeriesSpec.from_mapping(payload),
             start="2026-05-01",
             end="2026-05-02",
-            limit=20,
+            limit=None,
             config={},
         )
 
@@ -210,7 +232,7 @@ def test_cap_node_series_materializer_rejects_unapplied_transforms(monkeypatch):
         )
 
 
-def test_prepare_cap_node_series_spec_freezes_live_response_receipt(monkeypatch):
+def test_prepare_cap_node_series_spec_records_live_response_receipt(monkeypatch):
     monkeypatch.setattr(
         "abel_edge.plugins.abel.cap_node_series.fetch_node_series",
         lambda **_: pd.DataFrame(ROWS),
