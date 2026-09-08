@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date, datetime, timezone
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,10 +31,26 @@ DEFAULT_GRAPH_VERSION = "CausalNodeV3"
 DEFAULT_TIMEOUT_SECONDS = 60
 DEFAULT_RETRY_ATTEMPTS = 4
 
-def _serialize_timestamp(value):
+def _serialize_daily_bar_bound(value: Any) -> str | None:
     if value is None:
         return None
-    return value.isoformat() if hasattr(value, "isoformat") else str(value)
+    if isinstance(value, datetime):
+        timestamp = value
+    elif isinstance(value, date):
+        return value.isoformat()
+    else:
+        text = str(value)
+        try:
+            return date.fromisoformat(text).isoformat()
+        except ValueError:
+            pass
+        try:
+            timestamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return text
+    if timestamp.utcoffset() is not None:
+        timestamp = timestamp.astimezone(timezone.utc)
+    return timestamp.date().isoformat()
 
 
 class AbelClient:
@@ -143,8 +160,8 @@ class AbelClient:
                     _normalize_market_symbol(symbol)
                     for symbol in symbols
                 ],
-                "start": _serialize_timestamp(start),
-                "end": _serialize_timestamp(end),
+                "start": _serialize_daily_bar_bound(start),
+                "end": _serialize_daily_bar_bound(end),
                 "timeframe": timeframe,
                 "limit": limit,
                 "fields": _normalize_market_fields(fields),
