@@ -9,6 +9,7 @@ from abel_edge.engine.feed_loader import load_feed_frame
 from abel_edge.plugins.abel.cap_node_series import (
     compile_cap_node_series_spec,
     load_cap_node_series,
+    prepare_cap_node_series_spec,
 )
 
 
@@ -142,3 +143,36 @@ def test_future_availability_is_filtered_before_max_data_date_guard(monkeypatch)
     )
 
     assert frame["value"].tolist() == [9.0]
+
+
+def test_preparation_receipt_excludes_rows_not_yet_visible_at_cutoff():
+    rows = pd.DataFrame(
+        [
+            {
+                "timestamp": "2026-12-30T12:00:00Z",
+                "event_time": "2026-12-30T00:00:00Z",
+                "node_id": NODE_ID,
+                "value": 9.0,
+            },
+            {
+                "timestamp": "2027-01-02T12:00:00Z",
+                "event_time": "2026-12-31T00:00:00Z",
+                "node_id": NODE_ID,
+                "value": 10.0,
+            },
+        ]
+    )
+
+    spec = prepare_cap_node_series_spec(
+        node_id=NODE_ID,
+        graph_ref=GRAPH_REF,
+        start="2026-01-01",
+        end="2026-12-31",
+        fetcher=lambda **kwargs: rows,
+    )
+
+    assert spec.payload["provenance"]["source_observation_count"] == 1
+    assert (
+        spec.payload["provenance"]["source_last_timestamp"]
+        == "2026-12-30T12:00:00Z"
+    )

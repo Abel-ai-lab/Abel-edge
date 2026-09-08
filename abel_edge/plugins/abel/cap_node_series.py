@@ -108,7 +108,19 @@ def prepare_cap_node_series_spec(
         raise CanonicalNodeDataError(
             f"CAP node scalar series returned no observations: {node_id}"
         )
-    receipt = cap_node_series_receipt(rows, node_id=node_id)
+    cap_node_series_receipt(records, node_id=node_id)
+    visible = _filter_visible_frame(
+        pd.DataFrame(records),
+        start=start,
+        end=end,
+        limit=limit,
+    )
+    records = visible.to_dict("records")
+    if not records:
+        raise CanonicalNodeDataError(
+            f"CAP node scalar series returned no visible observations: {node_id}"
+        )
+    receipt = cap_node_series_receipt(records, node_id=node_id)
     timestamps = sorted(_optional_text(row.get("timestamp")) for row in records)
     return compile_cap_node_series_spec(
         node_id=node_id,
